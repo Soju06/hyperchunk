@@ -15,6 +15,15 @@ add_compile_options(
   -Wall -Wextra -Werror
 )
 
+# ADR-009 D2: sanitizer 게이트 빌드 (CMakePresets.json 의 asan-ubsan 이 켠다).
+# 이 빌드는 check_no_fma.sh 대상이 아니다 — 계측 코드가 섞여 디스어셈블
+# 게이트가 무의미하다 (ADR-009 Pitfall 2). FMA 게이트는 release 아카이브 전용.
+option(HC_SANITIZE "Build with ASan+UBSan (ADR-009 D2 gate build)" OFF)
+if(HC_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
 add_subdirectory(core)
 add_subdirectory(cli)
 enable_testing()

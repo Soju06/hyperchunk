@@ -1,0 +1,18 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default (-O2, FMA-gated release archive)",
+      "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "asan-ubsan",
+      "displayName": "ASan+UBSan gate build (ADR-009 D2; not FMA-gated)",
+      "binaryDir": "${sourceDir}/build-asan",
+      "cacheVariables": {
+        "HC_SANITIZE": "ON"
+      }
+    }
+  ]
+}
