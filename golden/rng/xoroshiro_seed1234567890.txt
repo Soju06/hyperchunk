@@ -1,0 +1,42 @@
+# MC 26.2 XoroshiroRandomSource golden vectors
+# construction: new net.minecraft.world.level.levelgen.XoroshiroRandomSource(1234567890L)
+#   == Xoroshiro128PlusPlus(RandomSupport.upgradeSeedTo128bit(seed))
+#   upgradeSeedTo128bit(seed) = mixStafford13(seed ^ SILVER_RATIO_64), mixStafford13(lo + GOLDEN_RATIO_64)
+# each 'section' below starts from a FRESH instance seeded with the same seed
+# longs/ints are printed as signed decimal (Java toString)
+seed 1234567890
+state_unmixed_lo 7640891575990143963
+state_unmixed_hi 594862321603790832
+state_mixed_lo -1830858561583430087
+state_mixed_hi -5671731991842687364
+section nextLong 16
+nextLong[0] -3900051847162792453
+nextLong[1] 5404024164299963211
+nextLong[2] 5845663370893641180
+nextLong[3] -1128398228392132376
+nextLong[4] 8971601858629355458
+nextLong[5] 4127443171940112941
+nextLong[6] 5974796894294035733
+nextLong[7] -9154186579510914529
+nextLong[8] 5308643698453648707
+nextLong[9] 555617714725146452
+nextLong[10] 3728259244009941411
+nextLong[11] 2058323568343414436
+nextLong[12] 7366575134257222944
+nextLong[13] 2097144216331534164
+nextLong[14] -4944832323230869203
+nextLong[15] -3514229090980417274
+section nextInt(256-i) 8
+nextInt(256) 36
+nextInt(255) 126
+nextInt(254) 58
+nextInt(253) 46
+nextInt(252) 88
+nextInt(251) 92
+nextInt(250) 149
+nextInt(249) 140
+section nextDouble 4
+nextDouble[0] 0.78857776572499970 bits=0x3fe93c077044882e
+nextDouble[1] 0.29295273695490910 bits=0x3fd2bfbcd61fae7e
+nextDouble[2] 0.31689404631709106 bits=0x3fd447fdf74ea830
+nextDouble[3] 0.93882940946742280 bits=0x3fee0ae3f945f038

@@ -1,0 +1,41 @@
+# java.util.Random (legacy 48-bit LCG) golden vectors
+# construction: new java.util.Random(1234567890L)
+#   state0 = (seed ^ 0x5DEECE66D) & ((1<<48)-1)
+# each 'section' below starts from a FRESH instance seeded with the same seed
+seed 1234567890
+section nextLong 16
+nextLong[0] -5197880843569031643
+nextLong[1] -455857754086099036
+nextLong[2] -1009835137506199904
+nextLong[3] 2760636605756985376
+nextLong[4] -1824155662461692906
+nextLong[5] 4518992736225145867
+nextLong[6] -8963186996212760330
+nextLong[7] 3015204577362510986
+nextLong[8] -7742738610918953084
+nextLong[9] 8004217737854698935
+nextLong[10] 7685817615627686380
+nextLong[11] 865562189400100566
+nextLong[12] -8272166368955537510
+nextLong[13] -8554565356223690293
+nextLong[14] 5467397544107330504
+nextLong[15] -3405578189098863152
+section nextInt(256-i) 8
+nextInt(256) 183
+nextInt(255) 197
+nextInt(254) 163
+nextInt(253) 98
+nextInt(252) 113
+nextInt(251) 214
+nextInt(250) 149
+nextInt(249) 203
+section nextDouble 4
+nextDouble[0] 0.71822231345927010 bits=0x3fe6fbad5c7214b1
+nextDouble[1] 0.97528790982851600 bits=0x3fef358efd9cb9bd
+nextDouble[2] 0.94525673911180400 bits=0x3fee3f8b0f99e1b5
+nextDouble[3] 0.14965441544104874 bits=0x3fc327e03a02ba04
+section legacyRandomSource_crosscheck 4
+legacy_nextLong[0] -5197880843569031643 matches_jdk true
+legacy_nextLong[1] -455857754086099036 matches_jdk true
+legacy_nextLong[2] -1009835137506199904 matches_jdk true
+legacy_nextLong[3] 2760636605756985376 matches_jdk true
