@@ -1,0 +1,41 @@
+// Plain `java` build — deliberately NOT fabric-loom.
+//
+// Since MC 26.1 the game ships fully unobfuscated and Fabric's intermediary
+// for 26.x is a stub (version 0.0.0): the runtime namespace IS the official
+// Mojang namespace. There is nothing to remap, so Loom's whole
+// mapping/remapping machinery is dead weight (ADR-006 D3). We compile
+// directly against the extracted vanilla server jar + bundled libraries +
+// sponge-mixin annotations, and the resulting jar is loadable by
+// fabric-loader as-is.
+//
+// tools/golden/make_stage_dumps.sh populates tools/golden/libs/ before
+// invoking this build (fetch_server.sh + extract_nested.sh + fabric jars).
+
+plugins {
+    id 'java'
+}
+
+def toolsGolden = layout.projectDirectory.asFile.parentFile   // tools/golden
+def targetVersion = new File(toolsGolden, '../../TARGET_VERSION').text.trim()
+def extracted = new File(toolsGolden, 'libs/extracted')
+def fabricLibs = new File(toolsGolden, 'libs/fabric')
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+dependencies {
+    compileOnly files(new File(extracted, "server-${targetVersion}.jar"))
+    compileOnly fileTree(dir: new File(extracted, 'libraries'), include: '**/*.jar')
+    compileOnly fileTree(dir: fabricLibs, include: 'sponge-mixin-*.jar')
+}
+
+jar {
+    archiveFileName = 'hyperchunk-stagedump.jar'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

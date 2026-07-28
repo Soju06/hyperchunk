@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "dev.hyperchunk.stagedump.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "ChunkStepMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "hyperchunk-stagedump",
+  "version": "0.1.0",
+  "name": "hyperchunk stage-dump harness",
+  "description": "Dumps intermediate chunk state after each worldgen ChunkStatus stage for golden-parity testing. Inert unless -Dhyperchunk.dump.dir is set.",
+  "license": "MIT",
+  "environment": "*",
+  "mixins": [
+    "hyperchunk-stagedump.mixins.json"
+  ],
+  "depends": {
+    "minecraft": "26.2"
+  }
+}
