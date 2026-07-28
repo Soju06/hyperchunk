@@ -10,3 +10,12 @@ add_test(NAME arena COMMAND test_arena)
 add_executable(test_chunk unit/test_chunk.c)
 target_link_libraries(test_chunk PRIVATE hyperchunk)
 add_test(NAME chunk COMMAND test_chunk)
+
+add_executable(test_perlin unit/test_perlin.c)
+target_link_libraries(test_perlin PRIVATE hyperchunk)
+add_test(NAME perlin_golden COMMAND test_perlin
+         ${CMAKE_SOURCE_DIR}/golden/rng/perlin_seed1234567890.txt)
+
+add_executable(test_df unit/test_df.c)
+target_link_libraries(test_df PRIVATE hyperchunk)
+add_test(NAME df_eval COMMAND test_df)
