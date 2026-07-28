@@ -1,53 +1,114 @@
 #include "hc_rng.h"
 
-/* RED 단계 스텁 — 전 벡터가 golden 과 불일치해야 한다.
- * 실제 구현은 다음 커밋에서 채운다. */
+/* 두 RNG 모두 golden/rng/ 의 26.2 실측 벡터로 전 구간 검증된다
+ * (tests/unit/test_rng.c). 알고리즘은 공개 문서 + golden 대조로 확보했다
+ * (ADR-002 R4: 디컴파일 코드 복사 금지). */
+
+/* --- Xoroshiro128++ (1.18+ worldgen, XoroshiroRandomSource) --- */
+
+static uint64_t rotl64(uint64_t x, int k) {
+    return (x << k) | (x >> (64 - k));
+}
+
+/* RandomSupport.mixStafford13 — SplitMix64 finalizer 의 Stafford 변형 13 */
+static uint64_t mix_stafford13(uint64_t z) {
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+#define HC_GOLDEN_RATIO_64 0x9E3779B97F4A7C15ULL
+#define HC_SILVER_RATIO_64 0x6A09E667F3BCC909ULL
 
 void hc_xoro_init(hc_xoro_t *r, int64_t seed) {
-    (void)seed;
-    r->lo = 0;
-    r->hi = 0;
+    /* RandomSupport.upgradeSeedTo128bit:
+     * lo = mix(seed ^ SILVER), hi = mix(lo_unmixed + GOLDEN) */
+    uint64_t lo = (uint64_t)seed ^ HC_SILVER_RATIO_64;
+    uint64_t hi = lo + HC_GOLDEN_RATIO_64;
+    r->lo = mix_stafford13(lo);
+    r->hi = mix_stafford13(hi);
+    /* 128비트 all-zero 는 축퇴 상태 — 바닐라도 같은 상수로 회피한다 */
+    if ((r->lo | r->hi) == 0) {
+        r->lo = HC_GOLDEN_RATIO_64;
+        r->hi = HC_SILVER_RATIO_64;
+    }
 }
 
 uint64_t hc_xoro_next(hc_xoro_t *r) {
-    (void)r;
-    return 0;
+    uint64_t s0 = r->lo, s1 = r->hi;
+    uint64_t res = rotl64(s0 + s1, 17) + s0; /* ++ scrambler */
+    s1 ^= s0;
+    r->lo = rotl64(s0, 49) ^ s1 ^ (s1 << 21);
+    r->hi = rotl64(s1, 28);
+    return res;
 }
 
 int32_t hc_xoro_next_int(hc_xoro_t *r, int32_t bound) {
-    (void)r;
-    (void)bound;
-    return -1;
+    /* XoroshiroRandomSource.nextInt(bound): nextLong 의 '하위' 32비트를
+     * 무부호로 취해 곱셈-거절한다 ((int)nextLong 캐스트 의미).
+     * 상위 32비트를 쓰면 golden nextInt(256)=36 이 201 로 어긋난다. */
+    uint32_t b = (uint32_t)bound;
+    uint32_t v = (uint32_t)hc_xoro_next(r);
+    uint64_t m = (uint64_t)v * (uint64_t)b;
+    uint32_t frac = (uint32_t)m;
+    if (frac < b) {
+        uint32_t t = (0u - b) % b; /* (2^32 - b) mod b: 편향 거절 문턱 */
+        while (frac < t) {
+            v = (uint32_t)hc_xoro_next(r);
+            m = (uint64_t)v * (uint64_t)b;
+            frac = (uint32_t)m;
+        }
+    }
+    return (int32_t)(m >> 32);
 }
 
 double hc_xoro_next_double(hc_xoro_t *r) {
-    (void)r;
-    return -1.0;
+    /* nextBits(53) * 2^-53. 53비트 정수의 double 변환은 정확하고
+     * 2^-53 곱은 지수 스케일링뿐이라 반올림이 발생하지 않는다. */
+    return (double)(hc_xoro_next(r) >> 11) * 0x1.0p-53;
 }
 
+/* --- Legacy 48-bit LCG (java.util.Random == LegacyRandomSource) --- */
+
+#define HC_LCG_MUL  0x5DEECE66DULL
+#define HC_LCG_ADD  0xBULL
+#define HC_LCG_MASK ((1ULL << 48) - 1)
+
 void hc_lcg_init(hc_lcg_t *r, int64_t seed) {
-    (void)seed;
-    r->s = 0;
+    r->s = ((uint64_t)seed ^ HC_LCG_MUL) & HC_LCG_MASK;
 }
 
 int32_t hc_lcg_next(hc_lcg_t *r, int bits) {
-    (void)r;
-    (void)bits;
-    return -1;
+    r->s = (r->s * HC_LCG_MUL + HC_LCG_ADD) & HC_LCG_MASK;
+    return (int32_t)(r->s >> (48 - bits));
 }
 
 int64_t hc_lcg_next_long(hc_lcg_t *r) {
-    (void)r;
-    return 0;
+    /* ((long)next(32) << 32) + next(32) — 하위 절반이 부호확장되어
+     * '더해진다'(OR 아님). 합은 무부호로 계산해 랩어라운드를 정의한다. */
+    uint64_t hi = (uint64_t)(uint32_t)hc_lcg_next(r, 32) << 32;
+    uint64_t lo = (uint64_t)(int64_t)hc_lcg_next(r, 32);
+    return (int64_t)(hi + lo);
 }
 
 int32_t hc_lcg_next_int(hc_lcg_t *r, int32_t bound) {
-    (void)r;
-    (void)bound;
-    return -1;
+    int32_t m = bound - 1;
+    if ((bound & m) == 0) /* 2의 거듭제곱 경로: (bound * next(31)) >> 31 */
+        return (int32_t)(((int64_t)bound * (int64_t)hc_lcg_next(r, 31)) >> 31);
+    int32_t u = hc_lcg_next(r, 31);
+    int32_t val = u % bound;
+    /* Java 는 u - val + m 의 int 오버플로(<0)로 편향 구간을 판정한다.
+     * C 의 signed 오버플로는 UB 이므로 무부호로 계산해 재해석한다. */
+    while ((int32_t)((uint32_t)u - (uint32_t)val + (uint32_t)m) < 0) {
+        u = hc_lcg_next(r, 31);
+        val = u % bound;
+    }
+    return val;
 }
 
 double hc_lcg_next_double(hc_lcg_t *r) {
-    (void)r;
-    return -1.0;
+    /* ((long)next(26) << 27) + next(27), 스케일 2^-53 */
+    int64_t hi = (int64_t)hc_lcg_next(r, 26) << 27;
+    int64_t lo = (int64_t)hc_lcg_next(r, 27);
+    return (double)(hi + lo) * 0x1.0p-53;
 }
