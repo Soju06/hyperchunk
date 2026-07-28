@@ -4,6 +4,10 @@
  * NULL (abort 금지). 오버플로 안전성은 SIZE_MAX 근처 요청으로 찌른다 —
  * naive 한 `off + n` 비교는 여기서 랩어라운드해 가짜 성공을 낸다. */
 
+/* 테스트의 assert 는 빌드 플레이버와 무관하게 항상 살아 있어야 한다 —
+ * NDEBUG 빌드에서 assert 가 증발하면 테스트가 공허하게 통과한다. */
+#undef NDEBUG
+
 #include "hc_arena.h"
 
 #include <assert.h>

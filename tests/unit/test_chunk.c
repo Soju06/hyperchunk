@@ -7,6 +7,13 @@
  * hc_idx 레이아웃은 golden 덤프 (golden/stages/FORMAT.md) 와 같아야
  * 스테이지 대조가 인덱스 변환 없이 성립한다. */
 
+/* 테스트의 assert 는 빌드 플레이버와 무관하게 항상 살아 있어야 한다 —
+ * NDEBUG 빌드에서 assert 가 증발하면 테스트가 공허하게 통과한다.
+ * hc_idx 는 헤더 인라인이라 이 #undef 가 아래 negative test 의 hc_idx
+ * assert 도 항상 켠다 (라이브러리 내부 사용처는 여전히 빌드 플래그를
+ * 따르므로 release zero-cost 는 유지된다, ADR-009 D3). */
+#undef NDEBUG
+
 #include "hc_chunk.h"
 
 #include <assert.h>
@@ -14,11 +21,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifndef NDEBUG
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#endif
 
 static _Alignas(64) unsigned char backing[HC_BLOCKS * sizeof(uint16_t) + 4096];
 
@@ -64,13 +69,12 @@ int main(void) {
     hc_chunk_t c2;
     assert(hc_chunk_init(&c2, &tiny, 0, 0) == -1);
 
-#ifndef NDEBUG
-    /* ADR-009 D3 negative test: 범위 밖 hc_idx 는 debug 빌드에서 assert 로
-     * 죽어야 한다. fork 한 자식에서 관찰한다 — assert 는 SIGABRT 이지만,
-     * sanitizer 가 abort 를 가로채 비정상 exit 코드로 바꾸는 구성도 있어
-     * 둘 다 '죽음' 으로 인정한다. 자식이 0 으로 살아 돌아오는 것만이
-     * 실패(= assert 가 없다)다. NDEBUG 빌드에서는 assert 자체가 컴파일
-     * 아웃이라 이 테스트가 성립하지 않으므로 통째로 제외한다. */
+    /* ADR-009 D3 negative test: 범위 밖 hc_idx 는 assert 로 죽어야 한다.
+     * fork 한 자식에서 관찰한다 — assert 는 SIGABRT 이지만, sanitizer 가
+     * abort 를 가로채 비정상 exit 코드로 바꾸는 구성도 있어 둘 다
+     * '죽음' 으로 인정한다. 자식이 0 으로 살아 돌아오는 것만이 실패
+     * (= assert 가 없다)다. 파일 상단의 #undef NDEBUG 덕에 이 TU 의
+     * 인라인 hc_idx 는 어떤 빌드 플레이버에서도 assert 를 갖는다. */
     pid_t pid = fork();
     assert(pid >= 0);
     if (pid == 0) {
@@ -83,9 +87,6 @@ int main(void) {
     int died_by_abort = WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT;
     int died_by_exit  = WIFEXITED(status) && WEXITSTATUS(status) != 0;
     assert(died_by_abort || died_by_exit);
-#else
-    printf("test_chunk: NDEBUG build — hc_idx negative assert test skipped\n");
-#endif
 
     return 0;
 }
