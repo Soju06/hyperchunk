@@ -4,10 +4,15 @@ build/
 *.a
 compile_commands.json
 
-# golden artifacts (binary, regenerable) — only SHA256SUMS is tracked
+# golden artifacts (binary, regenerable) — only SHA256SUMS, rng/ texts and FORMAT.md are tracked
 golden/*.mca
+golden/stages/
 tools/golden/libs/
 tools/golden/*.class
+tools/golden/work/
+tools/golden/stage-dump-mod/build/
+tools/golden/stage-dump-mod/.gradle/
+tools/golden/stage-dump-mod/run/
 
 __pycache__/
 *.pyc
