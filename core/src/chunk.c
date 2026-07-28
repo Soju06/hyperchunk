@@ -1,11 +1,18 @@
 #include "hc_chunk.h"
 
-/* 의도적 스텁 (TDD RED) — GREEN 커밋에서 실제 구현으로 교체된다. */
+#include <string.h>
 
 int hc_chunk_init(hc_chunk_t *c, hc_arena_t *a, int32_t cx, int32_t cz) {
-    (void)c;
-    (void)a;
-    (void)cx;
-    (void)cz;
-    return -1;
+    c->cx = cx;
+    c->cz = cz;
+    /* 64바이트 정렬: 캐시라인 경계 + Phase 2 SIMD 로드 준비 */
+    c->states = (uint16_t *)hc_arena_alloc(a, sizeof(uint16_t) * HC_BLOCKS, 64);
+    if (!c->states)
+        return -1;
+    /* 항상 zero-fill. arena 재사용 시 stale 데이터가 새 청크로 새면
+     * 산발적 패리티 버그가 된다 (ADR-003 Pitfall 3). */
+    memset(c->states, 0, sizeof(uint16_t) * HC_BLOCKS);
+    memset(c->heightmap_ws, 0, sizeof c->heightmap_ws);
+    memset(c->heightmap_ocean_floor, 0, sizeof c->heightmap_ocean_floor);
+    return 0;
 }
