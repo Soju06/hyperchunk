@@ -1,0 +1,14 @@
+build/
+*.o
+*.so
+*.a
+compile_commands.json
+
+# golden artifacts (binary, regenerable) — only SHA256SUMS is tracked
+golden/*.mca
+tools/golden/libs/
+tools/golden/*.class
+
+__pycache__/
+*.pyc
+.DS_Store
