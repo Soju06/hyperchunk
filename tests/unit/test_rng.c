@@ -145,6 +145,12 @@ static void parse_golden(const char *path, golden_t *g) {
     if (g->exp_ints  <= 0 || g->exp_ints  != g->n_ints)  die(path, "nextInt count mismatch");
     if (g->exp_dbls  <= 0 || g->exp_dbls  != g->n_dbls)  die(path, "nextDouble count mismatch");
     if (g->exp_cross != -1 && g->exp_cross != g->n_cross) die(path, "crosscheck count mismatch");
+
+    /* 섹션명 'nextInt(256-i)' 가 선언한 bound 스케줄을 강제한다. 파일의
+     * bound 를 그대로 믿으면 nextInt(1)=0 같은 자명한 벡터로 바꿔치기해도
+     * 62 checks 가 그대로 찍히며 rejection 경로 커버리지가 사라진다. */
+    for (int i = 0; i < g->n_ints; i++)
+        if (g->int_bounds[i] != 256 - i) die(path, "nextInt bound schedule != 256-i");
 }
 
 static void run_xoro(const char *path) {
