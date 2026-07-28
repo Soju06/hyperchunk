@@ -18,10 +18,14 @@ add_compile_options(
 # ADR-009 D2: sanitizer 게이트 빌드 (CMakePresets.json 의 asan-ubsan 이 켠다).
 # 이 빌드는 check_no_fma.sh 대상이 아니다 — 계측 코드가 섞여 디스어셈블
 # 게이트가 무의미하다 (ADR-009 Pitfall 2). FMA 게이트는 release 아카이브 전용.
+# float-cast-overflow 는 gcc 의 'undefined' 그룹에 포함되지 않아 명시해야
+# 한다 — (int)double 범위 밖 캐스트가 이 프로젝트의 실제 UB 클래스다
+# (floor 좌표 → int 변환 경로).
 option(HC_SANITIZE "Build with ASan+UBSan (ADR-009 D2 gate build)" OFF)
 if(HC_SANITIZE)
-  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
-  add_link_options(-fsanitize=address,undefined)
+  add_compile_options(-fsanitize=address,undefined,float-cast-overflow
+                      -fno-omit-frame-pointer -g)
+  add_link_options(-fsanitize=address,undefined,float-cast-overflow)
 endif()
 
 add_subdirectory(core)

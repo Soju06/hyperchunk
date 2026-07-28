@@ -82,10 +82,11 @@ double hc_df_eval(const hc_df_graph_t *g, double x, double y, double z,
             r = jmax(scratch[nd->a], scratch[nd->b]);
             break;
         case HC_DF_CLAMP: {
-            /* Mth.clamp(v, k0, k1) */
+            /* Mth.clamp(v, k0, k1): v < lo 면 lo, 아니면 Math.min(v, hi)
+             * — 상한이 Math.min 을 통과하는 것까지 바이트코드 그대로 */
             assert(nd->a >= 0 && nd->a < i);
             double t = scratch[nd->a];
-            r = t < nd->k0 ? nd->k0 : (t > nd->k1 ? nd->k1 : t);
+            r = t < nd->k0 ? nd->k0 : jmin(t, nd->k1);
             break;
         }
         case HC_DF_Y_CLAMPED_GRADIENT: {

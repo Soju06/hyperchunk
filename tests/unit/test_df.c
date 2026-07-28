@@ -26,13 +26,19 @@ static int bits_eq(double a, double b) {
     return x == y;
 }
 
+static int bits_are(double a, uint64_t want) {
+    uint64_t x;
+    memcpy(&x, &a, sizeof x);
+    return x == want;
+}
+
 int main(void) {
     hc_perlin_t noise;
     hc_perlin_init(&noise, 1234567890LL);
 
     enum { N_CONST_A, N_CONST_B, N_X, N_Y, N_Z, N_ADD, N_MUL, N_MIN, N_MAX,
-           N_CLAMP, N_YGRAD, N_NOISE, N_SPLINE, N_ZERO, N_NEG, N_MULZ,
-           N_NEGZ, N_MINZ, N_MAXZ, N_COUNT };
+           N_CLAMP, N_YGRAD, N_YGRAD2, N_NOISE, N_SPLINE, N_ZERO, N_NEG,
+           N_MULZ, N_NEGZ, N_MINZ, N_MAXZ, N_COUNT };
     hc_df_node_t nodes[N_COUNT] = {
         [N_CONST_A] = {.op = HC_DF_CONST, .a = -1, .b = -1, .k0 = 2.5},
         [N_CONST_B] = {.op = HC_DF_CONST, .a = -1, .b = -1, .k0 = 4.0},
@@ -48,6 +54,10 @@ int main(void) {
         /* 오버월드 스타일: fromY=-64, toY=320, fromValue=1.5, toValue=-1.5 */
         [N_YGRAD]   = {.op = HC_DF_Y_CLAMPED_GRADIENT, .a = -1, .b = -1,
                        .k0 = -64.0, .k1 = 320.0, .k2 = 1.5, .k3 = -1.5},
+        /* 비이진 상수(0.1/0.7)로 lerp '공식' 을 비트로 고정하기 위한 노드 —
+         * 대칭 상수에서는 모든 lerp 변형이 비트 동일해 공허하다 */
+        [N_YGRAD2]  = {.op = HC_DF_Y_CLAMPED_GRADIENT, .a = -1, .b = -1,
+                       .k0 = -64.0, .k1 = 320.0, .k2 = 0.1, .k3 = 0.7},
         /* NOISE(noise_id, 좌표 스케일 k0,k1,k2) */
         [N_NOISE]   = {.op = HC_DF_NOISE, .a = -1, .b = -1,
                        .k0 = 1.0, .k1 = 1.0, .k2 = 1.0, .noise_id = 0},
@@ -96,12 +106,21 @@ int main(void) {
     /* y 클램프 양끝 + 범위 밖 */
     hc_df_eval(&g, X, -64.0, Z, scratch);
     assert(bits_eq(scratch[N_YGRAD], 1.5));
+    assert(bits_eq(scratch[N_YGRAD2], 0.1)); /* t=0: c + 0*(d-c) == c 정확 */
     hc_df_eval(&g, X, -1000.0, Z, scratch);
     assert(bits_eq(scratch[N_YGRAD], 1.5));
     hc_df_eval(&g, X, 320.0, Z, scratch);
     assert(bits_eq(scratch[N_YGRAD], -1.5));
     hc_df_eval(&g, X, 1000.0, Z, scratch);
     assert(bits_eq(scratch[N_YGRAD], -1.5));
+    assert(bits_eq(scratch[N_YGRAD2], 0.7)); /* t>1 은 상수 d 반환 */
+
+    /* lerp 공식 자체를 비트로 고정한다: y=-59 → t=5/384 (비이진) 에서
+     * 바닐라 c + t*(d-c) 는 0x3fbb99999999999a, 수학적으로 동치인
+     * (1-t)*c + t*d 는 ...99 로 최하위 비트가 다르다. 대칭 상수/중앙점만
+     * 찍으면 어떤 공식이든 통과하는 공허한 검사가 된다 (리뷰 실증). */
+    hc_df_eval(&g, X, -59.0, Z, scratch);
+    assert(bits_are(scratch[N_YGRAD2], 0x3fbb99999999999aULL));
 
     /* NOISE 의 좌표 스케일: k 를 바꾸면 스케일된 좌표의 직접 샘플과 같다 */
     nodes[N_NOISE].k0 = 0.25;

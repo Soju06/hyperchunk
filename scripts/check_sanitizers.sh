@@ -17,8 +17,10 @@ cmake --build build-asan -j
 # halt_on_error=1: 리포트 즉시 비정상 종료 → ctest FAIL 로 전파.
 # (UBSan 은 기본이 '출력만 하고 계속' 이라 이 옵션 없이는 게이트가 새는
 #  false-PASS 채널이 된다. print_stacktrace 는 리포트 진단용.)
+# --no-tests=error: 테스트가 0개 발견돼도 ctest 는 기본적으로 exit 0 이다
+# — 계측 하에 아무것도 실행하지 않고 PASS 배너를 찍는 false-PASS 채널.
 ASAN_OPTIONS="halt_on_error=1" \
 UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1" \
-ctest --test-dir build-asan --output-on-failure
+ctest --test-dir build-asan --no-tests=error --output-on-failure
 
 echo "PASS: full ctest suite clean under ASan+UBSan"

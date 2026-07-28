@@ -13,6 +13,14 @@
       "cacheVariables": {
         "HC_SANITIZE": "ON"
       }
+    },
+    {
+      "name": "release",
+      "displayName": "Release (NDEBUG: bounds asserts compiled out, ADR-009 D3 zero-cost)",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ]
 }

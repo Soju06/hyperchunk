@@ -60,6 +60,30 @@ int main(void) {
     assert(hc_arena_used(&a) == sizeof backing);
     assert(hc_arena_alloc(&a, 1, 1) == NULL);
 
+    /* 오버플로 probe 를 0 이 아닌 오프셋에서 다시 찌른다 — off=0 에서는
+     * naive `p + n > cap` 도 랩 없이 우연히 옳아서 위 probe 만으로는
+     * 뮤턴트가 살아남는다 (리뷰에서 실증된 false-PASS 채널). off=16 이면
+     * naive 는 p+n 이 7 / 0 으로 랩어라운드해 가짜 성공을 낸다. */
+    hc_arena_reset(&a);
+    assert(hc_arena_alloc(&a, 16, 16) != NULL);
+    assert(hc_arena_alloc(&a, SIZE_MAX - 8, 16) == NULL);
+    assert(hc_arena_alloc(&a, SIZE_MAX - 15, 1) == NULL);
+    assert(hc_arena_used(&a) == 16);
+
+    /* 정렬은 '주소' 보증이다: 일부러 1바이트 어긋난 backing 에서도 반환
+     * 주소가 align 배수여야 한다. 오프셋 기준으로만 정렬하는 구현은
+     * 64정렬 backing 위에서는 구분 불가라 여기서만 잡힌다. */
+    hc_arena_t m;
+    hc_arena_init(&m, backing + 1, sizeof backing - 1);
+    void *mp = hc_arena_alloc(&m, 8, 64);
+    assert(mp != NULL);
+    assert(((uintptr_t)mp & 63u) == 0);
+    assert((unsigned char *)mp >= backing + 1);
+    void *mq = hc_arena_alloc(&m, 8, 32);
+    assert(mq != NULL);
+    assert(((uintptr_t)mq & 31u) == 0);
+    assert((unsigned char *)mq >= (unsigned char *)mp + 8);
+
     /* n=0 도 유효한 정렬 주소를 반환한다 (전진 없음이어도 무방) */
     hc_arena_reset(&a);
     void *z = hc_arena_alloc(&a, 0, 32);

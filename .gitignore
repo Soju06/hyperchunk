@@ -1,5 +1,6 @@
 build/
 build-asan/
+build-*/
 *.o
 *.so
 *.a
@@ -22,3 +23,4 @@ __pycache__/
 
 # vanilla server debris if a jar is ever launched from repo root
 logs/
+build-release/
