@@ -537,3 +537,62 @@ Pumpkin/Valence가 우리 코어를 쓸 수 있다는 것은, 우리가 나중�
 - ADR-003 (fallback 전략, 모듈 경계)
 - https://github.com/zlib-ng/zlib-ng/issues/1486 (압축 라이브러리 벤치)
 - https://minecraft.wiki/w/Java_Edition_protocol/Packets
+
+---
+
+## ADR-006 — 타겟 버전을 26.2로 변경하고, 비난독화 소스와 FFM을 활용한다 (Phase 1, 2026-07-28)
+
+**Status:** Decided
+**Type:** Scope / Contract
+**Resolves:** ADR-002 D4의 버전 핀, ADR-003의 JNI 선택을 부분 supersede
+
+### Context
+
+사용자 directive: "일단 최초 버전 타겟은 26.2로 하자"
+
+ADR-002 D4는 "1.21.x 단일 패치"를 가정했으나, Mojang이 2026년부터 연도 기반 버저닝(year.drop.hotfix)으로 전환했다. 릴리스 계보: 1.21.11 → 26.1 "Tiny Takeover" (2026-03-24) → 26.1.1/26.1.2 → **26.2 "Chaos Cubed" (2026-06-16, 현재 latest release)**. 버전 매니페스트에서 실존 확인함 (protocol 776, data version 4903, data pack format 107.1).
+
+조사에서 확인된 파급효과 세 가지:
+
+1. **Java 25 필수.** 26.1부터 Minimum Java version = Java SE 25. 플랜의 "JDK 21 설치" 지시는 무효.
+2. **26.1부터 완전 비난독화.** 26.1은 "the first to be fully unobfuscated without an accompanying obfuscated variant". Fabric도 이에 따라 Yarn 매핑 지원을 중단하고 Mojang 공식 이름으로 전환했다. 매핑 레이어가 사라져 스테이지 덤프 하네스(mixin)를 실명 클래스로 직접 작성한다.
+3. **26.2 worldgen은 1.21.x와 다르다.** sulfur caves 케이브 바이옴과 sulfur/cinnabar 블록이 추가되어 재현해야 할 표면이 늘었다. cubiomes 등 기존 레퍼런스 구현은 26.x를 지원하지 않을 가능성이 높다. 대신 비난독화 소스가 알고리즘 확인 비용을 크게 낮춰 이를 상쇄한다.
+
+### Decision (4 핵심 결정)
+
+| # | 결정 | 핵심 |
+|---|---|---|
+| D1 | **타겟 버전 = 26.2 고정** | TARGET_VERSION=26.2. ADR-002 D4의 "단일 패치 고정" 원칙은 유지, 값만 교체 |
+| D2 | **golden 생성 환경은 JDK 25** | 26.x 서버 구동 요건 |
+| D3 | **매핑 레이어 폐기, Mojang 실명 직접 사용** | Yarn 사망. 비난독화 jar 기준으로 mixin/리플렉션 작성 |
+| D4 | **Phase 3 브릿지는 JNI 대신 FFM** | Java 25에서 FFM(JEP 454)이 정식. ADR-003의 "Java 21 preview라서 JNI" 논거 소멸. 경계 입도 불변식(리전 단위)은 그대로 |
+
+### Why 26.2 over 1.21.x?
+
+최신 안정판이 26.2이므로 "현재의 바닐라"와 비교하는 것이 시연 목적(ADR-001)에 부합한다. 1.21.x 대비 벤치는 출시 시점에 이미 구버전 비교가 된다.
+
+### Anti-goals
+
+- 26.1/26.3-snapshot 동시 지원 (단일 패치 원칙)
+- 1.21.x 하위 호환
+- 디컴파일/비난독화 소스 코드의 복사 — 이름 참조와 알고리즘 이해는 자유로워졌지만 코드 복사는 여전히 저작권 문제 (ADR-002 R4 원칙 유지)
+
+### Pitfalls
+
+1. **sulfur caves는 carvers/features/biomes 재구현 범위에 포함된다.** 1.21 기준 자료(위키 문서 다수)가 26.2 현실과 다를 수 있으므로, 항상 비난독화 소스와 26.2 추출 JSON을 1차 근거로 삼는다.
+2. **cubiomes 참조 시 버전 주의.** 26.x 미지원 알고리즘을 그대로 믿으면 패리티가 조용히 깨진다.
+3. **data pack format 107.1.** Task 12 데이터팩 스키마 파서는 26.2 스키마 기준이다.
+4. **오버월드 y 범위(-64..319) 유지 여부 미확인.** Task 2 golden 덤프에서 실측으로 확정하고 hyperchunk.h 상수를 그에 맞춘다.
+
+### Verification
+
+- TARGET_VERSION 파일 내용 = 26.2
+- golden 서버가 JDK 25에서 구동되고 region 생성 확인
+- 스테이지 덤프 하네스가 매핑 도구 없이 빌드됨
+
+### References
+
+- ADR-002, ADR-003
+- https://minecraft.wiki/w/Java_Edition_26.2
+- https://minecraft.wiki/w/Java_Edition_26.1 (비난독화, Java 25 요건)
+- https://docs.fabricmc.net/develop/porting/ (Yarn 중단, Mojang mappings 전환)

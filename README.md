@@ -85,7 +85,7 @@ zero allocations, which inverts the sign: batching gets cheaper as it grows.
 
 **In scope for Phase 1**
 
-- Single pinned 1.21.x patch
+- Single pinned version: 26.2 (\"Chaos Cubed\")
 - Overworld only
 - Structures placed but not jigsaw-assembled
 - Scalar reference kernel

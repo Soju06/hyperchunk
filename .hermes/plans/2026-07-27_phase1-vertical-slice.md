@@ -23,7 +23,7 @@
 | 구현 | 밑바닥부터 순수 C | ADR-002 D1 |
 | 파이프라인 | 5스테이지 전부 | ADR-002 D2 |
 | 수용 기준 | region `sha256` 일치 | ADR-002 D3 |
-| 범위 | 1.21.x 단일 패치 / 오버월드만 / 구조물은 배치까지 | ADR-002 D4 |
+| 범위 | 26.2 고정 / 오버월드만 / 구조물은 배치까지 | ADR-002 D4 + ADR-006 |
 | 경계 | 리전 단위 C ABI만 | ADR-003 D2 |
 | 커널 | Phase 1은 스칼라만 | ADR-004 (Phase 2) |
 | FMA | 전면 금지 | ADR-004 D3 |
@@ -43,7 +43,7 @@ CPU     : AMD Ryzen 9 5900X (Zen 3), 22 vCPU 보고
 ISA     : avx avx2 fma sse4_1 sse4_2 sse4a  (AVX-512 없음)
 gcc     : 13.3.0        ✅
 cmake   : 3.28.3        ✅
-java    : 17.0.19       ⚠️ MC 1.21은 Java 21 필요 → Task 0에서 설치
+java    : 17.0.19       ⚠️ MC 26.2는 Java 25 필요 → Task 0에서 JDK 25 설치 (ADR-006 D2)
 clang   : MISSING       (선택, gcc로 충분)
 ninja   : MISSING       (선택, Makefile 생성기로 대체)
 python3 : 3.12.3        ✅
@@ -54,7 +54,7 @@ RAM     : 47 GB
 
 **가정:**
 
-- MC 1.21.4를 대상 패치로 고정한다 (Task 0에서 실제 버전 확인 후 확정)
+- 대상 버전은 26.2로 고정 (ADR-006 D1). 26.1부터 완전 비난독화라 매핑 레이어 불필요 (ADR-006 D3)
 - 바닐라 알고리즘 참조는 디컴파일된 소스가 아니라 공개 문서(minecraft.wiki) + cubiomes 구현 + 실측 대조로 확보한다
 - Task 1~4는 데이터팩 스키마를 다루지 않는다. 하드코딩된 오버월드 기본 설정만 사용한다 (스키마 파서는 Task 12)
 
@@ -80,7 +80,7 @@ RAM     : 47 GB
 
 ### Task 0: 개발 환경 준비 및 대상 버전 고정
 
-**Objective:** Java 21 설치, MC 1.21.x 정확한 패치 버전 확정, 프로젝트 스캐폴드 생성
+**Objective:** JDK 25 설치, TARGET_VERSION=26.2 고정, 프로젝트 스캐폴드 생성
 
 **Files:**
 - Create: `/home/ubuntu/projects/hyperchunk/.gitignore`
@@ -90,21 +90,21 @@ RAM     : 47 GB
 **Step 1: Java 21 설치**
 
 ```bash
-sudo apt-get update && sudo apt-get install -y openjdk-21-jdk
+sudo apt-get update && sudo apt-get install -y openjdk-25-jdk  # 없으면 Temurin 25
 java -version 2>&1 | head -1
 ```
-Expected: `openjdk version "21.x.x"`
+Expected: `openjdk version "25.x.x"`
 
 **Step 2: 대상 버전 확정**
 
-MC 버전 매니페스트에서 최신 1.21.x 릴리스를 확인한다.
+TARGET_VERSION은 26.2로 확정이다 (ADR-006). 매니페스트에서 26.2 존재만 확인한다.
 
 ```bash
 curl -s https://launchermeta.mojang.com/mc/game/version_manifest_v2.json \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); print([v['id'] for v in d['versions'] if v['type']=='release' and v['id'].startswith('1.21')][:5])"
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print([v['id'] for v in d['versions'] if v['id']=='26.2'])"
 ```
 
-가장 최신 1.21.x를 `TARGET_VERSION`에 기록한다. 이 값은 Phase 1 전체에서 고정된다 (ADR-002 D4).
+`TARGET_VERSION`에 `26.2`를 기록한다. 이 값은 Phase 1 전체에서 고정된다 (ADR-002 D4 + ADR-006 D1).
 
 **Step 3: git init + 스캐폴드**
 
@@ -282,11 +282,11 @@ echo "fetched: $OUT/server-$VER.jar"
 
 | 경로 | 방법 | 리스크 |
 |---|---|---|
-| A. Fabric 모드 + mixin | `ChunkGenerator` 각 단계 후 훅 | Fabric 설치 필요, 가장 확실 |
-| B. 리플렉션 하네스 | 서버 jar를 클래스패스로 두고 직접 호출 | 난독화된 이름, 매핑 필요 |
+| A. Fabric 모드 + mixin | `ChunkGenerator` 각 단계 후 훅 (26.1+ 비난독화라 Mojang 실명 직접 사용, 매핑 불필요) | Fabric 설치 필요, 가장 확실 |
+| B. 리플렉션 하네스 | 서버 jar를 클래스패스로 두고 직접 호출 | 비난독화라 실명 호출 가능, 부트스트랩 순서가 관건 |
 | C. region 파일만 대조 | 최종 결과만 비교 | 스테이지 격리 불가 → 디버깅 지옥 |
 
-**추천: A.** Fabric mixin으로 각 스테이지 직후 `ProtoChunk` 상태를 덤프한다. Yarn 매핑이 있어 클래스/메서드 이름이 읽을 수 있다.
+**추천: A.** Fabric mixin으로 각 스테이지 직후 `ProtoChunk` 상태를 덤프한다. 26.1+는 완전 비난독화이므로 Mojang 실명으로 바로 작성한다 (Yarn은 26.x에서 지원 중단됨).
 
 C는 폴백으로만 쓴다. 스테이지 격리 없이 5스테이지 패리티를 디버깅하는 것은 실질적으로 불가능하다.
 
@@ -493,7 +493,7 @@ javac RngGolden.java && java RngGolden
 
 출력값을 `tests/unit/test_rng.c`의 PLACEHOLDER에 채운다.
 
-⚠️ Xoroshiro golden은 `net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom`이 MC 내부 클래스라 Task 2 전략 A(Fabric mixin)가 확보된 후에 덤프해야 한다. 그때까지 LCG만 검증한다.
+⚠️ Xoroshiro golden은 MC 내부 Xoroshiro 클래스(26.x 비난독화 실명 기준)라 Task 2 전략 A(Fabric mixin)가 확보된 후에 덤프해야 한다. 그때까지 LCG만 검증한다.
 
 **Step 5: 테스트 통과 확인**
 
@@ -613,7 +613,7 @@ size_t hc_arena_used(const hc_arena_t *a) { return a->off; }
 #include <stdint.h>
 #include "hc_arena.h"
 
-/* 1.21 오버월드: y = -64 .. 319 (384 블록) */
+/* 오버월드 y 범위: 1.21 기준 -64..319 (384). 26.2에서 유지 여부는 Task 2 golden에서 실측 확정 (ADR-006 Pitfall 4) */
 #define HC_MIN_Y      (-64)
 #define HC_HEIGHT     384
 #define HC_CHUNK_XZ   16
@@ -896,7 +896,7 @@ git add -A && git commit -m "feat: flat density function IR and scalar Perlin"
 
 ### Task 6: 스플라인 + 오버월드 노이즈 라우터 하드코딩
 
-**Objective:** 1.21 오버월드의 density function 그래프를 하드코딩으로 구성해 `final_density`를 평가할 수 있게 한다
+**Objective:** 26.2 오버월드의 density function 그래프를 하드코딩으로 구성해 `final_density`를 평가할 수 있게 한다
 
 **Files:**
 - Create: `core/src/df_spline.c`
@@ -904,7 +904,7 @@ git add -A && git commit -m "feat: flat density function IR and scalar Perlin"
 - Create: `core/include/hc_overworld.h`
 - Create: `tests/parity/test_noise_column.c`
 
-⚠️ **이 태스크가 Phase 1 최대 작업량이다.** 1.21 오버월드 노이즈 라우터는 `continents`, `erosion`, `depth`, `ridges`, `jaggedness`, `offset`, `factor` 등을 조합하며 스플라인이 중첩된다. 실제 파라미터는 `data/minecraft/worldgen/noise_settings/overworld.json`에서 추출한다.
+⚠️ **이 태스크가 Phase 1 최대 작업량이다.** 26.2 오버월드 노이즈 라우터는 `continents`, `erosion`, `depth`, `ridges`, `jaggedness`, `offset`, `factor` 등을 조합하며 스플라인이 중첩된다. 실제 파라미터는 `data/minecraft/worldgen/noise_settings/overworld.json`에서 추출한다.
 
 **Step 1: 바닐라 JSON 추출**
 
