@@ -53,8 +53,10 @@ int hc_octaves_init(hc_octaves_t *o, hc_arena_t *a, hc_xoro_t *rand,
                     int32_t first_octave, const double *amps, int32_t count);
 
 /* LEGACY 초기화 (BlendedNoise 전용): 인덱스 j = -first_octave (옥타브 0)
- * 을 먼저 만들고 j-1..0 (옥타브 -1..first_octave) 을 내림차순으로 하나의
- * RNG 에서 '순차' 소비한다. 진폭 0 인 자리는 262 draw 를 건너뛴다. */
+ * 의 ImprovedNoise 를 저장 여부와 무관하게 항상 먼저 생성(=소비)하고,
+ * j-1..0 (옥타브 -1..first_octave) 을 내림차순으로 하나의 RNG 에서 '순차'
+ * 소비한다. 내림차순 구간에서 진폭 0 인 자리는 262 draw 를 건너뛴다.
+ * j < count-1 (양수 옥타브) 는 바닐라가 throw 하므로 -1 을 돌려준다. */
 int hc_octaves_init_legacy(hc_octaves_t *o, hc_arena_t *a, hc_xoro_t *rand,
                            int32_t first_octave, const double *amps,
                            int32_t count);

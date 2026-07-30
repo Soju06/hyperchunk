@@ -6,6 +6,7 @@ add_library(hyperchunk STATIC
   src/md5.c
   src/json.c
   src/noise_perlin.c
+  src/noise_octaves.c
   src/df_eval.c
 )
 target_include_directories(hyperchunk PUBLIC include)

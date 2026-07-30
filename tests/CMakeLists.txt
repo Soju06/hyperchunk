@@ -33,3 +33,5 @@ add_executable(test_noise unit/test_noise.c)
 target_link_libraries(test_noise PRIVATE hyperchunk)
 add_test(NAME noise_fork COMMAND test_noise fork
          ${CMAKE_SOURCE_DIR}/golden/rng/fork_seed1234567890.txt)
+add_test(NAME noise_octaves COMMAND test_noise octaves
+         ${CMAKE_SOURCE_DIR}/golden/rng/octaves_seed1234567890.txt)

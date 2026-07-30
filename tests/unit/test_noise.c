@@ -51,6 +51,23 @@ static void check_u64(const char *what, const char *key, int idx,
     }
 }
 
+static void check_bits(const char *label, double got, uint64_t want_bits) {
+    uint64_t got_bits;
+    memcpy(&got_bits, &got, sizeof got_bits);
+    g_checks++;
+    if (got_bits != want_bits) {
+        g_fails++;
+        fprintf(stderr,
+                "FAIL %s: got %.17g (0x%016" PRIx64 ") want bits 0x%016" PRIx64
+                "\n",
+                label, got, got_bits, want_bits);
+    }
+}
+
+/* 노이즈 인스턴스 시딩용 arena — 블록마다 reset 해 재사용한다 */
+static unsigned char g_backing[1u << 20];
+static hc_arena_t g_arena;
+
 /* ---------------- fork: positional fork / fromHashOf / at ---------------- */
 
 static int run_fork(const char *path) {
@@ -150,6 +167,304 @@ static int run_fork(const char *path) {
     return g_fails == 0 ? 0 : 1;
 }
 
+/* --------- octaves/normal: NormalNoise 내부 + 샘플 (octaves golden) --------- */
+
+#define MAX_OCT     16
+#define MAX_SAMPLES 8
+
+typedef struct {
+    int      has_fo, fo;
+    int      n_amp;
+    double   amp[MAX_OCT];
+    int      has_lfif, has_lfvf;
+    uint64_t lfif_bits, lfvf_bits;
+    int      oct_count; /* .octave_count 선언, 없으면 -1 */
+    int      oct_seen[MAX_OCT]; /* 비트: 1 xo, 2 yo, 4 zo, 8 null */
+    uint64_t oct_bits[MAX_OCT][3];
+    int      n_val;
+    double   vx[MAX_SAMPLES], vy[MAX_SAMPLES], vz[MAX_SAMPLES];
+    uint64_t vbits[MAX_SAMPLES];
+} perlin_golden_t;
+
+typedef struct {
+    char            key[128];
+    int             has_vf;
+    uint64_t        vf_bits;
+    perlin_golden_t first, second;
+    int             n_val; /* NormalNoise.getValue 샘플 */
+    double          vx[MAX_SAMPLES], vy[MAX_SAMPLES], vz[MAX_SAMPLES];
+    uint64_t        vbits[MAX_SAMPLES];
+} noise_golden_t;
+
+/* rest 는 ".first"/".second" 프리픽스를 제거한 나머지 (".firstOctave ..."). */
+static int parse_perlin_line(const char *path, const char *rest,
+                             perlin_golden_t *pg) {
+    int      iv, oi;
+    uint64_t bits;
+    double   x, y, z;
+    char     tag[8];
+
+    if (sscanf(rest, ".firstOctave %d", &iv) == 1) {
+        pg->fo = iv;
+        pg->has_fo = 1;
+    } else if (strncmp(rest, ".amplitudes [", 13) == 0) {
+        const char *s = rest + 13;
+        char       *end;
+        for (;;) {
+            double v = strtod(s, &end);
+            if (end == s)
+                break;
+            if (pg->n_amp >= MAX_OCT)
+                die(path, "amplitude overflow");
+            pg->amp[pg->n_amp++] = v;
+            s = end;
+            while (*s == ',' || *s == ' ')
+                s++;
+        }
+        if (*s != ']')
+            die(path, "amplitudes not terminated by ]");
+        if (pg->n_amp < 1)
+            die(path, "empty amplitudes");
+    } else if (sscanf(rest, ".lowestFreqInputFactor %*s bits=0x%" SCNx64,
+                      &bits) == 1) {
+        pg->lfif_bits = bits;
+        pg->has_lfif = 1;
+    } else if (sscanf(rest, ".lowestFreqValueFactor %*s bits=0x%" SCNx64,
+                      &bits) == 1) {
+        pg->lfvf_bits = bits;
+        pg->has_lfvf = 1;
+    } else if (sscanf(rest, ".octave_count %d", &iv) == 1) {
+        pg->oct_count = iv;
+    } else if (sscanf(rest, ".octave[%d].xo %*s bits=0x%" SCNx64, &oi,
+                      &bits) == 2) {
+        if (oi < 0 || oi >= MAX_OCT)
+            die(path, "octave index out of range");
+        pg->oct_bits[oi][0] = bits;
+        pg->oct_seen[oi] |= 1;
+    } else if (sscanf(rest, ".octave[%d].yo %*s bits=0x%" SCNx64, &oi,
+                      &bits) == 2) {
+        if (oi < 0 || oi >= MAX_OCT)
+            die(path, "octave index out of range");
+        pg->oct_bits[oi][1] = bits;
+        pg->oct_seen[oi] |= 2;
+    } else if (sscanf(rest, ".octave[%d].zo %*s bits=0x%" SCNx64, &oi,
+                      &bits) == 2) {
+        if (oi < 0 || oi >= MAX_OCT)
+            die(path, "octave index out of range");
+        pg->oct_bits[oi][2] = bits;
+        pg->oct_seen[oi] |= 4;
+    } else if (sscanf(rest, ".octave[%d] %7s", &oi, tag) == 2 &&
+               strcmp(tag, "null") == 0) {
+        if (oi < 0 || oi >= MAX_OCT)
+            die(path, "octave index out of range");
+        pg->oct_seen[oi] |= 8;
+    } else if (sscanf(rest, ".getValue(%lf,%lf,%lf) %*s bits=0x%" SCNx64, &x,
+                      &y, &z, &bits) == 4) {
+        if (pg->n_val >= MAX_SAMPLES)
+            die(path, "getValue sample overflow");
+        pg->vx[pg->n_val] = x;
+        pg->vy[pg->n_val] = y;
+        pg->vz[pg->n_val] = z;
+        pg->vbits[pg->n_val++] = bits;
+    } else {
+        return -1;
+    }
+    return 0;
+}
+
+/* 블록 완결성 검사 — 필수 섹션이 빠진 golden 은 공허 통과를 만들므로 즉사 */
+static void validate_perlin_golden(const char *path, const char *key,
+                                   const perlin_golden_t *pg) {
+    if (!pg->has_fo || !pg->has_lfif || !pg->has_lfvf)
+        die(path, "perlin block missing firstOctave/lowestFreq factors");
+    if (pg->oct_count != pg->n_amp)
+        die(path, "octave_count != amplitude count");
+    if (pg->n_val < 3)
+        die(path, "fewer than 3 perlin getValue samples");
+    for (int i = 0; i < pg->n_amp; i++) {
+        if (pg->oct_seen[i] != 7 && pg->oct_seen[i] != 8) {
+            fprintf(stderr, "GOLDEN FORMAT ERROR %s: %s octave[%d] "
+                            "incomplete (seen=%d)\n",
+                    path, key, i, pg->oct_seen[i]);
+            exit(2);
+        }
+    }
+}
+
+static void validate_noise_golden(const char *path, const noise_golden_t *b) {
+    validate_perlin_golden(path, b->key, &b->first);
+    validate_perlin_golden(path, b->key, &b->second);
+    if (!b->has_vf)
+        die(path, "missing .valueFactor");
+    if (b->n_val < 4)
+        die(path, "fewer than 4 NormalNoise getValue samples");
+    if (b->first.fo != b->second.fo || b->first.n_amp != b->second.n_amp ||
+        memcmp(b->first.amp, b->second.amp,
+               sizeof(double) * (size_t)b->first.n_amp) != 0)
+        die(path, "first/second parameter mismatch");
+}
+
+/* 구성한 hc_octaves_t 를 golden 의 first/second 서브블록과 대조한다 */
+static void check_octaves(const char *key, const char *sub,
+                          const perlin_golden_t *pg, const hc_octaves_t *o) {
+    char label[256];
+
+    snprintf(label, sizeof label, "%s%s.lowestFreqInputFactor", key, sub);
+    check_bits(label, o->lowest_freq_input, pg->lfif_bits);
+    snprintf(label, sizeof label, "%s%s.lowestFreqValueFactor", key, sub);
+    check_bits(label, o->lowest_freq_value, pg->lfvf_bits);
+
+    for (int i = 0; i < pg->n_amp; i++) {
+        int want_null = (pg->oct_seen[i] == 8);
+        g_checks++;
+        if ((o->octaves[i] == NULL) != want_null) {
+            g_fails++;
+            fprintf(stderr, "FAIL %s%s.octave[%d]: got %s want %s\n", key,
+                    sub, i, o->octaves[i] ? "instance" : "null",
+                    want_null ? "null" : "instance");
+            continue;
+        }
+        if (want_null)
+            continue;
+        static const char *axis[3] = {"xo", "yo", "zo"};
+        const double      *got[3] = {&o->octaves[i]->xo, &o->octaves[i]->yo,
+                                     &o->octaves[i]->zo};
+        for (int c = 0; c < 3; c++) {
+            snprintf(label, sizeof label, "%s%s.octave[%d].%s", key, sub, i,
+                     axis[c]);
+            check_bits(label, *got[c], pg->oct_bits[i][c]);
+        }
+    }
+    for (int i = 0; i < pg->n_val; i++) {
+        snprintf(label, sizeof label, "%s%s.getValue(%g,%g,%g)", key, sub,
+                 pg->vx[i], pg->vy[i], pg->vz[i]);
+        check_bits(label,
+                   hc_octaves_value(o, pg->vx[i], pg->vy[i], pg->vz[i], 0.0,
+                                    0.0),
+                   pg->vbits[i]);
+    }
+}
+
+/* 바닐라 RandomState.getOrCreateNoise 재현: 노이즈별 RNG 는
+ * XoroshiroRandomSource(seed).forkPositional().fromHashOf(key) 다. */
+static void seed_noise_rand(int64_t seed, const char *key, hc_xoro_t *out) {
+    hc_xoro_t      base;
+    hc_xoro_fork_t fk;
+    hc_xoro_init(&base, seed);
+    hc_xoro_fork_positional(&base, &fk);
+    hc_xoro_from_hash_of(&fk, key, out);
+}
+
+/* NormalNoise 소비 순서 재현: first/second PerlinNoise 를 같은 rand 에서
+ * 순차 초기화한다 (forkPositional 2회 == nextLong 4회 소비). */
+static void verify_noise_block(const char *path, int64_t seed,
+                               const noise_golden_t *b, int mode) {
+    hc_xoro_t rand;
+    seed_noise_rand(seed, b->key, &rand);
+    hc_arena_reset(&g_arena);
+
+    if (mode == 0) {
+        hc_octaves_t first, second;
+        if (hc_octaves_init(&first, &g_arena, &rand, b->first.fo,
+                            b->first.amp, b->first.n_amp) != 0 ||
+            hc_octaves_init(&second, &g_arena, &rand, b->first.fo,
+                            b->first.amp, b->first.n_amp) != 0)
+            die(path, "hc_octaves_init failed (arena exhausted?)");
+        check_octaves(b->key, ".first", &b->first, &first);
+        check_octaves(b->key, ".second", &b->second, &second);
+    } else {
+        die(path, "normal mode not implemented yet");
+    }
+}
+
+/* mode: 0 = octaves (first/second 내부 + 샘플), 1 = normal (valueFactor +
+ * 결합 샘플). 같은 파일을 두 게이트로 나눠 실패 계층을 격리한다. */
+static int run_octaves_file(const char *path, int mode) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "cannot open golden file: %s\n", path);
+        exit(2);
+    }
+    hc_arena_init(&g_arena, g_backing, sizeof g_backing);
+
+    char           line[16384];
+    int64_t        seed = 0;
+    int            has_seed = 0;
+    int            want_count = -1, n_blocks = 0;
+    noise_golden_t blk;
+    int            in_block = 0;
+
+    memset(&blk, 0, sizeof blk);
+    blk.first.oct_count = blk.second.oct_count = -1;
+
+    while (fgets(line, sizeof line, f)) {
+        if (line[0] == '#' || blank(line))
+            continue;
+
+        int64_t  sv;
+        int      n;
+        uint64_t bits;
+        double   x, y, z;
+        char     key[128];
+
+        if (sscanf(line, "seed %" SCNd64, &sv) == 1) {
+            seed = sv;
+            has_seed = 1;
+        } else if (sscanf(line, "noise_count %d", &n) == 1) {
+            want_count = n;
+        } else if (sscanf(line, "noise \"%127[^\"]\"", key) == 1) {
+            if (in_block) {
+                validate_noise_golden(path, &blk);
+                verify_noise_block(path, seed, &blk, mode);
+                n_blocks++;
+            }
+            if (!has_seed)
+                die(path, "noise block before seed");
+            memset(&blk, 0, sizeof blk);
+            blk.first.oct_count = blk.second.oct_count = -1;
+            snprintf(blk.key, sizeof blk.key, "%s", key);
+            in_block = 1;
+        } else if (!in_block) {
+            die_line(path, line);
+        } else if (strncmp(line, ".first.", 7) == 0) {
+            if (parse_perlin_line(path, line + 6, &blk.first) != 0)
+                die_line(path, line);
+        } else if (strncmp(line, ".second.", 8) == 0) {
+            if (parse_perlin_line(path, line + 7, &blk.second) != 0)
+                die_line(path, line);
+        } else if (sscanf(line, ".valueFactor %*s bits=0x%" SCNx64, &bits) ==
+                   1) {
+            blk.vf_bits = bits;
+            blk.has_vf = 1;
+        } else if (sscanf(line, ".getValue(%lf,%lf,%lf) %*s bits=0x%" SCNx64,
+                          &x, &y, &z, &bits) == 4) {
+            if (blk.n_val >= MAX_SAMPLES)
+                die(path, "getValue sample overflow");
+            blk.vx[blk.n_val] = x;
+            blk.vy[blk.n_val] = y;
+            blk.vz[blk.n_val] = z;
+            blk.vbits[blk.n_val++] = bits;
+        } else {
+            die_line(path, line);
+        }
+    }
+    fclose(f);
+
+    if (in_block) {
+        validate_noise_golden(path, &blk);
+        verify_noise_block(path, seed, &blk, mode);
+        n_blocks++;
+    }
+    if (!has_seed)
+        die(path, "missing seed");
+    if (want_count < 1 || n_blocks != want_count)
+        die(path, "noise_count missing or block count mismatch");
+
+    printf("test_noise %s: %d noises, %d checks, %d failures\n",
+           mode == 0 ? "octaves" : "normal", n_blocks, g_checks, g_fails);
+    return g_fails == 0 ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) {
         fprintf(stderr,
@@ -161,6 +476,8 @@ int main(int argc, char **argv) {
 
     if (strcmp(mode, "fork") == 0)
         return run_fork(path);
+    if (strcmp(mode, "octaves") == 0)
+        return run_octaves_file(path, 0);
     fprintf(stderr, "unknown mode: %s\n", mode);
     return 2;
 }
