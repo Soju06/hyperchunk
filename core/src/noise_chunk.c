@@ -58,9 +58,10 @@ static int32_t mth_floor(double d) {
 /* --- preliminarySurfaceLevel (Long2IntMap 메모 — 값-중립) --- */
 
 int32_t hc_nc_psl(hc_noise_chunk_t *nc, int32_t x, int32_t z) {
-    /* QuartPos.toBlock(QuartPos.fromBlock(v)) = (v >> 2) << 2 */
-    int32_t qx = (x >> 2) << 2;
-    int32_t qz = (z >> 2) << 2;
+    /* QuartPos.toBlock(QuartPos.fromBlock(v)) = (v >> 2) << 2 — Java 의
+     * 음수 좌시프트는 래핑이라 무부호로 우회한다 (값 범위상 동일) */
+    int32_t qx = (int32_t)((uint32_t)(x >> 2) << 2);
+    int32_t qz = (int32_t)((uint32_t)(z >> 2) << 2);
     /* ColumnPos.asLong(x, z) = (x & 0xFFFFFFFF) | (z << 32) */
     uint64_t key = (uint64_t)(uint32_t)qx | ((uint64_t)(uint32_t)qz << 32);
     uint32_t h = (uint32_t)(key ^ (key >> 29)) * 2654435761u;
@@ -317,9 +318,9 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
         hc_df_flat_t *fl = &nc->flat[f];
         int32_t       child = g->nodes[fl->node].a;
         for (int32_t qi = 0; qi <= nc->noise_size_xz; qi++) {
-            int32_t bx = (nc->first_noise_x + qi) << 2; /* QuartPos.toBlock */
+            int32_t bx = (int32_t)((uint32_t)(nc->first_noise_x + qi) << 2);
             for (int32_t qj = 0; qj <= nc->noise_size_xz; qj++) {
-                int32_t bz = (nc->first_noise_z + qj) << 2;
+                int32_t bz = (int32_t)((uint32_t)(nc->first_noise_z + qj) << 2);
                 fl->values[qi + qj * flat_size] = nc_eval(
                     nc, child, (double)bx, 0.0, (double)bz, HC_DF_MODE_SP);
             }

@@ -9,7 +9,7 @@
  * false-PASS 방어:
  *  - golden 파일이 없거나 헤더 형식이 다르면 즉사 (exit 2)
  *  - 라인 수 불일치도 diff 로 계상 (꼬리 절단 방어)
- *  - 검사한 총 라인 수를 인쇄해 육안 대조 가능 (블록 6154 x2 + 하이트맵) */
+ *  - 검사한 총 라인 수를 인쇄해 육안 대조 가능 (청크당 블록 ~6154 + 하이트맵 40) */
 
 #undef NDEBUG
 
@@ -360,7 +360,11 @@ int main(int argc, char **argv) {
     if (!sb.buf)
         die("arena exhausted (render buffer)", NULL);
 
-    static const int32_t CHUNKS[][2] = {{0, 0}, {1, 0}, {-1, -1}};
+    /* golden 9청크 전부 — c.1.-1 이 유일하게 용암(y<-54 글로벌 픽커)을,
+     * c.0.-1/c.0.0/c.-1.-1 이 aquifer 물을 커버한다 */
+    static const int32_t CHUNKS[][2] = {{0, 0},  {1, 0},   {-1, -1},
+                                        {0, -1}, {1, -1},  {-1, 0},
+                                        {-1, 1}, {0, 1},   {1, 1}};
     int total_lines = 0;
     for (size_t ci = 0; ci < sizeof CHUNKS / sizeof CHUNKS[0]; ci++) {
         int32_t cx = CHUNKS[ci][0], cz = CHUNKS[ci][1];
@@ -403,7 +407,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("test_noise_stage: %d nodes, %d noises; 3 chunks, %d golden "
+    printf("test_noise_stage: %d nodes, %d noises; 9 chunks, %d golden "
            "lines compared, %d diffs\n",
            graph.n, graph.n_noises, total_lines, g_fails);
     return g_fails == 0 ? 0 : 1;

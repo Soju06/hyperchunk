@@ -15,6 +15,11 @@
 
 #define WAY_BELOW_MIN_Y (-32512) /* DimensionType.MIN_Y(-2032) << 4 */
 
+/* Java int << k 는 래핑으로 정의 — C 의 음수 좌시프트 UB 를 무부호 우회 */
+static int32_t shl32(int32_t v, int k) {
+    return (int32_t)((uint32_t)v << k);
+}
+
 static int32_t grid_x(int32_t v) {
     return v >> 4;
 }
@@ -138,8 +143,8 @@ static hc_fluid_status_t compute_fluid(hc_aquifer_t *aq, int32_t x, int32_t y,
     int               center_fluid = 0;
 
     for (int i = 0; i < 13; i++) {
-        int32_t sx = x + ((int32_t)SURF_OFFS[i][0] << 4);
-        int32_t sz = z + ((int32_t)SURF_OFFS[i][1] << 4);
+        int32_t sx = x + shl32(SURF_OFFS[i][0], 4);
+        int32_t sz = z + shl32(SURF_OFFS[i][1], 4);
         int32_t prelim = hc_nc_psl(aq->nc, sx, sz);
         int32_t adjusted = prelim + 8; /* adjustSurfaceLevel */
         int     is_center = SURF_OFFS[i][0] == 0 && SURF_OFFS[i][1] == 0;
@@ -330,8 +335,8 @@ int hc_aquifer_substance(hc_aquifer_t *aq, int32_t x, int32_t y, int32_t z,
                     int32_t ox = hc_xoro_next_int(&r, 10);
                     int32_t oy = hc_xoro_next_int(&r, 9);
                     int32_t oz = hc_xoro_next_int(&r, 10);
-                    loc = bp_pack((gx << 4) + ox, gy * 12 + oy,
-                                  (gz << 4) + oz);
+                    loc = bp_pack(shl32(gx, 4) + ox, gy * 12 + oy,
+                                  shl32(gz, 4) + oz);
                     aq->loc_cache[idx] = loc;
                 }
                 int32_t ddx = bp_x(loc) - x;
@@ -465,10 +470,10 @@ int hc_aquifer_init(hc_aquifer_t *aq, hc_arena_t *arena,
 
     /* skipSamplingAboveY: maxPsl(그리드 경계, +9 오프셋) + 8, +12 → 그리드
      * 상단 - 1 (생성자에서 즉시 계산 — psl 평가는 순수라 순서 무관) */
-    int32_t surf = hc_nc_max_psl_range(nc, aq->min_grid_x << 4,
-                                       aq->min_grid_z << 4,
-                                       (max_grid_x << 4) + 9,
-                                       (max_grid_z << 4) + 9) +
+    int32_t surf = hc_nc_max_psl_range(nc, shl32(aq->min_grid_x, 4),
+                                       shl32(aq->min_grid_z, 4),
+                                       shl32(max_grid_x, 4) + 9,
+                                       shl32(max_grid_z, 4) + 9) +
                    8;
     int32_t g = grid_y(surf + 12) + 1;
     aq->skip_sampling_above_y = (g * 12 + 11) - 1; /* fromGridY(g,11) - 1 */
