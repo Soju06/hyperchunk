@@ -27,3 +27,9 @@ add_test(NAME md5 COMMAND test_md5)
 add_executable(test_json unit/test_json.c)
 target_link_libraries(test_json PRIVATE hyperchunk)
 add_test(NAME json COMMAND test_json)
+
+# 노이즈 스택 (Task 6a). 한 바이너리, 모드별 golden 대조.
+add_executable(test_noise unit/test_noise.c)
+target_link_libraries(test_noise PRIVATE hyperchunk)
+add_test(NAME noise_fork COMMAND test_noise fork
+         ${CMAKE_SOURCE_DIR}/golden/rng/fork_seed1234567890.txt)
