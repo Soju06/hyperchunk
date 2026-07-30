@@ -4,26 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* --- 바닐라 26.2 ImprovedNoise (스칼라 Perlin) ---
- *
- * 시맨틱은 26.2 비난독화 클래스(tools/golden/work/server)를 javap 로
- * 확인했고, golden/rng/perlin_seed1234567890.txt 로 비트단위 검증된다
- * (tests/unit/test_perlin.c).
- *
- * 바닐라는 perm 을 byte[256] 로 두고 p(i) = p[i & 255] & 255 로 조회
- * 시점에 마스킹한다 — 교과서식 512 복제 테이블이 아니며, floor 좌표도
- * 마스킹 없이 그대로 들어간다. 여기서도 같은 구조를 쓴다. */
-typedef struct {
-    double  xo, yo, zo;
-    uint8_t perm[256];
-} hc_perlin_t;
-
-/* 시딩: 같은 Xoroshiro 인스턴스에서 xo, yo, zo (nextDouble()*256) 를
- * 순서대로 소비한 뒤, i=0..255 에 대해 nextInt(256-i) 로 perm 을 셔플한다.
- * 이 소비 순서가 어긋나면 이후 모든 노이즈가 어긋난다 (ADR-002 Pitfall 2). */
-void   hc_perlin_init(hc_perlin_t *p, int64_t seed);
-/* ImprovedNoise.noise(x,y,z) == noise(x,y,z,0,0): yScale=0 경로 */
-double hc_perlin_sample(const hc_perlin_t *p, double x, double y, double z);
+#include "hc_noise.h" /* hc_perlin_t 등 노이즈 스택 (Task 6 에서 분리) */
 
 /* --- density function IR ---
  * 트리 순회 대신 평탄 배열. 노드는 위상 정렬되어 있고 각 노드는

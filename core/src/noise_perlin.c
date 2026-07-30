@@ -26,6 +26,20 @@ static double smoothstep(double t) {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
+/* Mth.floor = (int)Math.floor(d) — Java d2i 는 포화 변환이고 NaN 은 0 이다.
+ * C 의 범위 밖 (int) 캐스트는 UB 라 (UBSan float-cast-overflow 게이트
+ * 대상) 명시적으로 포화시킨다. */
+static int mth_floor(double d) {
+    double f = floor(d);
+    if (f != f)
+        return 0;
+    if (f >= 2147483647.0)
+        return INT32_MAX;
+    if (f < -2147483648.0)
+        return INT32_MIN;
+    return (int)f;
+}
+
 /* Mth.lerp: a + t * (b - a) */
 static double lerp(double t, double a, double b) {
     return a + t * (b - a);
@@ -45,37 +59,50 @@ static double grad_dot(const hc_perlin_t *p, int hash,
     return (double)g[0] * x + (double)g[1] * y + (double)g[2] * z;
 }
 
-void hc_perlin_init(hc_perlin_t *p, int64_t seed) {
-    hc_xoro_t r;
-    hc_xoro_init(&r, seed);
+void hc_perlin_init_from(hc_perlin_t *p, hc_xoro_t *r) {
     /* 소비 순서 = 바닐라 생성자 순서: xo, yo, zo 먼저 (ADR-002 Pitfall 2) */
-    p->xo = hc_xoro_next_double(&r) * 256.0;
-    p->yo = hc_xoro_next_double(&r) * 256.0;
-    p->zo = hc_xoro_next_double(&r) * 256.0;
+    p->xo = hc_xoro_next_double(r) * 256.0;
+    p->yo = hc_xoro_next_double(r) * 256.0;
+    p->zo = hc_xoro_next_double(r) * 256.0;
     for (int i = 0; i < 256; i++)
         p->perm[i] = (uint8_t)i;
     /* Fisher-Yates 변형: i 오름차순, j = nextInt(256 - i), p[i] <-> p[i+j] */
     for (int i = 0; i < 256; i++) {
-        int j = hc_xoro_next_int(&r, 256 - i);
+        int j = hc_xoro_next_int(r, 256 - i);
         uint8_t t = p->perm[i];
         p->perm[i] = p->perm[i + j];
         p->perm[i + j] = t;
     }
 }
 
-double hc_perlin_sample(const hc_perlin_t *p, double x, double y, double z) {
-    /* noise(x,y,z) == noise(x,y,z,0,0): yScale=0 이라 y 양자화가 없고
-     * smoothstep 의 y 인자도 같은 fy 다 (sampleAndLerp 의 7번째 인자). */
+void hc_perlin_init(hc_perlin_t *p, int64_t seed) {
+    hc_xoro_t r;
+    hc_xoro_init(&r, seed);
+    hc_perlin_init_from(p, &r);
+}
+
+double hc_perlin_sample_scaled(const hc_perlin_t *p, double x, double y,
+                               double z, double yscale, double ymax) {
     double dx = x + p->xo;
     double dy = y + p->yo;
     double dz = z + p->zo;
-    /* Mth.floor = (int)Math.floor */
-    int ix = (int)floor(dx);
-    int iy = (int)floor(dy);
-    int iz = (int)floor(dz);
+    int ix = mth_floor(dx);
+    int iy = mth_floor(dy);
+    int iz = mth_floor(dz);
     double fx = dx - (double)ix;
     double fy = dy - (double)iy;
     double fz = dz - (double)iz;
+
+    /* yScale != 0 이면 y 분수를 yScale 격자로 내림 양자화한다.
+     * 양자화된 y 는 gradient 내적에만 쓰이고 smoothstep fade 는 원래
+     * fy 를 쓴다 (sampleAndLerp 의 7번째 인자). 보정 상수는 float
+     * 1.0E-7f 를 double 로 승격한 값 그대로다 — 1e-7 이 아니다. */
+    double yadj = 0.0;
+    if (yscale != 0.0) {
+        double t = (ymax >= 0.0 && ymax < fy) ? ymax : fy;
+        yadj = (double)mth_floor(t / yscale + 0x1.AD7F2Ap-24) * yscale;
+    }
+    double gy = fy - yadj;
 
     /* sampleAndLerp 의 해시 체인. iy/iz 는 마스킹 없이 더해진다. */
     int a  = P(p, ix);
@@ -85,21 +112,26 @@ double hc_perlin_sample(const hc_perlin_t *p, double x, double y, double z) {
     int ba = P(p, b + iy);
     int bb = P(p, b + iy + 1);
 
-    double v000 = grad_dot(p, aa + iz,     fx,       fy,       fz);
-    double v100 = grad_dot(p, ba + iz,     fx - 1.0, fy,       fz);
-    double v010 = grad_dot(p, ab + iz,     fx,       fy - 1.0, fz);
-    double v110 = grad_dot(p, bb + iz,     fx - 1.0, fy - 1.0, fz);
-    double v001 = grad_dot(p, aa + iz + 1, fx,       fy,       fz - 1.0);
-    double v101 = grad_dot(p, ba + iz + 1, fx - 1.0, fy,       fz - 1.0);
-    double v011 = grad_dot(p, ab + iz + 1, fx,       fy - 1.0, fz - 1.0);
-    double v111 = grad_dot(p, bb + iz + 1, fx - 1.0, fy - 1.0, fz - 1.0);
+    double v000 = grad_dot(p, aa + iz,     fx,       gy,       fz);
+    double v100 = grad_dot(p, ba + iz,     fx - 1.0, gy,       fz);
+    double v010 = grad_dot(p, ab + iz,     fx,       gy - 1.0, fz);
+    double v110 = grad_dot(p, bb + iz,     fx - 1.0, gy - 1.0, fz);
+    double v001 = grad_dot(p, aa + iz + 1, fx,       gy,       fz - 1.0);
+    double v101 = grad_dot(p, ba + iz + 1, fx - 1.0, gy,       fz - 1.0);
+    double v011 = grad_dot(p, ab + iz + 1, fx,       gy - 1.0, fz - 1.0);
+    double v111 = grad_dot(p, bb + iz + 1, fx - 1.0, gy - 1.0, fz - 1.0);
 
     double sx = smoothstep(fx);
-    double sy = smoothstep(fy);
+    double sy = smoothstep(fy); /* fade 는 양자화 전 fy */
     double sz = smoothstep(fz);
 
     /* Mth.lerp3: x 최내측, y 중간, z 최외측 */
     double l0 = lerp(sy, lerp(sx, v000, v100), lerp(sx, v010, v110));
     double l1 = lerp(sy, lerp(sx, v001, v101), lerp(sx, v011, v111));
     return lerp(sz, l0, l1);
+}
+
+double hc_perlin_sample(const hc_perlin_t *p, double x, double y, double z) {
+    /* noise(x,y,z) == noise(x,y,z,0,0): yScale=0 → 양자화 없음 */
+    return hc_perlin_sample_scaled(p, x, y, z, 0.0, 0.0);
 }

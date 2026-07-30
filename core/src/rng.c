@@ -68,6 +68,65 @@ double hc_xoro_next_double(hc_xoro_t *r) {
     return (double)(hc_xoro_next(r) >> 11) * 0x1.0p-53;
 }
 
+/* --- positional fork (XoroshiroPositionalRandomFactory) --- */
+
+#include "hc_md5.h"
+
+#include <string.h>
+
+/* raw (lo,hi) 생성자: 재믹싱 없음, all-zero 가드만 (Xoroshiro128PlusPlus
+ * (long,long) 생성자와 동일) */
+static void xoro_init_raw(hc_xoro_t *r, uint64_t lo, uint64_t hi) {
+    r->lo = lo;
+    r->hi = hi;
+    if ((r->lo | r->hi) == 0) {
+        r->lo = HC_GOLDEN_RATIO_64;
+        r->hi = HC_SILVER_RATIO_64;
+    }
+}
+
+void hc_xoro_fork(hc_xoro_t *r, hc_xoro_t *out) {
+    uint64_t lo = hc_xoro_next(r); /* 첫 draw 가 lo */
+    uint64_t hi = hc_xoro_next(r);
+    xoro_init_raw(out, lo, hi);
+}
+
+void hc_xoro_fork_positional(hc_xoro_t *r, hc_xoro_fork_t *f) {
+    f->lo = hc_xoro_next(r);
+    f->hi = hc_xoro_next(r);
+}
+
+void hc_xoro_from_hash_of(const hc_xoro_fork_t *f, const char *s,
+                          hc_xoro_t *out) {
+    /* RandomSupport.seedFromHashOf: md5(UTF-8) 를 빅엔디언으로
+     * (b[0] 최상위) long 2개로 읽고 factory 시드와 XOR */
+    uint8_t d[16];
+    hc_md5(s, strlen(s), d);
+    uint64_t hlo = 0, hhi = 0;
+    for (int i = 0; i < 8; i++) {
+        hlo = (hlo << 8) | d[i];
+        hhi = (hhi << 8) | d[8 + i];
+    }
+    xoro_init_raw(out, hlo ^ f->lo, hhi ^ f->hi);
+}
+
+int64_t hc_mth_get_seed(int32_t x, int32_t y, int32_t z) {
+    /* x*3129871 은 int 곱으로 래핑된 '후' 부호확장, z 는 long 곱, y 는
+     * 그대로 XOR. 이어 l*l*42317861 + l*11 (래핑) 후 산술 >>16.
+     * signed 오버플로는 C 에서 UB 이므로 전부 무부호로 계산해 재해석한다. */
+    uint64_t l = (uint64_t)(int64_t)(int32_t)((uint32_t)x * 3129871u);
+    l ^= (uint64_t)((int64_t)z * 116129781LL);
+    l ^= (uint64_t)(int64_t)y;
+    l = l * l * 42317861u + l * 11u;
+    return (int64_t)l >> 16;
+}
+
+void hc_xoro_at(const hc_xoro_fork_t *f, int32_t x, int32_t y, int32_t z,
+                hc_xoro_t *out) {
+    /* hi 는 XOR 하지 않는다 — fromHashOf 와 다른 점 */
+    xoro_init_raw(out, (uint64_t)hc_mth_get_seed(x, y, z) ^ f->lo, f->hi);
+}
+
 /* --- Legacy 48-bit LCG (java.util.Random == LegacyRandomSource) --- */
 
 #define HC_LCG_MUL  0x5DEECE66DULL

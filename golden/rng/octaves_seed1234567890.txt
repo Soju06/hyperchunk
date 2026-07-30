@@ -1,0 +1,1261 @@
+# MC 26.2 NormalNoise instances from RandomState(seed=1234567890, overworld)
+# exactly what NoiseChunk sees: rs.getOrCreateNoise(key)
+# valueFactor/internals dumped via reflection from the LIVE instance
+seed 1234567890
+noise_count 35
+noise "minecraft:aquifer_barrier"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -3
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.12500000000000000 bits=0x3fc0000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 97.216243272360170 bits=0x40584dd6ee05b116
+.first.octave[0].yo 174.04321495084720 bits=0x4065c162045212c8
+.first.octave[0].zo 229.51817231901504 bits=0x406cb094de1d7b96
+.first.getValue(0.0,0.0,0.0) 0.0011701285619402090 bits=0x3f532bdff9f62600
+.first.getValue(123.456,-64.0,-789.012) 0.0029449402664104563 bits=0x3f681ffcc440c500
+.first.getValue(-3000.5,80.25,3000.75) -0.14451383551603780 bits=0xbfc27f6deaae3228
+.second.firstOctave -3
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.12500000000000000 bits=0x3fc0000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 123.23251505583198 bits=0x405ecee186d42810
+.second.octave[0].yo 224.56262602747356 bits=0x406c1201084c7c13
+.second.octave[0].zo 51.570461770327340 bits=0x4049c904e42b964c
+.second.getValue(0.0,0.0,0.0) 0.014029934221411244 bits=0x3f8cbbb9e52afe20
+.second.getValue(123.456,-64.0,-789.012) 0.23473383876671547 bits=0x3fce0bc22862400f
+.second.getValue(-3000.5,80.25,3000.75) -0.14496192713590310 bits=0xbfc28e1cc81b5f12
+.getValue(0.0,0.0,0.0) 0.012666718986126210 bits=0x3f89f1023e582265
+.getValue(0.25,-16.0,0.75) 0.23314941449012563 bits=0x3fcdd7d70b288799
+.getValue(1234.5,63.0,-987.25) 0.074304539024586250 bits=0x3fb3059f4d0e1172
+.getValue(-8.125,320.0,8.5) 0.26324598928734620 bits=0x3fd0d905b4b2b558
+noise "minecraft:aquifer_fluid_level_floodedness"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 236.82071684332502 bits=0x406d9a434ff82b6f
+.first.octave[0].yo 93.934732523646770 bits=0x40577bd2a85ce482
+.first.octave[0].zo 204.98940657583807 bits=0x40699fa937fab580
+.first.getValue(0.0,0.0,0.0) 0.10466586716514464 bits=0x3fbacb61dc7b55b4
+.first.getValue(123.456,-64.0,-789.012) -0.13148713337020000 bits=0xbfc0d49204d5bbfb
+.first.getValue(-3000.5,80.25,3000.75) 0.068646422467985620 bits=0x3fb192cfdb7cc61b
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 172.58093426572904 bits=0x4065929703750dd3
+.second.octave[0].yo 250.93125014567260 bits=0x406f5dcccd1b01e4
+.second.octave[0].zo 244.79271612793673 bits=0x406e995dee369000
+.second.getValue(0.0,0.0,0.0) 0.55769147595450390 bits=0x3fe1d89bcb4f712b
+.second.getValue(123.456,-64.0,-789.012) -0.34472453291141490 bits=0xbfd60ff77cbef012
+.second.getValue(-3000.5,80.25,3000.75) 0.15203222684923710 bits=0x3fc375cac120b517
+.getValue(0.0,0.0,0.0) 0.55196445259970710 bits=0x3fe1a9b15b0f0c91
+.getValue(0.25,-16.0,0.75) 0.66922206159455890 bits=0x3fe56a446289ee35
+.getValue(1234.5,63.0,-987.25) -0.23876067077326940 bits=0xbfce8fb5ac45674e
+.getValue(-8.125,320.0,8.5) 0.16883978462962526 bits=0x3fc59c8ac49fbbf9
+noise "minecraft:aquifer_fluid_level_spread"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -5
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.031250000000000000 bits=0x3fa0000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 127.25796104703659 bits=0x405fd0826f0d2a80
+.first.octave[0].yo 35.351750107392150 bits=0x4041ad0625c3ce90
+.first.octave[0].zo 155.87860627852646 bits=0x40637c1d8aea0a9b
+.first.getValue(0.0,0.0,0.0) 0.20769114495727070 bits=0x3fca959f99a150a0
+.first.getValue(123.456,-64.0,-789.012) -0.030185258490320603 bits=0xbf9ee8e26826207e
+.first.getValue(-3000.5,80.25,3000.75) -0.14579690787427235 bits=0xbfc2a9791b96c63c
+.second.firstOctave -5
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.031250000000000000 bits=0x3fa0000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 188.40004751312486 bits=0x40678ccd307136f5
+.second.octave[0].yo 236.92668911471580 bits=0x406d9da76fee286f
+.second.octave[0].zo 245.64533870482757 bits=0x406eb4a69d5b027a
+.second.getValue(0.0,0.0,0.0) 0.18456216305269224 bits=0x3fc79fbba331f66c
+.second.getValue(123.456,-64.0,-789.012) 0.014079349351457937 bits=0x3f8cd5a2481b9680
+.second.getValue(-3000.5,80.25,3000.75) -0.25924514255401426 bits=0xbfd09778f03aa577
+.getValue(0.0,0.0,0.0) 0.32687775667496910 bits=0x3fd4eb90aead5d9a
+.getValue(0.25,-16.0,0.75) -0.35435141288657346 bits=0xbfd6adb18c68e914
+.getValue(1234.5,63.0,-987.25) -0.11534274366001494 bits=0xbfbd871a1fd9c5df
+.getValue(-8.125,320.0,8.5) -0.059691019885352980 bits=0xbfae8fd2448b8212
+noise "minecraft:aquifer_lava"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -1
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.50000000000000000 bits=0x3fe0000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 47.882841260009770 bits=0x4047f100f141a694
+.first.octave[0].yo 173.78068763898278 bits=0x4065b8fb64a4ba52
+.first.octave[0].zo 38.778395896517110 bits=0x404363a27a0b70d8
+.first.getValue(0.0,0.0,0.0) -0.31709470309116150 bits=0xbfd44b4794e0ba44
+.first.getValue(123.456,-64.0,-789.012) -0.15486767818061284 bits=0xbfc3d2b43e7f20af
+.first.getValue(-3000.5,80.25,3000.75) 0.11795586231156327 bits=0x3fbe325afaffe89e
+.second.firstOctave -1
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.50000000000000000 bits=0x3fe0000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 64.428891749716740 bits=0x40501b72f661a3b0
+.second.octave[0].yo 15.862702118574276 bits=0x402fb9b41792eed0
+.second.octave[0].zo 233.72837477736450 bits=0x406d374ed89f0061
+.second.getValue(0.0,0.0,0.0) 0.025264468572752440 bits=0x3f99deedc9154a60
+.second.getValue(123.456,-64.0,-789.012) -0.15435654146953362 bits=0xbfc3c1f484c48531
+.second.getValue(-3000.5,80.25,3000.75) -0.12695335196291602 bits=0xbfc04001e7662ec0
+.getValue(0.0,0.0,0.0) -0.24319186209867420 bits=0xbfcf20e9332efeb1
+.getValue(0.25,-16.0,0.75) -0.68363652832689340 bits=0xbfe5e059b6707ac1
+.getValue(1234.5,63.0,-987.25) -0.54377371903924070 bits=0xbfe16698247654a2
+.getValue(-8.125,320.0,8.5) 0.13478091275015314 bits=0x3fc140803e318728
+noise "minecraft:cave_cheese"
+.valueFactor 1.4814814814814814 bits=0x3ff7b425ed097b42
+.first.firstOctave -8
+.first.amplitudes [0.5, 1.0, 2.0, 1.0, 2.0, 1.0, 0.0, 2.0, 0.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 0.50097847358121330 bits=0x3fe0080402010080
+.first.octave_count 9
+.first.octave[0].xo 108.17164013506220 bits=0x405b0afc26e7b17c
+.first.octave[0].yo 87.594765855045150 bits=0x4055e610a4ce0c92
+.first.octave[0].zo 41.106768319760480 bits=0x40448daa9594cf60
+.first.octave[1].xo 88.067860861874240 bits=0x40560457d5159b68
+.first.octave[1].yo 244.98685005560242 bits=0x406e9f9446915bc8
+.first.octave[1].zo 225.48299437940528 bits=0x406c2f74b0a0f652
+.first.octave[2].xo 29.047485049559782 bits=0x403d0c27faeee880
+.first.octave[2].yo 122.76972203165508 bits=0x405eb14320323e08
+.first.octave[2].zo 131.78942785603752 bits=0x40607942fe350771
+.first.octave[3].xo 39.894160219849624 bits=0x4043f273d792d1b4
+.first.octave[3].yo 100.25975542203341 bits=0x4059109fd534a5e6
+.first.octave[3].zo 230.52168437703745 bits=0x406cd0b1a36f46b8
+.first.octave[4].xo 185.25068724733143 bits=0x40672805a1431a02
+.first.octave[4].yo 172.83057738141386 bits=0x40659a9417043f09
+.first.octave[4].zo 232.82241914048203 bits=0x406d1a5141f1ff31
+.first.octave[5].xo 209.91017046263508 bits=0x406a3d201dce59b1
+.first.octave[5].yo 223.62387209585720 bits=0x406bf3f6c29d12ff
+.first.octave[5].zo 122.87197353548476 bits=0x405eb7ce6a16789c
+.first.octave[6] null
+.first.octave[7].xo 241.65334811253675 bits=0x406e34e83a4d07f5
+.first.octave[7].yo 202.75082557835026 bits=0x40695806c35d0078
+.first.octave[7].zo 207.02582047883368 bits=0x4069e0d38578050c
+.first.octave[8] null
+.first.getValue(0.0,0.0,0.0) -0.0032166188498023520 bits=0xbf6a59bd186f6592
+.first.getValue(123.456,-64.0,-789.012) -0.094429594060870450 bits=0xbfb82c89b2441836
+.first.getValue(-3000.5,80.25,3000.75) -0.16438902683382023 bits=0xbfc50ab31b09487a
+.second.firstOctave -8
+.second.amplitudes [0.5, 1.0, 2.0, 1.0, 2.0, 1.0, 0.0, 2.0, 0.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 0.50097847358121330 bits=0x3fe0080402010080
+.second.octave_count 9
+.second.octave[0].xo 160.42733630073812 bits=0x40640dacbd2d820b
+.second.octave[0].yo 27.731292245693396 bits=0x403bbb35f7f71250
+.second.octave[0].zo 124.27392610959885 bits=0x405f118801608fd8
+.second.octave[1].xo 215.28117615194512 bits=0x406ae8ff6521209f
+.second.octave[1].yo 82.543858672006510 bits=0x4054a2ce949a7a7e
+.second.octave[1].zo 235.99678326149004 bits=0x406d7fe5a602a999
+.second.octave[2].xo 39.494644832768444 bits=0x4043bf508599f01c
+.second.octave[2].yo 180.74548814502984 bits=0x406697db09f44eaf
+.second.octave[2].zo 2.7538017668082944 bits=0x400607c93880de80
+.second.octave[3].xo 111.53273477789972 bits=0x405be218539c215a
+.second.octave[3].yo 151.25173495983790 bits=0x4062e80e36797870
+.second.octave[3].zo 80.245657285588980 bits=0x40540fb8d955e83e
+.second.octave[4].xo 176.43171533170410 bits=0x40660dd09cabdb3b
+.second.octave[4].yo 64.888867349177250 bits=0x405038e333e0ccb4
+.second.octave[4].zo 145.69742689643616 bits=0x406236515235f169
+.second.octave[5].xo 76.333488505504420 bits=0x40531557e02c2ef0
+.second.octave[5].yo 33.978745225926560 bits=0x4040fd4786083c40
+.second.octave[5].zo 91.376369762746580 bits=0x4056d81671338cca
+.second.octave[6] null
+.second.octave[7].xo 173.04291732125398 bits=0x4065a15f942566f8
+.second.octave[7].yo 14.599113444906521 bits=0x402d32beff58ef50
+.second.octave[7].zo 139.53117708208956 bits=0x406170ff67147eb3
+.second.octave[8] null
+.second.getValue(0.0,0.0,0.0) -0.021158272508157790 bits=0xbf95aa83a1d97db5
+.second.getValue(123.456,-64.0,-789.012) -0.032642200190087360 bits=0xbfa0b67a7c9262d2
+.second.getValue(-3000.5,80.25,3000.75) 0.18185698666289649 bits=0x3fc74716f922146f
+.getValue(0.0,0.0,0.0) -0.036110950159940945 bits=0xbfa27d226bedca13
+.getValue(0.25,-16.0,0.75) -0.063925879203825900 bits=0xbfb05d72488c691b
+.getValue(1234.5,63.0,-987.25) 0.0075843971452674810 bits=0x3f7f10d11b2e487b
+.getValue(-8.125,320.0,8.5) 0.029399134867981920 bits=0x3f9e1ace8b279a95
+noise "minecraft:cave_entrance"
+.valueFactor 1.2500000000000000 bits=0x3ff4000000000000
+.first.firstOctave -7
+.first.amplitudes [0.4, 0.5, 1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 0.57142857142857140 bits=0x3fe2492492492492
+.first.octave_count 3
+.first.octave[0].xo 61.076651612995450 bits=0x404e89cfb8558024
+.first.octave[0].yo 248.82339183846966 bits=0x406f1a5939d740a8
+.first.octave[0].zo 93.966621606371970 bits=0x40577ddd20debe60
+.first.octave[1].xo 5.8356671624107720 bits=0x401757b921f394e0
+.first.octave[1].yo 187.81594489613803 bits=0x40677a1c38788808
+.first.octave[1].zo 229.32473820551883 bits=0x406caa6441608ee2
+.first.octave[2].xo 97.762821906152600 bits=0x405870d212f8e642
+.first.octave[2].yo 122.28290126477094 bits=0x405e921b0de80c0c
+.first.octave[2].zo 101.70795904020738 bits=0x40596d4f336f264a
+.first.getValue(0.0,0.0,0.0) 0.088323036772095900 bits=0x3fb69c56aa6b681b
+.first.getValue(123.456,-64.0,-789.012) -0.15295003863890155 bits=0xbfc393ddeaf02160
+.first.getValue(-3000.5,80.25,3000.75) -0.079319176345652190 bits=0xbfb44e42f459a8de
+.second.firstOctave -7
+.second.amplitudes [0.4, 0.5, 1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 0.57142857142857140 bits=0x3fe2492492492492
+.second.octave_count 3
+.second.octave[0].xo 198.85550410209234 bits=0x4068db604a238293
+.second.octave[0].yo 153.78407551277348 bits=0x4063391725879e9c
+.second.octave[0].zo 17.392786250963525 bits=0x4031648da3c634f0
+.second.octave[1].xo 235.77131685510010 bits=0x406d78aea0af7046
+.second.octave[1].yo 127.82359215132593 bits=0x405ff4b5bbdacbfa
+.second.octave[1].zo 55.350487544677120 bits=0x404bacdcc69f0594
+.second.octave[2].xo 239.85145439611930 bits=0x406dfb3f1d4a2bc5
+.second.octave[2].yo 36.249989932781800 bits=0x40421fffab8cd044
+.second.octave[2].zo 170.10807879469684 bits=0x4065437561a913a6
+.second.getValue(0.0,0.0,0.0) -0.043775101737309065 bits=0xbfa669b0acae7f55
+.second.getValue(123.456,-64.0,-789.012) 0.010477653818494912 bits=0x3f85754ee3e9f95f
+.second.getValue(-3000.5,80.25,3000.75) 0.038046414079429510 bits=0x3fa37ad1d06706cb
+.getValue(0.0,0.0,0.0) 0.055684918793483536 bits=0x3fac82bbd2326519
+.getValue(0.25,-16.0,0.75) 0.014890720629232579 bits=0x3f8e7f06b0ee7100
+.getValue(1234.5,63.0,-987.25) -0.21435021807886120 bits=0xbfcb6fd3f44503bf
+.getValue(-8.125,320.0,8.5) 0.27410607673818220 bits=0x3fd18af436ce6c48
+noise "minecraft:cave_layer"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 41.879100109680280 bits=0x4044f0865a367e50
+.first.octave[0].yo 53.495203415570330 bits=0x404abf62d3555efc
+.first.octave[0].zo 212.07795571398870 bits=0x406a827e9cfb43c5
+.first.getValue(0.0,0.0,0.0) 0.58724515575057070 bits=0x3fe2cab65a55dc2e
+.first.getValue(123.456,-64.0,-789.012) 0.086888793058455430 bits=0x3fb63e580c9331c0
+.first.getValue(-3000.5,80.25,3000.75) -0.13433300199004494 bits=0xbfc131d2e5290e34
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 84.288321273359880 bits=0x40551273db11f498
+.second.octave[0].yo 225.78349276391460 bits=0x406c39125f6ab54f
+.second.octave[0].zo 139.83606801137410 bits=0x40617ac111b3c2ac
+.second.getValue(0.0,0.0,0.0) -0.0090608667085512180 bits=0xbf828e80f17e3e80
+.second.getValue(123.456,-64.0,-789.012) -0.45138689655286535 bits=0xbfdce385dda26644
+.second.getValue(-3000.5,80.25,3000.75) -0.20025085818626587 bits=0xbfc9a1d1f373f608
+.getValue(0.0,0.0,0.0) 0.48182024086834950 bits=0x3fded62490452556
+.getValue(0.25,-16.0,0.75) 0.46090228564131970 bits=0x3fdd7f6c4cdecaa5
+.getValue(1234.5,63.0,-987.25) 0.18726675075201923 bits=0x3fc7f85b5d0dd66b
+.getValue(-8.125,320.0,8.5) -0.57794603810663540 bits=0xbfe27e88b090aa23
+noise "minecraft:continentalness"
+.valueFactor 1.4999999999999998 bits=0x3ff7ffffffffffff
+.first.firstOctave -9
+.first.amplitudes [1.0, 1.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0]
+.first.lowestFreqInputFactor 0.0019531250000000000 bits=0x3f60000000000000
+.first.lowestFreqValueFactor 0.50097847358121330 bits=0x3fe0080402010080
+.first.octave_count 9
+.first.octave[0].xo 213.42432940481396 bits=0x406aad941b428d07
+.first.octave[0].yo 89.382559997945890 bits=0x4056587bdcedfbde
+.first.octave[0].zo 143.98595634918362 bits=0x4061ff8cf45460df
+.first.octave[1].xo 224.40316246837585 bits=0x406c0ce6b4fa14c4
+.first.octave[1].yo 55.635544093737990 bits=0x404bd1598244e2a4
+.first.octave[1].zo 243.08407561247495 bits=0x406e62b0bf56bf13
+.first.octave[2].xo 147.45034597754190 bits=0x40626e693bf7adaf
+.first.octave[2].yo 184.77720791575527 bits=0x406718dee3228b8f
+.first.octave[2].zo 72.781698717401240 bits=0x405232075a0ea410
+.first.octave[3].xo 81.594501968756360 bits=0x4054660c51fc4dd6
+.first.octave[3].yo 55.423798753256136 bits=0x404bb63f099ca90c
+.first.octave[3].zo 106.45042757432151 bits=0x405a9cd3ce2d3b5c
+.first.octave[4].xo 45.770282974645085 bits=0x4046e298a1ec6214
+.first.octave[4].yo 53.892478685229776 bits=0x404af23cbdd6b830
+.first.octave[4].zo 0.037318365379121590 bits=0x3fa31b648dafe000
+.first.octave[5].xo 76.393126369424410 bits=0x40531928fb80f7e0
+.first.octave[5].yo 44.481852657634820 bits=0x40463dad590f0420
+.first.octave[5].zo 18.092820048160917 bits=0x403217c30dff43a8
+.first.octave[6].xo 204.60106772593085 bits=0x4069933bf26231bb
+.first.octave[6].yo 240.32278045764230 bits=0x406e0a5437aeab92
+.first.octave[6].zo 51.598782265795760 bits=0x4049cca4e5b48240
+.first.octave[7].xo 103.46160601650419 bits=0x4059dd8af3f6216e
+.first.octave[7].yo 132.17260514894363 bits=0x40608585fb3bbab1
+.first.octave[7].zo 171.88167772227624 bits=0x40657c36b432d939
+.first.octave[8].xo 71.043178005187400 bits=0x4051c2c36dae0bee
+.first.octave[8].yo 109.24809804412337 bits=0x405b4fe0d69e6d88
+.first.octave[8].zo 215.24385017522110 bits=0x406ae7cd9ee1f65a
+.first.getValue(0.0,0.0,0.0) 0.24354765901196954 bits=0x3fcf2c91d73ca475
+.first.getValue(123.456,-64.0,-789.012) -0.13105380547335577 bits=0xbfc0c65f00431fd4
+.first.getValue(-3000.5,80.25,3000.75) 0.25499053955429296 bits=0x3fd051c3d70b348e
+.second.firstOctave -9
+.second.amplitudes [1.0, 1.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0]
+.second.lowestFreqInputFactor 0.0019531250000000000 bits=0x3f60000000000000
+.second.lowestFreqValueFactor 0.50097847358121330 bits=0x3fe0080402010080
+.second.octave_count 9
+.second.octave[0].xo 237.17780833912695 bits=0x406da5b09b1d3034
+.second.octave[0].yo 179.40513638629614 bits=0x40666cf6e09531f8
+.second.octave[0].zo 194.81408594169875 bits=0x40685a0cfdf5f758
+.second.octave[1].xo 238.35761218678778 bits=0x406dcb718f1cdcf2
+.second.octave[1].yo 21.292982077218540 bits=0x40354b00df97f7c0
+.second.octave[1].zo 19.252998404831658 bits=0x403340c480e2b130
+.second.octave[2].xo 142.00166754618755 bits=0x4061c00da9190ae2
+.second.octave[2].yo 179.35596912957018 bits=0x40666b64195f3c77
+.second.octave[2].zo 123.09688901496148 bits=0x405ec6336dfba67a
+.second.octave[3].xo 232.73400914837768 bits=0x406d177d00c0e7e7
+.second.octave[3].yo 220.38075737836564 bits=0x406b8c2f2a18f951
+.second.octave[3].zo 203.63425752085936 bits=0x4069744bd66daaa8
+.second.octave[4].xo 28.211023491467614 bits=0x403c3605a2b28a88
+.second.octave[4].yo 96.974757027850610 bits=0x40583e626b4d0a88
+.second.octave[4].zo 69.352459031908700 bits=0x4051568eb053ce92
+.second.octave[5].xo 125.34205584189448 bits=0x405f55e43e2f95ec
+.second.octave[5].yo 145.98005454165350 bits=0x40623f5c9b579656
+.second.octave[5].zo 226.66191538573725 bits=0x406c552e692ccebe
+.second.octave[6].xo 105.82407580090230 bits=0x405a74bda86d933a
+.second.octave[6].yo 91.341076797516850 bits=0x4056d5d433c6b098
+.second.octave[6].zo 82.554338142316370 bits=0x4054a37a46b00b26
+.second.octave[7].xo 97.881378468320660 bits=0x40587868813c357e
+.second.octave[7].yo 106.61781499515516 bits=0x405aa78a47e7cade
+.second.octave[7].zo 79.784990788255670 bits=0x4053f23d4a00ce0a
+.second.octave[8].xo 247.68035418123225 bits=0x406ef5c57621c2dc
+.second.octave[8].yo 109.52648286067895 bits=0x405b61b1e52b2152
+.second.octave[8].zo 94.469942158795590 bits=0x40579e138846c27a
+.second.getValue(0.0,0.0,0.0) -0.27714877077741940 bits=0xbfd1bcce32a76644
+.second.getValue(123.456,-64.0,-789.012) -0.21939487705493224 bits=0xbfcc15219eee3125
+.second.getValue(-3000.5,80.25,3000.75) -0.019947230304390050 bits=0xbf946d0bf7366920
+.getValue(0.0,0.0,0.0) -0.050401667648174780 bits=0xbfa9ce3f546cf071
+.getValue(0.25,-16.0,0.75) 0.042292897183840140 bits=0x3fa5a76a2483ef25
+.getValue(1234.5,63.0,-987.25) 0.18119245757870328 bits=0x3fc731507fca8c04
+.getValue(-8.125,320.0,8.5) -0.35989822040216674 bits=0xbfd708928ba1049b
+noise "minecraft:erosion"
+.valueFactor 1.3888888888888888 bits=0x3ff638e38e38e38e
+.first.firstOctave -9
+.first.amplitudes [1.0, 1.0, 0.0, 1.0, 1.0]
+.first.lowestFreqInputFactor 0.0019531250000000000 bits=0x3f60000000000000
+.first.lowestFreqValueFactor 0.51612903225806450 bits=0x3fe0842108421084
+.first.octave_count 5
+.first.octave[0].xo 7.1633336891366070 bits=0x401ca740f254b500
+.first.octave[0].yo 144.37516164027244 bits=0x40620c0152fbf5e2
+.first.octave[0].zo 34.459688524251476 bits=0x40413ad712d500d8
+.first.octave[1].xo 172.54861020706410 bits=0x4065918e36fe32f2
+.first.octave[1].yo 234.87422423617352 bits=0x406d5bf9a51af78c
+.first.octave[1].zo 110.59226178480381 bits=0x405ba5e79df919ca
+.first.octave[2] null
+.first.octave[3].xo 227.86698202642023 bits=0x406c7bbe5117363b
+.first.octave[3].yo 103.77253628311360 bits=0x4059f1713c05bc90
+.first.octave[3].zo 249.35737865909147 bits=0x406f2b6fa55ea2c2
+.first.octave[4].xo 226.44707807758746 bits=0x406c4e4e76af3fe5
+.first.octave[4].yo 161.22179749726090 bits=0x40642718f710a23f
+.first.octave[4].zo 138.93209423417588 bits=0x40615dd3b749926b
+.first.getValue(0.0,0.0,0.0) 0.20766357251909234 bits=0x3fca94b84e451f92
+.first.getValue(123.456,-64.0,-789.012) -0.094593247678813940 bits=0xbfb837435933f378
+.first.getValue(-3000.5,80.25,3000.75) 0.22912470145831096 bits=0x3fcd53f54dbc0f0b
+.second.firstOctave -9
+.second.amplitudes [1.0, 1.0, 0.0, 1.0, 1.0]
+.second.lowestFreqInputFactor 0.0019531250000000000 bits=0x3f60000000000000
+.second.lowestFreqValueFactor 0.51612903225806450 bits=0x3fe0842108421084
+.second.octave_count 5
+.second.octave[0].xo 121.20311763618406 bits=0x405e4cffe11d29b0
+.second.octave[0].yo 224.55704161460780 bits=0x406c11d348efa80d
+.second.octave[0].zo 126.71387553437592 bits=0x405fadb0230263c8
+.second.octave[1].xo 104.60138043072646 bits=0x405a267d04589b2c
+.second.octave[1].yo 191.44195268528940 bits=0x4067ee2479f53651
+.second.octave[1].zo 69.212568999494350 bits=0x40514d9abb013e30
+.second.octave[2] null
+.second.octave[3].xo 173.24299373345660 bits=0x4065a7c69acb4a87
+.second.octave[3].yo 240.50546547610554 bits=0x406e102cc5ef242c
+.second.octave[3].zo 173.84677532510310 bits=0x4065bb18c8910c15
+.second.octave[4].xo 172.91971695017960 bits=0x40659d6e523dd325
+.second.octave[4].yo 177.05615658109605 bits=0x406621cc08e2e868
+.second.octave[4].zo 208.75233628275382 bits=0x406a1813238a40b3
+.second.getValue(0.0,0.0,0.0) -0.042499255623368676 bits=0xbfa5c27662036fd4
+.second.getValue(123.456,-64.0,-789.012) -0.14661060709860602 bits=0xbfc2c422e95e1ba2
+.second.getValue(-3000.5,80.25,3000.75) 0.047302309493225880 bits=0x3fa838022098ebfe
+.getValue(0.0,0.0,0.0) 0.22939488457739400 bits=0x3fcd5ccfc39096cc
+.getValue(0.25,-16.0,0.75) 0.28372037616709733 bits=0x3fd2287982362d12
+.getValue(1234.5,63.0,-987.25) -0.57404034010364680 bits=0xbfe25e89d8ea8e61
+.getValue(-8.125,320.0,8.5) 0.033419642951764210 bits=0x3fa11c61230b2c8a
+noise "minecraft:jagged"
+.valueFactor 1.5686274509803920 bits=0x3ff9191919191918
+.first.firstOctave -16
+.first.amplitudes [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+.first.lowestFreqInputFactor 1.5258789062500000e-05 bits=0x3ef0000000000000
+.first.lowestFreqValueFactor 0.50000762951094830 bits=0x3fe0001000100010
+.first.octave_count 16
+.first.octave[0].xo 89.247253973223000 bits=0x40564fd302543320
+.first.octave[0].yo 238.18127038345003 bits=0x406dc5ccf78c14d7
+.first.octave[0].zo 125.26523956267764 bits=0x405f50f9af5bd392
+.first.octave[1].xo 67.621303806838400 bits=0x4050e7c3710ad014
+.first.octave[1].yo 226.51648515900860 bits=0x406c50870be259f6
+.first.octave[1].zo 31.692588121693774 bits=0x403fb14d748445d8
+.first.octave[2].xo 81.461844198476260 bits=0x40545d8edaf81362
+.first.octave[2].yo 95.104980757556000 bits=0x4057c6b801361a64
+.first.octave[2].zo 29.540410733155370 bits=0x403d8a585b994f48
+.first.octave[3].xo 93.700572086210200 bits=0x40576cd62c4db0da
+.first.octave[3].yo 128.20971086166280 bits=0x406006b5f38d8ea6
+.first.octave[3].zo 200.33107757259663 bits=0x40690a982ffe57bb
+.first.octave[4].xo 49.634861028529060 bits=0x4048d143204d84c4
+.first.octave[4].yo 5.8657678220498330 bits=0x4017768bd7068860
+.first.octave[4].zo 84.345297539713840 bits=0x405516195ada1d74
+.first.octave[5].xo 92.815165178390030 bits=0x4057342baa91817c
+.first.octave[5].yo 176.34337156688918 bits=0x40660afce65e454a
+.first.octave[5].zo 84.989811300061520 bits=0x40553f59117ebe6e
+.first.octave[6].xo 42.436480064640850 bits=0x404537de94297e84
+.first.octave[6].yo 194.99254655478666 bits=0x40685fc2f0fe121e
+.first.octave[6].zo 165.31331337975803 bits=0x4064aa06a9c7eeb8
+.first.octave[7].xo 72.473808987642540 bits=0x40521e52e2ee9e70
+.first.octave[7].yo 35.436510040749340 bits=0x4041b7df8f9eb270
+.first.octave[7].zo 243.46819641196802 bits=0x406e6efb770ab03b
+.first.octave[8].xo 37.186319245625440 bits=0x404297d94f1d49d0
+.first.octave[8].yo 228.04021406883350 bits=0x406c81496f03cf54
+.first.octave[8].zo 240.53354405284534 bits=0x406e1112cafa3e46
+.first.octave[9].xo 66.397008303167870 bits=0x405099689583962c
+.first.octave[9].yo 30.170521466847987 bits=0x403e2ba74b7b60c8
+.first.octave[9].zo 38.940872921267440 bits=0x4043786e861d4490
+.first.octave[10].xo 172.55846205983718 bits=0x406591deebd361d7
+.first.octave[10].yo 72.822281351985710 bits=0x405234a041f6b8ea
+.first.octave[10].zo 7.8284221143642580 bits=0x401f504de301e920
+.first.octave[11].xo 245.38173396696413 bits=0x406eac372a26fc44
+.first.octave[11].yo 170.33405588164624 bits=0x40654ab095f5d6a0
+.first.octave[11].zo 156.92101131933322 bits=0x40639d78ecbaf906
+.first.octave[12].xo 180.95066139312770 bits=0x40669e6bd17121b4
+.first.octave[12].yo 156.01008230384795 bits=0x40638052981fa973
+.first.octave[12].zo 22.370125457807290 bits=0x40365ec08ac0b308
+.first.octave[13].xo 41.493809022093700 bits=0x4044bf3522502e5c
+.first.octave[13].yo 108.30370413608060 bits=0x405b136fe3790812
+.first.octave[13].zo 13.912153311414500 bits=0x402bd305c242ed40
+.first.octave[14].xo 121.88549198063265 bits=0x405e78abe68e6c00
+.first.octave[14].yo 20.207542599717755 bits=0x4034352183065088
+.first.octave[14].zo 170.43562240290380 bits=0x40654df09e64bc0e
+.first.octave[15].xo 190.86968710042714 bits=0x4067dbd47a0ac2ce
+.first.octave[15].yo 31.805386670231627 bits=0x403fce2dd2214778
+.first.octave[15].zo 182.56116313863623 bits=0x4066d1f50c66053a
+.first.getValue(0.0,0.0,0.0) -0.11314572038862558 bits=0xbfbcf71e30c062c8
+.first.getValue(123.456,-64.0,-789.012) -0.11304237943401985 bits=0xbfbcf0586abb2be0
+.first.getValue(-3000.5,80.25,3000.75) -0.11687410395535230 bits=0xbfbdeb76163ccf94
+.second.firstOctave -16
+.second.amplitudes [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+.second.lowestFreqInputFactor 1.5258789062500000e-05 bits=0x3ef0000000000000
+.second.lowestFreqValueFactor 0.50000762951094830 bits=0x3fe0001000100010
+.second.octave_count 16
+.second.octave[0].xo 92.585398587009930 bits=0x405725772ba29544
+.second.octave[0].yo 7.0364429167029240 bits=0x401c25514abda3c0
+.second.octave[0].zo 161.62064578225338 bits=0x406433dc548b25b7
+.second.octave[1].xo 215.55393212750540 bits=0x406af1b9cfde7adc
+.second.octave[1].yo 248.79495986208770 bits=0x406f19704faa2994
+.second.octave[1].zo 93.583194546931000 bits=0x405765530f38918c
+.second.octave[2].xo 64.909611578915500 bits=0x40503a37137be052
+.second.octave[2].yo 23.117353495324295 bits=0x40371e0ae0f07d38
+.second.octave[2].zo 197.43173945482403 bits=0x4068add0cf42db96
+.second.octave[3].xo 178.30889630144500 bits=0x406649e27a7f11f9
+.second.octave[3].yo 152.71330657174843 bits=0x406316d3684db5ce
+.second.octave[3].zo 202.67209505514154 bits=0x40695581cd7d345c
+.second.octave[4].xo 21.165298194203500 bits=0x40352a50fb823120
+.second.octave[4].yo 45.113507642511340 bits=0x40468e876b1e3754
+.second.octave[4].zo 216.54749214242740 bits=0x406b11850e3dd15d
+.second.octave[5].xo 17.678591609336820 bits=0x4031adb82e017110
+.second.octave[5].yo 200.84844737078294 bits=0x40691b267b19bc7a
+.second.octave[5].zo 176.69361885636590 bits=0x40661632202bff60
+.second.octave[6].xo 162.01330651998268 bits=0x4064406d01cb84c6
+.second.octave[6].yo 154.75296274530720 bits=0x406358184553c66d
+.second.octave[6].zo 11.136857356016606 bits=0x402646122ad89de0
+.second.octave[7].xo 108.21213227605173 bits=0x405b0d939341045e
+.second.octave[7].yo 90.197544187200320 bits=0x40568ca4905fe294
+.second.octave[7].zo 42.652953211360140 bits=0x40455393f8884e14
+.second.octave[8].xo 12.791709900072505 bits=0x4029955b00017630
+.second.octave[8].yo 190.01307402167697 bits=0x4067c06b1a35f0f4
+.second.octave[8].zo 220.36052263610880 bits=0x406b8b8966c471c3
+.second.octave[9].xo 78.902125422322800 bits=0x4053b9bc6c447110
+.second.octave[9].yo 56.392893266547160 bits=0x404c324a539951c0
+.second.octave[9].zo 47.078891157663776 bits=0x40478a191aff0e04
+.second.octave[10].xo 135.91573936687456 bits=0x4060fd4dbca50c5a
+.second.octave[10].yo 111.19256797416293 bits=0x405bcc53089fd25a
+.second.octave[10].zo 100.16077366711374 bits=0x40590a4a1da293f0
+.second.octave[11].xo 125.21164074384308 bits=0x405f4d8b859e53a8
+.second.octave[11].yo 243.75121012595883 bits=0x406e7809e9d16d5a
+.second.octave[11].zo 9.5828321302063270 bits=0x40232a68f91496a0
+.second.octave[12].xo 93.790953701240880 bits=0x4057729efc45deb4
+.second.octave[12].yo 228.81251401655900 bits=0x406c9a001d651533
+.second.octave[12].zo 47.513973631524976 bits=0x4047c1c9e35133fc
+.second.octave[13].xo 40.823986602465540 bits=0x40446978649af740
+.second.octave[13].yo 180.03533402151052 bits=0x4066812174d05a5d
+.second.octave[13].zo 222.26956387142680 bits=0x406bc8a044697ec3
+.second.octave[14].xo 161.28217440502792 bits=0x40642907929e2b9f
+.second.octave[14].yo 189.43087581816783 bits=0x4067adc9bc157561
+.second.octave[14].zo 166.74993799725180 bits=0x4064d7ff7df8872d
+.second.octave[15].xo 215.69346940157520 bits=0x406af630e6be1159
+.second.octave[15].yo 230.33936176023857 bits=0x406ccadc0d31b79b
+.second.octave[15].zo 176.90299443765470 bits=0x40661ce55497464d
+.second.getValue(0.0,0.0,0.0) 0.15990477656230540 bits=0x3fc477c27ce796c8
+.second.getValue(123.456,-64.0,-789.012) 0.16780785948743490 bits=0x3fc57aba5a415163
+.second.getValue(-3000.5,80.25,3000.75) 0.15230410240042458 bits=0x3fc37eb3696da070
+.getValue(0.0,0.0,0.0) 0.073347539095968320 bits=0x3fb2c6e781a8c59d
+.getValue(0.25,-16.0,0.75) 0.073759301468452150 bits=0x3fb2e1e3bb9532d3
+.getValue(1234.5,63.0,-987.25) 0.13099788964531392 bits=0x3fc0c489f1ef91e9
+.getValue(-8.125,320.0,8.5) 0.075793970230285180 bits=0x3fb3673bcf5f81ad
+noise "minecraft:noodle"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 141.98900728742058 bits=0x4061bfa5f29c5f44
+.first.octave[0].yo 66.522317313190060 bits=0x4050a16da598924c
+.first.octave[0].zo 165.01064003708723 bits=0x4064a05729c66a2c
+.first.getValue(0.0,0.0,0.0) -0.030455782916216808 bits=0xbf9f2fccfe659baf
+.first.getValue(123.456,-64.0,-789.012) -0.23043912698525080 bits=0xbfcd7f07810f6aaf
+.first.getValue(-3000.5,80.25,3000.75) 0.018565972496927320 bits=0x3f9302f552c55d30
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 0.35317618587015430 bits=0x3fd69a704a027400
+.second.octave[0].yo 65.036581814251690 bits=0x405042575b3ff5b8
+.second.octave[0].zo 254.99681612007635 bits=0x406fdfe5eaeb7b50
+.second.getValue(0.0,0.0,0.0) -0.034537863774983470 bits=0xbfa1aef266c64690
+.second.getValue(123.456,-64.0,-789.012) 0.0038434105046708520 bits=0x3f6f7c374d867700
+.second.getValue(-3000.5,80.25,3000.75) 0.30375465062354900 bits=0x3fd370b7589be83a
+.getValue(0.0,0.0,0.0) -0.054161372242666890 bits=0xbfabbb0a14fa3bab
+.getValue(0.25,-16.0,0.75) 0.043226399171786944 bits=0x3fa621c545888880
+.getValue(1234.5,63.0,-987.25) 0.034462066352865806 bits=0x3fa1a5030fe053f8
+.getValue(-8.125,320.0,8.5) -0.10606166387067144 bits=0xbfbb26db71af12ab
+noise "minecraft:noodle_ridge_a"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 183.21839608269970 bits=0x4066e6fd19c818a2
+.first.octave[0].yo 155.88289046566100 bits=0x40637c40a3817edb
+.first.octave[0].zo 37.483975022647170 bits=0x4042bdf2e4bf2cdc
+.first.getValue(0.0,0.0,0.0) 0.23788431071608884 bits=0x3fce72fe3b60e8c8
+.first.getValue(123.456,-64.0,-789.012) -0.56798623278000550 bits=0xbfe22cf176cbc9a9
+.first.getValue(-3000.5,80.25,3000.75) 0.071088467823969600 bits=0x3fb232da946d3c10
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 195.26819375339020 bits=0x406868950b10f9ad
+.second.octave[0].yo 158.05910660772716 bits=0x4063c1e4338a654d
+.second.octave[0].zo 92.878543254391130 bits=0x4057383a0d7c6ece
+.second.getValue(0.0,0.0,0.0) 0.20813587016880708 bits=0x3fcaa43239bff08c
+.second.getValue(123.456,-64.0,-789.012) 0.54787278557607320 bits=0x3fe1882c820d5d6e
+.second.getValue(-3000.5,80.25,3000.75) 0.015626748717556857 bits=0x3f9000755abd265c
+.getValue(0.0,0.0,0.0) 0.37168348407074660 bits=0x3fd7c9a986230538
+.getValue(0.25,-16.0,0.75) 0.30471333528391326 bits=0x3fd3806c5c6cc473
+.getValue(1234.5,63.0,-987.25) -0.0075539637491365640 bits=0xbf7ef0e7b41f95aa
+.getValue(-8.125,320.0,8.5) 0.45270741132775510 bits=0x3fdcf9288193cf4f
+noise "minecraft:noodle_ridge_b"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 18.849019591305193 bits=0x4032d959591251b0
+.first.octave[0].yo 75.534988884865130 bits=0x4052e23d42050e08
+.first.octave[0].zo 43.507611928096000 bits=0x4045c0f96d7b1dac
+.first.getValue(0.0,0.0,0.0) 0.45491636435385760 bits=0x3fdd1d5986d42998
+.first.getValue(123.456,-64.0,-789.012) 0.070235878458171920 bits=0x3fb1fafa80fbd268
+.first.getValue(-3000.5,80.25,3000.75) 0.047055741225456640 bits=0x3fa817b0ab4e0420
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 176.54997493371910 bits=0x4066119965083e30
+.second.octave[0].yo 242.97064944678425 bits=0x406e5f0f8f6dba34
+.second.octave[0].zo 17.176115429020230 bits=0x40312d15e697f680
+.second.getValue(0.0,0.0,0.0) 0.32334842210182463 bits=0x3fd4b1bd9488fe9d
+.second.getValue(123.456,-64.0,-789.012) 0.25318566004626590 bits=0x3fd03431a06dc0b1
+.second.getValue(-3000.5,80.25,3000.75) 0.52687529108071710 bits=0x3fe0dc299208639e
+.getValue(0.0,0.0,0.0) 0.64855398871306850 bits=0x3fe4c0f44b66d0c0
+.getValue(0.25,-16.0,0.75) 0.53704225135280430 bits=0x3fe12f733b442d1b
+.getValue(1234.5,63.0,-987.25) 0.68115484895683450 bits=0x3fe5cc0540f9016d
+.getValue(-8.125,320.0,8.5) -0.60921386285484860 bits=0xbfe37eae122767a9
+noise "minecraft:noodle_thickness"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 76.963831313694020 bits=0x40533daf6988cb4c
+.first.octave[0].yo 223.74928227263530 bits=0x406bf7fa1ed10e1e
+.first.octave[0].zo 86.661374878015690 bits=0x4055aa53f74bde4c
+.first.getValue(0.0,0.0,0.0) 0.069644529901976920 bits=0x3fb1d4395246378a
+.first.getValue(123.456,-64.0,-789.012) 0.14989560692296210 bits=0x3fc32fc77cc62b34
+.first.getValue(-3000.5,80.25,3000.75) -0.029396015796857855 bits=0xbf9e19fd39ebba90
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 26.386520166505562 bits=0x403a62f2fc5262c8
+.second.octave[0].yo 239.04642154566702 bits=0x406de17c49098f07
+.second.octave[0].zo 52.398441388550990 bits=0x404a3300209e9984
+.second.getValue(0.0,0.0,0.0) 0.25277389311557440 bits=0x3fd02d728d0db20a
+.second.getValue(123.456,-64.0,-789.012) 0.33191685842358530 bits=0x3fd53e2034fae732
+.second.getValue(-3000.5,80.25,3000.75) 0.11144586076389523 bits=0x3fbc87b74741686c
+.getValue(0.0,0.0,0.0) 0.26868201918129275 bits=0x3fd13216115a0a9a
+.getValue(0.25,-16.0,0.75) 0.20391612028096548 bits=0x3fca19ec65ddf20b
+.getValue(1234.5,63.0,-987.25) 0.10483095801050964 bits=0x3fbad633a04373f5
+.getValue(-8.125,320.0,8.5) -0.53240036017735360 bits=0xbfe1096c7aeae42f
+noise "minecraft:offset"
+.valueFactor 1.2500000000000000 bits=0x3ff4000000000000
+.first.firstOctave -3
+.first.amplitudes [1.0, 1.0, 1.0, 0.0]
+.first.lowestFreqInputFactor 0.12500000000000000 bits=0x3fc0000000000000
+.first.lowestFreqValueFactor 0.53333333333333330 bits=0x3fe1111111111111
+.first.octave_count 4
+.first.octave[0].xo 59.496323069991350 bits=0x404dbf8783acee7c
+.first.octave[0].yo 149.76954726666202 bits=0x4062b8a02196e144
+.first.octave[0].zo 64.486756910047200 bits=0x40501f270674704e
+.first.octave[1].xo 119.58172390120194 bits=0x405de53af6e2bdb0
+.first.octave[1].yo 200.24730423735213 bits=0x406907e9ea9372de
+.first.octave[1].zo 223.15737961603475 bits=0x406be50940f9fda4
+.first.octave[2].xo 194.96253556363712 bits=0x40685ecd1761e1de
+.first.octave[2].yo 204.08237929401557 bits=0x406982a2d9e6b543
+.first.octave[2].zo 19.578492189383525 bits=0x40339418106a64c8
+.first.octave[3] null
+.first.getValue(0.0,0.0,0.0) 0.0011941174056421394 bits=0x3f53907dcd1bba40
+.first.getValue(123.456,-64.0,-789.012) -0.10156826534071420 bits=0xbfba0060b9f32742
+.first.getValue(-3000.5,80.25,3000.75) -0.30792313916494085 bits=0xbfd3b503411948f4
+.second.firstOctave -3
+.second.amplitudes [1.0, 1.0, 1.0, 0.0]
+.second.lowestFreqInputFactor 0.12500000000000000 bits=0x3fc0000000000000
+.second.lowestFreqValueFactor 0.53333333333333330 bits=0x3fe1111111111111
+.second.octave_count 4
+.second.octave[0].xo 136.90593960032882 bits=0x40611cfd750b7209
+.second.octave[0].yo 67.409236048132020 bits=0x4050da30ec64c490
+.second.octave[0].zo 249.84238883505730 bits=0x406f3af4d96e22c6
+.second.octave[1].xo 147.21925318444679 bits=0x406267041f4117c5
+.second.octave[1].yo 210.98457773445506 bits=0x406a5f81a92a3b56
+.second.octave[1].zo 214.57575411550502 bits=0x406ad26c93e51435
+.second.octave[2].xo 101.67486956995731 bits=0x40596b3110230210
+.second.octave[2].yo 200.65304364968375 bits=0x406914e5bbcbc812
+.second.octave[2].zo 84.701846041427980 bits=0x40552ceb0ba8b0a8
+.second.octave[3] null
+.second.getValue(0.0,0.0,0.0) 0.0075318116391235190 bits=0x3f7ed9ad4ab6f572
+.second.getValue(123.456,-64.0,-789.012) 0.074549541384941300 bits=0x3fb315adc22e1c70
+.second.getValue(-3000.5,80.25,3000.75) 0.13783669780107210 bits=0x3fc1a4a2069f4340
+.getValue(0.0,0.0,0.0) 0.010907411305957073 bits=0x3f86569ff6beae81
+.getValue(0.25,-16.0,0.75) 0.27031185624355686 bits=0x3fd14cca19926057
+.getValue(1234.5,63.0,-987.25) 0.14076016966730512 bits=0x3fc2046de2a67659
+.getValue(-8.125,320.0,8.5) 0.015072204474124665 bits=0x3f8ede2d0a5c23e2
+noise "minecraft:ore_gap"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -5
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.031250000000000000 bits=0x3fa0000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 36.319545948818075 bits=0x404228e6e1b3df18
+.first.octave[0].yo 168.65117835168604 bits=0x406514d673fb8b5a
+.first.octave[0].zo 238.80982612429406 bits=0x406dd9ea1879e943
+.first.getValue(0.0,0.0,0.0) 0.093981468041193900 bits=0x3fb80f2b63aac050
+.first.getValue(123.456,-64.0,-789.012) 0.37608082985734130 bits=0x3fd811b55438f2d5
+.first.getValue(-3000.5,80.25,3000.75) -0.054638286614557160 bits=0xbfabf98cac3ced40
+.second.firstOctave -5
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.031250000000000000 bits=0x3fa0000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 44.925411505709010 bits=0x40467673e25c2e60
+.second.octave[0].yo 16.580918615992600 bits=0x403094b715195368
+.second.octave[0].zo 37.199876232464900 bits=0x404299958b5cd79c
+.second.getValue(0.0,0.0,0.0) -0.35967556564659800 bits=0xbfd704eca9e7d60c
+.second.getValue(123.456,-64.0,-789.012) -0.12898759691693906 bits=0xbfc082aa632c8774
+.second.getValue(-3000.5,80.25,3000.75) 0.26028327511792737 bits=0x3fd0a87b2e94f1f8
+.getValue(0.0,0.0,0.0) -0.22141174800450340 bits=0xbfcc57385c50949d
+.getValue(0.25,-16.0,0.75) -0.093538500231505330 bits=0xbfb7f2239f6944a7
+.getValue(1234.5,63.0,-987.25) -0.037784086315325455 bits=0xbfa3586f8e112f4c
+.getValue(-8.125,320.0,8.5) 0.48606035191775660 bits=0x3fdf1b9ce0d79df3
+noise "minecraft:ore_vein_a"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 254.48505765915910 bits=0x406fcf8597a3d868
+.first.octave[0].yo 181.64018749843254 bits=0x4066b47c6a7e226d
+.first.octave[0].zo 23.294036899251040 bits=0x40374b46009219b8
+.first.getValue(0.0,0.0,0.0) 0.15375454560145008 bits=0x3fc3ae3a9c7c1ad4
+.first.getValue(123.456,-64.0,-789.012) 0.19015538546361460 bits=0x3fc85702fcdcbc5e
+.first.getValue(-3000.5,80.25,3000.75) 0.22015530537760230 bits=0x3fcc2e0c8e519ffc
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 202.15755219919360 bits=0x4069450aaae8de61
+.second.octave[0].yo 227.46326817230990 bits=0x406c6ed317c62b29
+.second.octave[0].zo 5.5195021092202410 bits=0x401613f85c653740
+.second.getValue(0.0,0.0,0.0) 0.0031480258613028610 bits=0x3f69c9e383e15880
+.second.getValue(123.456,-64.0,-789.012) -0.40384259692254260 bits=0xbfd9d88e9ea0e5e1
+.second.getValue(-3000.5,80.25,3000.75) 0.048679742900140880 bits=0x3fa8ec8d1f77b3c0
+.getValue(0.0,0.0,0.0) 0.13075214288562745 bits=0x3fc0bc7c78c9b02d
+.getValue(0.25,-16.0,0.75) -0.032214371344240565 bits=0xbfa07e66eec4f913
+.getValue(1234.5,63.0,-987.25) 0.30438215645935970 bits=0x3fd37aff4bdea661
+.getValue(-8.125,320.0,8.5) 0.57058222999680560 bits=0x3fe24235aa307b21
+noise "minecraft:ore_vein_b"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 250.22831836825407 bits=0x406f474e62529746
+.first.octave[0].yo 240.27878585425555 bits=0x406e08ebd04fd3ae
+.first.octave[0].zo 95.747090801016670 bits=0x4057efd055ef6094
+.first.getValue(0.0,0.0,0.0) 0.049259394388715240 bits=0x3fa93886ffd73148
+.first.getValue(123.456,-64.0,-789.012) 0.19481645890411692 bits=0x3fc8efbee7db9c64
+.first.getValue(-3000.5,80.25,3000.75) 0.18745517457657620 bits=0x3fc7fe87fa22dcdf
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 36.489657072965570 bits=0x40423ead153d5234
+.second.octave[0].yo 15.204809661740597 bits=0x402e68dccfde2950
+.second.octave[0].zo 212.71414551419466 bits=0x406a96da47b181a3
+.second.getValue(0.0,0.0,0.0) -0.57352298918179100 bits=0xbfe25a4ce241474e
+.second.getValue(123.456,-64.0,-789.012) -0.17658404704761960 bits=0xbfc69a4e59884d0e
+.second.getValue(-3000.5,80.25,3000.75) -0.17937669076003063 bits=0xbfc6f5d0be3d5115
+.getValue(0.0,0.0,0.0) -0.43688632899422980 bits=0xbfdbf5f213c661b5
+.getValue(0.25,-16.0,0.75) -0.52563870489665390 bits=0xbfe0d20842e15fa1
+.getValue(1234.5,63.0,-987.25) 0.13196008631105066 bits=0x3fc0e4116f8aa992
+.getValue(-8.125,320.0,8.5) -0.012509219522387297 bits=0xbf899e6f05fa2395
+noise "minecraft:ore_veininess"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 187.94854491062900 bits=0x40677e5a7adb3e0b
+.first.octave[0].yo 109.18601622839830 bits=0x405b4be7b09c5fbe
+.first.octave[0].zo 229.57664615661980 bits=0x406cb273e2a4017a
+.first.getValue(0.0,0.0,0.0) -0.058957981648053770 bits=0xbfae2fbd96087a70
+.first.getValue(123.456,-64.0,-789.012) 0.024743984441040200 bits=0x3f99567cafc9ba80
+.first.getValue(-3000.5,80.25,3000.75) 0.27293748858549666 bits=0x3fd177ceccd4eee7
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 237.67526314472224 bits=0x406db59bc17458d6
+.second.octave[0].yo 96.528608923907600 bits=0x405821d4ba8623a4
+.second.octave[0].zo 237.25270431260023 bits=0x406da816275ac5a3
+.second.getValue(0.0,0.0,0.0) -0.028627015654294027 bits=0xbf9d50668011affc
+.second.getValue(123.456,-64.0,-789.012) 0.24233322987705297 bits=0x3fcf04c678872ac4
+.second.getValue(-3000.5,80.25,3000.75) 0.082553373115715690 bits=0x3fb52237c5b4dc2b
+.getValue(0.0,0.0,0.0) -0.072987497751956500 bits=0xbfb2af4f03dc8d03
+.getValue(0.25,-16.0,0.75) -0.039254024528202360 bits=0xbfa4191a7f2b868f
+.getValue(1234.5,63.0,-987.25) 0.15532910445694645 bits=0x3fc3e1d2f7e13907
+.getValue(-8.125,320.0,8.5) 0.12691121368945632 bits=0x3fc03ea06c255c67
+noise "minecraft:pillar"
+.valueFactor 1.1111111111111110 bits=0x3ff1c71c71c71c71
+.first.firstOctave -7
+.first.amplitudes [1.0, 1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 0.66666666666666660 bits=0x3fe5555555555555
+.first.octave_count 2
+.first.octave[0].xo 27.389871821399282 bits=0x403b63cea3c28ab8
+.first.octave[0].yo 187.34420241468350 bits=0x40676b03b4c848a3
+.first.octave[0].zo 67.333092379972670 bits=0x4050d55162b3a1e2
+.first.octave[1].xo 41.541710201500365 bits=0x4044c556c287ad44
+.first.octave[1].yo 62.873653992081074 bits=0x404f6fd3e4de0108
+.first.octave[1].zo 183.94038415826833 bits=0x4066fe17a084ae0c
+.first.getValue(0.0,0.0,0.0) -0.24393880667370155 bits=0xbfcf39630671c4ae
+.first.getValue(123.456,-64.0,-789.012) 0.19913762262220583 bits=0x3fc97d5774486465
+.first.getValue(-3000.5,80.25,3000.75) -0.015996053638446767 bits=0xbf906144fcf800d5
+.second.firstOctave -7
+.second.amplitudes [1.0, 1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 0.66666666666666660 bits=0x3fe5555555555555
+.second.octave_count 2
+.second.octave[0].xo 108.94214343727270 bits=0x405b3c4c13fcce8c
+.second.octave[0].yo 249.65410276213666 bits=0x406f34ee68ea7335
+.second.octave[0].zo 79.506661827792470 bits=0x4053e06d25bb2004
+.second.octave[1].xo 231.76260747712092 bits=0x406cf86747cbbd6c
+.second.octave[1].yo 65.220306135360860 bits=0x40504e197ee79eea
+.second.octave[1].zo 189.79832471068428 bits=0x4067b98be0437f49
+.second.getValue(0.0,0.0,0.0) 0.068163788926834700 bits=0x3fb1732e9c3652de
+.second.getValue(123.456,-64.0,-789.012) 0.093794136391470580 bits=0x3fb802e47c5ba146
+.second.getValue(-3000.5,80.25,3000.75) 0.057357346695342340 bits=0x3fad5df1307bd104
+.getValue(0.0,0.0,0.0) -0.19530557527429648 bits=0xbfc8ffc5e943c8f0
+.getValue(0.25,-16.0,0.75) -0.37057253121412065 bits=0xbfd7b775d99713dd
+.getValue(1234.5,63.0,-987.25) -0.039169188477346380 bits=0xbfa40dfbdf0ac8bc
+.getValue(-8.125,320.0,8.5) 0.039394397400225500 bits=0x3fa42b80a0f58d9a
+noise "minecraft:pillar_rareness"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 54.171550491052756 bits=0x404b15f55dd25798
+.first.octave[0].yo 172.18360160534624 bits=0x406585e010794e91
+.first.octave[0].zo 31.425293440429215 bits=0x403f6ce007e9d8c8
+.first.getValue(0.0,0.0,0.0) -0.45327441229381430 bits=0xbfdd0272ae3a986b
+.first.getValue(123.456,-64.0,-789.012) -0.043185370350116520 bits=0xbfa61c6492a38834
+.first.getValue(-3000.5,80.25,3000.75) 0.24364048183894850 bits=0x3fcf2f9c7ebd6f85
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 178.41479090756380 bits=0x40664d45f794d545
+.second.octave[0].yo 210.27844337763378 bits=0x406a48e902161732
+.second.octave[0].zo 173.19895351054120 bits=0x4065a65dd3c0a65d
+.second.getValue(0.0,0.0,0.0) -0.18144895987593510 bits=0xbfc739b83247b9cb
+.second.getValue(123.456,-64.0,-789.012) 0.098799607320179000 bits=0x3fb94aee5a4c3d58
+.second.getValue(-3000.5,80.25,3000.75) -0.13002745987666253 bits=0xbfc0a4bd63e048ac
+.getValue(0.0,0.0,0.0) -0.52893614347479110 bits=0xbfe0ed0b7dbcb0e1
+.getValue(0.25,-16.0,0.75) -0.48451547518703550 bits=0xbfdf024d321563d0
+.getValue(1234.5,63.0,-987.25) 0.27172916682817910 bits=0x3fd16402bb395deb
+.getValue(-8.125,320.0,8.5) -0.0068164121164222815 bits=0xbf7beb86b1db831f
+noise "minecraft:pillar_thickness"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 224.98153880179152 bits=0x406c1f68c40fae63
+.first.octave[0].yo 185.27352854995330 bits=0x406728c0bef2124c
+.first.octave[0].zo 214.55910727925618 bits=0x406ad1e434f2eb8c
+.first.getValue(0.0,0.0,0.0) 0.36267599666815170 bits=0x3fd73615622ef87d
+.first.getValue(123.456,-64.0,-789.012) -0.018909083656372380 bits=0xbf935ce71f9b150c
+.first.getValue(-3000.5,80.25,3000.75) -0.079499058474198890 bits=0xbfb45a0ce035a036
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 69.716084853668320 bits=0x40516dd45590eaa6
+.second.octave[0].yo 137.09102156897936 bits=0x406122e9a610bfe7
+.second.octave[0].zo 131.74222228004723 bits=0x406077c048f0654b
+.second.getValue(0.0,0.0,0.0) 0.090056832686945200 bits=0x3fb70df6ef2bf958
+.second.getValue(123.456,-64.0,-789.012) -0.10675634741573364 bits=0xbfbb54624cca7e54
+.second.getValue(-3000.5,80.25,3000.75) 0.34608690030093525 bits=0x3fd62649ab977538
+.getValue(0.0,0.0,0.0) 0.37727735779591404 bits=0x3fd8254fee504daf
+.getValue(0.25,-16.0,0.75) 0.35424755992916910 bits=0x3fd6abfdf5255966
+.getValue(1234.5,63.0,-987.25) 0.40392622110381780 bits=0x3fd9d9ed5d68d11a
+.getValue(-8.125,320.0,8.5) -0.34728523850876963 bits=0xbfd639ebdd71d6a3
+noise "minecraft:ridge"
+.valueFactor 1.2500000000000000 bits=0x3ff4000000000000
+.first.firstOctave -7
+.first.amplitudes [1.0, 2.0, 1.0, 0.0, 0.0, 0.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 0.50793650793650790 bits=0x3fe0410410410410
+.first.octave_count 6
+.first.octave[0].xo 225.57470493830294 bits=0x406c3263fb9c5b8c
+.first.octave[0].yo 158.39023465798240 bits=0x4063cc7ccd64b99b
+.first.octave[0].zo 29.299559959693823 bits=0x403d4caff6261378
+.first.octave[1].xo 235.61047693301967 bits=0x406d738906ebc905
+.first.octave[1].yo 12.474835750866902 bits=0x4028f31dabe9e3d0
+.first.octave[1].zo 77.908792448693650 bits=0x40537a29a7cd7f6c
+.first.octave[2].xo 235.51287809000218 bits=0x406d70697f4fec9e
+.first.octave[2].yo 227.90047896294166 bits=0x406c7cd0b9421241
+.first.octave[2].zo 162.57514479094843 bits=0x40645267960c72d3
+.first.octave[3] null
+.first.octave[4] null
+.first.octave[5] null
+.first.getValue(0.0,0.0,0.0) -0.34500065245917620 bits=0xbfd6147d9dda4af0
+.first.getValue(123.456,-64.0,-789.012) 0.0089309709354180800 bits=0x3f824a66a0b692cc
+.first.getValue(-3000.5,80.25,3000.75) -0.23760197776178180 bits=0xbfce69bdd9f9d3ab
+.second.firstOctave -7
+.second.amplitudes [1.0, 2.0, 1.0, 0.0, 0.0, 0.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 0.50793650793650790 bits=0x3fe0410410410410
+.second.octave_count 6
+.second.octave[0].xo 97.372222936800940 bits=0x405857d280271864
+.second.octave[0].yo 38.924466704512780 bits=0x40437654eccb0fc8
+.second.octave[0].zo 241.25639544541450 bits=0x406e283464389cc2
+.second.octave[1].xo 34.215186453006055 bits=0x40411b8b3acd1a04
+.second.octave[1].yo 223.35036160424352 bits=0x406beb36298a0000
+.second.octave[1].zo 144.05829629553930 bits=0x406201dd90315a37
+.second.octave[2].xo 18.688262700299646 bits=0x4032b031fbfcd7f8
+.second.octave[2].yo 186.83279705505920 bits=0x40675aa6460275e6
+.second.octave[2].zo 80.275155777931730 bits=0x4054119c26fae16c
+.second.octave[3] null
+.second.octave[4] null
+.second.octave[5] null
+.second.getValue(0.0,0.0,0.0) 0.045925950060031820 bits=0x3fa7839b2b17546a
+.second.getValue(123.456,-64.0,-789.012) 0.024432930408308975 bits=0x3f9904f234324f64
+.second.getValue(-3000.5,80.25,3000.75) -0.0082672595015829620 bits=0xbf80ee6cc97ea81c
+.getValue(0.0,0.0,0.0) -0.37384337799893050 bits=0xbfd7ed0cc695387c
+.getValue(0.25,-16.0,0.75) -0.19740533861680623 bits=0xbfc9449400b51e59
+.getValue(1234.5,63.0,-987.25) 0.26869369289305983 bits=0x3fd1324707e77f8b
+.getValue(-8.125,320.0,8.5) 0.19983719625395927 bits=0x3fc99443e737b0fd
+noise "minecraft:spaghetti_2d"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 129.19724810975325 bits=0x4060264fdb4492d1
+.first.octave[0].yo 51.633196082570660 bits=0x4049d10c91b94c54
+.first.octave[0].zo 23.649654053724106 bits=0x4037a64fba627578
+.first.getValue(0.0,0.0,0.0) -0.24661139061997106 bits=0xbfcf90f648c4556c
+.first.getValue(123.456,-64.0,-789.012) -0.32562901498017477 bits=0xbfd4d71b147dfca3
+.first.getValue(-3000.5,80.25,3000.75) -0.34343029782439230 bits=0xbfd5fac312671f9f
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 237.46580842158696 bits=0x406daee7e7101d5b
+.second.octave[0].yo 112.32388979309604 bits=0x405c14ba9c4136c4
+.second.octave[0].zo 17.224979123933366 bits=0x403139983b5b9398
+.second.getValue(0.0,0.0,0.0) 0.14927301593432693 bits=0x3fc31b60d0ce7e07
+.second.getValue(123.456,-64.0,-789.012) 0.079048980508604700 bits=0x3fb43c8dd2110c9c
+.second.getValue(-3000.5,80.25,3000.75) -0.052390858193247890 bits=0xbfaad2f97d194776
+.getValue(0.0,0.0,0.0) -0.081115312238036770 bits=0xbfb4c3f91d4466fd
+.getValue(0.25,-16.0,0.75) 0.087186857270746800 bits=0x3fb651e0bc9e6ebf
+.getValue(1234.5,63.0,-987.25) 0.12956300769101758 bits=0x3fc095854866f3dc
+.getValue(-8.125,320.0,8.5) 0.53534403613785340 bits=0x3fe12189d0ea435c
+noise "minecraft:spaghetti_2d_elevation"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 107.83521199295822 bits=0x405af5741d00bee2
+.first.octave[0].yo 247.32731660344805 bits=0x406eea7960ab67e9
+.first.octave[0].zo 94.583157624255760 bits=0x4057a552745b25dc
+.first.getValue(0.0,0.0,0.0) 0.34117066541899110 bits=0x3fd5d5bd7c951062
+.first.getValue(123.456,-64.0,-789.012) -0.057615044235567070 bits=0xbfad7fb8157fab50
+.first.getValue(-3000.5,80.25,3000.75) -0.56317080724583880 bits=0xbfe2057ec8e5d97a
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 76.192975305788310 bits=0x40530c59b518d2f8
+.second.octave[0].yo 13.078245826896165 bits=0x402a280fd6472290
+.second.octave[0].zo 89.556969024737360 bits=0x405663a561688872
+.second.getValue(0.0,0.0,0.0) -0.28576469107474667 bits=0xbfd249f7fca12008
+.second.getValue(123.456,-64.0,-789.012) -0.24961147749583576 bits=0xbfcff344d6468267
+.second.getValue(-3000.5,80.25,3000.75) 0.14981631371696583 bits=0x3fc32d2e53e92ba5
+.getValue(0.0,0.0,0.0) 0.046171645286870360 bits=0x3fa7a3cf5504ed02
+.getValue(0.25,-16.0,0.75) 0.071394756059297640 bits=0x3fb246ed3e616dc5
+.getValue(1234.5,63.0,-987.25) -0.39923373385375080 bits=0xbfd98d0ba5972830
+.getValue(-8.125,320.0,8.5) -0.28442966027735656 bits=0xbfd234187639d52f
+noise "minecraft:spaghetti_2d_modulator"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -11
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.00048828125000000000 bits=0x3f40000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 66.378425347185070 bits=0x405098381ef288ca
+.first.octave[0].yo 8.7522131298398160 bits=0x4021812214509150
+.first.octave[0].zo 248.88686944118830 bits=0x406f1c613c05b738
+.first.getValue(0.0,0.0,0.0) 0.15898809978088868 bits=0x3fc459b8d8818c8c
+.first.getValue(123.456,-64.0,-789.012) 0.36165858163042710 bits=0x3fd7256a091ae856
+.first.getValue(-3000.5,80.25,3000.75) 0.25857697117002254 bits=0x3fd08c866cab2284
+.second.firstOctave -11
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.00048828125000000000 bits=0x3f40000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 171.23379821729313 bits=0x4065677b46662463
+.second.octave[0].yo 250.40942996808040 bits=0x406f4d1a0ce05d0b
+.second.octave[0].zo 122.35421240958780 bits=0x405e96ab6a86c116
+.second.getValue(0.0,0.0,0.0) 0.22171418184153108 bits=0x3fcc61215c08cd8e
+.second.getValue(123.456,-64.0,-789.012) 0.33551557321442170 bits=0x3fd579164f904bf0
+.second.getValue(-3000.5,80.25,3000.75) 0.13974371741837668 bits=0x3fc1e31f44111309
+.getValue(0.0,0.0,0.0) 0.31725190135201640 bits=0x3fd44ddaeb39a58a
+.getValue(0.25,-16.0,0.75) 0.32067563133128440 bits=0x3fd485f3154c4a0c
+.getValue(1234.5,63.0,-987.25) 0.56427588973358640 bits=0x3fe20e8c4f8a773e
+.getValue(-8.125,320.0,8.5) 0.14546578394983770 bits=0x3fc29e9f706032f1
+noise "minecraft:spaghetti_2d_thickness"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -11
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.00048828125000000000 bits=0x3f40000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 156.75847865660126 bits=0x4063984575081a20
+.first.octave[0].yo 30.709805415395890 bits=0x403eb5b5cec5a628
+.first.octave[0].zo 143.79008252548562 bits=0x4061f9485b260342
+.first.getValue(0.0,0.0,0.0) 0.15214080125694573 bits=0x3fc379598ae495ac
+.first.getValue(123.456,-64.0,-789.012) 0.31775757771073790 bits=0x3fd45623e114b91b
+.first.getValue(-3000.5,80.25,3000.75) 0.55124819259256030 bits=0x3fe1a3d33fe540c4
+.second.firstOctave -11
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.00048828125000000000 bits=0x3f40000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 79.558313443161470 bits=0x4053e3bb684ed2ec
+.second.octave[0].yo 113.09700010278232 bits=0x405c46353feb4a28
+.second.octave[0].zo 113.00541509952939 bits=0x405c4058b892d888
+.second.getValue(0.0,0.0,0.0) 0.042933481432589670 bits=0x3fa5fb609550131e
+.second.getValue(123.456,-64.0,-789.012) 0.034308275552967280 bits=0x3fa190dab2f6dc78
+.second.getValue(-3000.5,80.25,3000.75) -0.30793929871252160 bits=0xbfd3b5470847e6b1
+.getValue(0.0,0.0,0.0) 0.16256190224127950 bits=0x3fc4ced412d9d60b
+.getValue(0.25,-16.0,0.75) 0.15719684136772308 bits=0x3fc41f06ae5abc45
+.getValue(1234.5,63.0,-987.25) 0.22040045073498657 bits=0x3fcc3614fbf71837
+.getValue(-8.125,320.0,8.5) 0.25909728130810900 bits=0x3fd0950cc36cda91
+noise "minecraft:spaghetti_3d_1"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 96.838529833600860 bits=0x405835aa7909024e
+.first.octave[0].yo 29.289124283320263 bits=0x403d4a040c8d5708
+.first.octave[0].zo 60.158165357180650 bits=0x404e143ec32e39bc
+.first.getValue(0.0,0.0,0.0) -0.23470027622131237 bits=0xbfce0aa89d5dc937
+.first.getValue(123.456,-64.0,-789.012) -0.39831860528078200 bits=0xbfd97e0d51c46f46
+.first.getValue(-3000.5,80.25,3000.75) 0.46793549414599395 bits=0x3fddf2a7b6ffa83d
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 98.314184837919300 bits=0x4058941b9ab8f0cc
+.second.octave[0].yo 189.16119639757696 bits=0x4067a5288558fa6f
+.second.octave[0].zo 218.94971091725796 bits=0x406b5e64082648de
+.second.getValue(0.0,0.0,0.0) -0.11967635345674726 bits=0xbfbea31c0833862c
+.second.getValue(123.456,-64.0,-789.012) 0.095154318617531320 bits=0x3fb85c088e8913f8
+.second.getValue(-3000.5,80.25,3000.75) 0.28487668130860005 bits=0x3fd23b6b676742cb
+.getValue(0.0,0.0,0.0) -0.29531385806504970 bits=0xbfd2e66c189c7a75
+.getValue(0.25,-16.0,0.75) -0.23178883256850340 bits=0xbfcdab41a7bad8d2
+.getValue(1234.5,63.0,-987.25) -0.28617594622955045 bits=0xbfd250b4ea7d4c2a
+.getValue(-8.125,320.0,8.5) 0.38730756561792795 bits=0x3fd8c9a5abf4a1c9
+noise "minecraft:spaghetti_3d_2"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -7
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 219.70113549037572 bits=0x406b766fb3b22751
+.first.octave[0].yo 204.71941903785302 bits=0x406997057b12f65a
+.first.octave[0].zo 31.805172797867527 bits=0x403fce1fcdf27848
+.first.getValue(0.0,0.0,0.0) -0.13161393612379885 bits=0xbfc0d8b9b7acbe06
+.first.getValue(123.456,-64.0,-789.012) -0.022880376239813870 bits=0xbf976df40eae42a0
+.first.getValue(-3000.5,80.25,3000.75) -0.56034400368606950 bits=0xbfe1ee568c4aec85
+.second.firstOctave -7
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0078125000000000000 bits=0x3f80000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 205.60966194605388 bits=0x4069b38259c4fd59
+.second.octave[0].yo 178.07274786818166 bits=0x40664253f3565635
+.second.octave[0].zo 224.28595232432946 bits=0x406c0926857d26ba
+.second.getValue(0.0,0.0,0.0) -0.27407936382983267 bits=0xbfd18a842c0a1664
+.second.getValue(123.456,-64.0,-789.012) -0.031264404781268460 bits=0xbfa001e358210020
+.second.getValue(-3000.5,80.25,3000.75) 0.16108376659957122 bits=0x3fc49e6492bb1787
+.getValue(0.0,0.0,0.0) -0.33807774996135960 bits=0xbfd5a310dbe5b72b
+.getValue(0.25,-16.0,0.75) -0.50170591869935600 bits=0xbfe00df99220bf70
+.getValue(1234.5,63.0,-987.25) 0.28279124361132857 bits=0x3fd2194071b9f90a
+.getValue(-8.125,320.0,8.5) 0.31304236746232970 bits=0x3fd408e2daa0d6f8
+noise "minecraft:spaghetti_3d_rarity"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -11
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.00048828125000000000 bits=0x3f40000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 116.25262564532241 bits=0x405d102b04c1329a
+.first.octave[0].yo 166.80537668860438 bits=0x4064d9c5a5555088
+.first.octave[0].zo 64.689251319505300 bits=0x40502c1cb1910002
+.first.getValue(0.0,0.0,0.0) 0.15359072101899462 bits=0x3fc3a8dc59df7130
+.first.getValue(123.456,-64.0,-789.012) 0.27186115989261794 bits=0x3fd1662c59b2a6a4
+.first.getValue(-3000.5,80.25,3000.75) 0.38814243435245344 bits=0x3fd8d7535d6ef38a
+.second.firstOctave -11
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.00048828125000000000 bits=0x3f40000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 117.96836796358335 bits=0x405d7df9bd9f856a
+.second.octave[0].yo 131.85080330807050 bits=0x40607b39c7dbefba
+.second.octave[0].zo 248.71238455010266 bits=0x406f16cbdaaf1bbb
+.second.getValue(0.0,0.0,0.0) 0.22298887671649470 bits=0x3fcc8ae6466f3f58
+.second.getValue(123.456,-64.0,-789.012) 0.030442342982749282 bits=0x3f9f2c470e191ca0
+.second.getValue(-3000.5,80.25,3000.75) -0.22936202565275680 bits=0xbfcd5bbc1f8fbb4d
+.getValue(0.0,0.0,0.0) 0.31381633144624105 bits=0x3fd415911820c98d
+.getValue(0.25,-16.0,0.75) 0.31141854756506343 bits=0x3fd3ee480f4a39a3
+.getValue(1234.5,63.0,-987.25) -0.15592970401714880 bits=0xbfc3f581299d4339
+.getValue(-8.125,320.0,8.5) 0.32765307907842700 bits=0x3fd4f8449ec4d5be
+noise "minecraft:spaghetti_3d_thickness"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 236.10583682956494 bits=0x406d836303eb3633
+.first.octave[0].yo 23.576625230419324 bits=0x4037939db60ab310
+.first.octave[0].zo 12.124441963997242 bits=0x40283fb6db6b3c80
+.first.getValue(0.0,0.0,0.0) 0.19412709358691022 bits=0x3fc8d928171c9572
+.first.getValue(123.456,-64.0,-789.012) 0.23985249910929668 bits=0x3fceb37c97c4e6f6
+.first.getValue(-3000.5,80.25,3000.75) 0.16339384621612140 bits=0x3fc4ea16eceed5a4
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 73.398359957396700 bits=0x4052597ebac34382
+.second.octave[0].yo 228.96475407695286 bits=0x406c9edf43f1263f
+.second.octave[0].zo 54.582214064533275 bits=0x404b4a85fd8f3888
+.second.getValue(0.0,0.0,0.0) 0.11059223047417732 bits=0x3fbc4fc5bd140a90
+.second.getValue(123.456,-64.0,-789.012) -0.013887015116677878 bits=0xbf8c70cb9e1f1b78
+.second.getValue(-3000.5,80.25,3000.75) -0.031758757039857670 bits=0xbfa042af0db212a4
+.getValue(0.0,0.0,0.0) 0.25393277005090625 bits=0x3fd0406f3bb015cd
+.getValue(0.25,-16.0,0.75) 0.16713476832049587 bits=0x3fc564ac0dfb043b
+.getValue(1234.5,63.0,-987.25) 0.069212772331124940 bits=0x3fb1b7eda1a0af54
+.getValue(-8.125,320.0,8.5) 0.027602595799680187 bits=0x3f9c43dad8fa3287
+noise "minecraft:spaghetti_roughness"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -5
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.031250000000000000 bits=0x3fa0000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 54.088013675303160 bits=0x404b0b4408388390
+.first.octave[0].yo 4.7412722494255775 bits=0x4012f7101292dc60
+.first.octave[0].zo 99.381122584812000 bits=0x4058d8644ffb6236
+.first.getValue(0.0,0.0,0.0) 0.47366184926968213 bits=0x3fde5079c9fe7982
+.first.getValue(123.456,-64.0,-789.012) 0.35425110147615270 bits=0x3fd6ac0ccfda5f14
+.first.getValue(-3000.5,80.25,3000.75) 0.17660785343405920 bits=0x3fc69b160d5ba761
+.second.firstOctave -5
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.031250000000000000 bits=0x3fa0000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 94.257940447150870 bits=0x4057908218a63508
+.second.octave[0].yo 65.168599432410760 bits=0x40504aca55461504
+.second.octave[0].zo 160.21861695432088 bits=0x406406fee8fba519
+.second.getValue(0.0,0.0,0.0) -0.18067851485336378 bits=0xbfc720793c31493e
+.second.getValue(123.456,-64.0,-789.012) -0.46688075752743620 bits=0xbfdde15fd42d9222
+.second.getValue(-3000.5,80.25,3000.75) -0.41684731077679360 bits=0xbfdaada057cd8f64
+.getValue(0.0,0.0,0.0) 0.24415277868026528 bits=0x3fcf4065f3d462cf
+.getValue(0.25,-16.0,0.75) 0.54022625823534730 bits=0x3fe1498893f1f5e7
+.getValue(1234.5,63.0,-987.25) 0.17730127499539763 bits=0x3fc6b1cee4d27995
+.getValue(-8.125,320.0,8.5) 0.10387653350125187 bits=0x3fba97a70a35b08c
+noise "minecraft:spaghetti_roughness_modulator"
+.valueFactor 0.83333333333333330 bits=0x3feaaaaaaaaaaaaa
+.first.firstOctave -8
+.first.amplitudes [1.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.first.octave_count 1
+.first.octave[0].xo 205.21841141415385 bits=0x4069a6fd39ef1ba5
+.first.octave[0].yo 253.40051214564858 bits=0x406facd0fed8e6c4
+.first.octave[0].zo 227.72378781019610 bits=0x406c7729450dc124
+.first.getValue(0.0,0.0,0.0) 0.38302597189877013 bits=0x3fd8837f5db4b9ad
+.first.getValue(123.456,-64.0,-789.012) 0.47736495856708240 bits=0x3fde8d25c1535432
+.first.getValue(-3000.5,80.25,3000.75) 0.25324894193012620 bits=0x3fd0353b0cd58923
+.second.firstOctave -8
+.second.amplitudes [1.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 1.0000000000000000 bits=0x3ff0000000000000
+.second.octave_count 1
+.second.octave[0].xo 81.751734550735020 bits=0x4054701c6b3bab88
+.second.octave[0].yo 125.25076044816387 bits=0x405f500c758cffa0
+.second.octave[0].zo 230.25821563849456 bits=0x406cc8434d7154cc
+.second.getValue(0.0,0.0,0.0) -0.011873933759034144 bits=0xbf88515c695c0010
+.second.getValue(123.456,-64.0,-789.012) 0.23112727410954070 bits=0x3fcd959419c1ce30
+.second.getValue(-3000.5,80.25,3000.75) -0.28441242397816870 bits=0xbfd233d02ae3fd10
+.getValue(0.0,0.0,0.0) 0.30929336511644660 bits=0x3fd3cb766602e00f
+.getValue(0.25,-16.0,0.75) 0.20678539538893850 bits=0x3fca77f19f3e32a1
+.getValue(1234.5,63.0,-987.25) -0.22821465803466540 bits=0xbfcd36234e5d04e2
+.getValue(-8.125,320.0,8.5) -0.51390084997510240 bits=0xbfe071e03200f309
+noise "minecraft:temperature"
+.valueFactor 1.2500000000000000 bits=0x3ff4000000000000
+.first.firstOctave -10
+.first.amplitudes [1.5, 0.0, 1.0, 0.0, 0.0, 0.0]
+.first.lowestFreqInputFactor 0.00097656250000000000 bits=0x3f50000000000000
+.first.lowestFreqValueFactor 0.50793650793650790 bits=0x3fe0410410410410
+.first.octave_count 6
+.first.octave[0].xo 137.22484493286000 bits=0x40612731ee0029c3
+.first.octave[0].yo 116.05822779290708 bits=0x405d03ba01109044
+.first.octave[0].zo 233.99517899162004 bits=0x406d3fd8819cd594
+.first.octave[1] null
+.first.octave[2].xo 128.46223703440728 bits=0x40600ecaa55238f0
+.first.octave[2].yo 209.99745940811104 bits=0x406a3feb2ffe1d95
+.first.octave[2].zo 215.34680117839693 bits=0x406aeb18fec8edbb
+.first.octave[3] null
+.first.octave[4] null
+.first.octave[5] null
+.first.getValue(0.0,0.0,0.0) 0.22759545968031470 bits=0x3fcd21d91805c3d0
+.first.getValue(123.456,-64.0,-789.012) 0.14961590934659597 bits=0x3fc3269d36cd6e5c
+.first.getValue(-3000.5,80.25,3000.75) -0.033591613024246650 bits=0xbfa132eb7eb7d264
+.second.firstOctave -10
+.second.amplitudes [1.5, 0.0, 1.0, 0.0, 0.0, 0.0]
+.second.lowestFreqInputFactor 0.00097656250000000000 bits=0x3f50000000000000
+.second.lowestFreqValueFactor 0.50793650793650790 bits=0x3fe0410410410410
+.second.octave_count 6
+.second.octave[0].xo 186.08699157037591 bits=0x406742c8a28bb95a
+.second.octave[0].yo 87.646165368817260 bits=0x4055e95ac5fdb830
+.second.octave[0].zo 229.68048924630327 bits=0x406cb5c6916244df
+.second.octave[1] null
+.second.octave[2].xo 255.20330381415343 bits=0x406fe68177001e1d
+.second.octave[2].yo 54.571671074207360 bits=0x404b492c848be518
+.second.octave[2].zo 38.401898488887610 bits=0x4043337168e10ac4
+.second.octave[3] null
+.second.octave[4] null
+.second.octave[5] null
+.second.getValue(0.0,0.0,0.0) -0.014490386683538116 bits=0xbf8dad22c74c2a54
+.second.getValue(123.456,-64.0,-789.012) 0.11148022997794832 bits=0x3fbc89f7e5e7e594
+.second.getValue(-3000.5,80.25,3000.75) 0.20194723006232482 bits=0x3fc9d9682651572f
+.getValue(0.0,0.0,0.0) 0.26638134124597074 bits=0x3fd10c64533aa0bb
+.getValue(0.25,-16.0,0.75) 0.28732881390429105 bits=0x3fd2639864bab6af
+.getValue(1234.5,63.0,-987.25) -0.31145663606848956 bits=0xbfd3eee7d0825357
+.getValue(-8.125,320.0,8.5) 0.034616040764252380 bits=0x3fa1b93195ffba1d
+noise "minecraft:vegetation"
+.valueFactor 1.1111111111111110 bits=0x3ff1c71c71c71c71
+.first.firstOctave -8
+.first.amplitudes [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+.first.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.first.lowestFreqValueFactor 0.50793650793650790 bits=0x3fe0410410410410
+.first.octave_count 6
+.first.octave[0].xo 61.653827111031944 bits=0x404ed3b09b558f68
+.first.octave[0].yo 188.03149984056157 bits=0x406781020bf42151
+.first.octave[0].zo 143.82766686637618 bits=0x4061fa7c3f396231
+.first.octave[1].xo 46.199489946228454 bits=0x40471988e2f5774c
+.first.octave[1].yo 117.37580169880502 bits=0x405d580d22918986
+.first.octave[1].zo 249.72255441505820 bits=0x406f371f2a6fc82c
+.first.octave[2] null
+.first.octave[3] null
+.first.octave[4] null
+.first.octave[5] null
+.first.getValue(0.0,0.0,0.0) 0.065302160837913940 bits=0x3fb0b7a475282f57
+.first.getValue(123.456,-64.0,-789.012) -0.041820747391162460 bits=0xbfa569876cadbb5d
+.first.getValue(-3000.5,80.25,3000.75) 0.27362639830816393 bits=0x3fd183184c0392c8
+.second.firstOctave -8
+.second.amplitudes [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+.second.lowestFreqInputFactor 0.0039062500000000000 bits=0x3f70000000000000
+.second.lowestFreqValueFactor 0.50793650793650790 bits=0x3fe0410410410410
+.second.octave_count 6
+.second.octave[0].xo 77.495168604266010 bits=0x40535fb0d7a85506
+.second.octave[0].yo 23.391664360734637 bits=0x403764441d945d30
+.second.octave[0].zo 29.086263095719318 bits=0x403d16155696f758
+.second.octave[1].xo 62.787509362791070 bits=0x404f64cd1b573da0
+.second.octave[1].yo 206.02161461340552 bits=0x4069c0b111213628
+.second.octave[1].zo 185.76546647324386 bits=0x4067387eb38b988a
+.second.octave[2] null
+.second.octave[3] null
+.second.octave[4] null
+.second.octave[5] null
+.second.getValue(0.0,0.0,0.0) 0.23709623244010130 bits=0x3fce592b5a2ae2e6
+.second.getValue(123.456,-64.0,-789.012) 0.18211819416184954 bits=0x3fc74fa623f742aa
+.second.getValue(-3000.5,80.25,3000.75) 0.10159483971726076 bits=0x3fba021e92072acd
+.getValue(0.0,0.0,0.0) 0.33599821475335023 bits=0x3fd580fea7f85250
+.getValue(0.25,-16.0,0.75) 0.29110255053584166 bits=0x3fd2a16c97955a26
+.getValue(1234.5,63.0,-987.25) 0.094796902657937720 bits=0x3fb8449c1cad8d58
+.getValue(-8.125,320.0,8.5) 0.41657231657952500 bits=0x3fdaa91eef083174
