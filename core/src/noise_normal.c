@@ -8,9 +8,10 @@
 /* NormalNoise.INPUT_FACTOR — second 좌표 스케일 */
 #define HC_NORMAL_INPUT_FACTOR 1.0181268882175227
 
-/* expectedDeviation(n) = 0.1 * (1 + 1/(n+1)) — 결합 순서 그대로 */
+/* expectedDeviation(n) = 0.1 * (1 + 1/(n+1)) — 결합 순서 그대로.
+ * n+1 도 Java iadd 래핑으로 계산한다 (C signed 오버플로 UB 회피). */
 static double expected_deviation(int32_t n) {
-    return 0.1 * (1.0 + 1.0 / (double)(n + 1));
+    return 0.1 * (1.0 + 1.0 / (double)(int32_t)((uint32_t)n + 1u));
 }
 
 int hc_normal_noise_init(hc_normal_noise_t *n, hc_arena_t *a, hc_xoro_t *rand,

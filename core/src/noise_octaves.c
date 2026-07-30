@@ -11,15 +11,13 @@
  * FP 결합 순서를 바닐라와 정확히 같게 유지한다. FMA 접힘은
  * -ffp-contract=off 가 컴파일러 차원에서 막는다 (ADR-004 D3). */
 
-/* Math.pow(2.0, n) — 정수 지수는 정확히 표현되므로 비트를 직접 조립한다.
- * libm pow 의 구현 편차를 원천 차단한다. normal 범위만 지원한다. */
+/* Math.pow(2.0, n) — ldexp 는 IEEE 754 scaleB 라 구현 편차가 없고, 정수
+ * 지수 전 구간 (서브노멀/언더플로/오버플로 포함) 에서 Java Math.pow 와
+ * 비트 동일하다. 비트 조립식 (n+1023)<<52 은 normal 범위 밖에서 조용히
+ * 틀리고 n+1023 이 int 오버플로 UB 였다 — 6b 데이터팩 JSON 의
+ * firstOctave 는 스키마상 무제한 int 라 방어가 실질이다. */
 static double pow2i(int32_t n) {
-    union {
-        uint64_t u;
-        double d;
-    } b;
-    b.u = (uint64_t)(n + 1023) << 52;
-    return b.d;
+    return ldexp(1.0, n);
 }
 
 /* Mth.lfloor — Java d2l 은 포화 변환. C 의 범위 밖 캐스트는 UB 라
@@ -79,7 +77,9 @@ int hc_octaves_init(hc_octaves_t *o, hc_arena_t *a, hc_xoro_t *rand,
         if (!p)
             return -1;
         char key[24];
-        snprintf(key, sizeof key, "octave_%d", (int)(first_octave + i));
+        /* Java iadd 는 int32 로 래핑한다 — C signed 오버플로 UB 회피 */
+        int32_t oct = (int32_t)((uint32_t)first_octave + (uint32_t)i);
+        snprintf(key, sizeof key, "octave_%d", (int)oct);
         hc_xoro_t r;
         hc_xoro_from_hash_of(&f, key, &r);
         hc_perlin_init_from(p, &r);
@@ -100,10 +100,12 @@ static void skip_octave(hc_xoro_t *rand) {
 int hc_octaves_init_legacy(hc_octaves_t *o, hc_arena_t *a, hc_xoro_t *rand,
                            int32_t first_octave, const double *amps,
                            int32_t count) {
-    int32_t j = -first_octave;
+    /* Java ineg 래핑 재현 (INT32_MIN 부정은 C UB) */
+    int32_t j = (int32_t)(0u - (uint32_t)first_octave);
     /* 바닐라는 j < count-1 (양수 옥타브) 이면 throw 한다.
-     * ("Positive octaves are temporarily disabled") */
-    if (j < count - 1)
+     * ("Positive octaves are temporarily disabled")
+     * count-1 의 int 오버플로를 피하려고 64비트로 비교한다. */
+    if ((int64_t)j < (int64_t)count - 1)
         return -1;
     if (alloc_tables(o, a, first_octave, amps, count) != 0)
         return -1;

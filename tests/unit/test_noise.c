@@ -608,8 +608,12 @@ static int run_blended(const char *path) {
         die(path, "missing seed");
     if (instances != 1)
         die(path, "blended_noise_instances != 1");
-    if (!bn_ready || n_vec < 100)
-        die(path, "old_blended_noise slot missing or too few vectors");
+    /* golden 은 동결이라 (재생성 금지) 벡터 수는 파일의 상수다. 슬롯이
+     * 파일 '마지막' 섹션이라 꼬리 절단이 이 카운트로만 잡힌다 — 하한
+     * 가드는 최대 85% 의 커버리지 증발을 통과시키는 false-PASS 채널임이
+     * 변조 실험으로 확인됐다 (8x5x17 격자 = 680). */
+    if (!bn_ready || n_vec != 680)
+        die(path, "old_blended_noise slot missing or vector count != 680");
     if (n_tuples != BLENDED_TUPLES)
         die(path, "blended config tuples != 40");
 
