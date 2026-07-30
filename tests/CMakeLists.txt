@@ -19,3 +19,11 @@ add_test(NAME perlin_golden COMMAND test_perlin
 add_executable(test_df unit/test_df.c)
 target_link_libraries(test_df PRIVATE hyperchunk)
 add_test(NAME df_eval COMMAND test_df)
+
+add_executable(test_md5 unit/test_md5.c)
+target_link_libraries(test_md5 PRIVATE hyperchunk)
+add_test(NAME md5 COMMAND test_md5)
+
+add_executable(test_json unit/test_json.c)
+target_link_libraries(test_json PRIVATE hyperchunk)
+add_test(NAME json COMMAND test_json)

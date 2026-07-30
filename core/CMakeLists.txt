@@ -3,6 +3,8 @@ add_library(hyperchunk STATIC
   src/rng.c
   src/arena.c
   src/chunk.c
+  src/md5.c
+  src/json.c
   src/noise_perlin.c
   src/df_eval.c
 )
