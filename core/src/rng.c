@@ -177,3 +177,9 @@ double hc_lcg_next_double(hc_lcg_t *r) {
     int64_t lo = (int64_t)hc_lcg_next(r, 27);
     return (double)(hi + lo) * 0x1.0p-53;
 }
+
+float hc_lcg_next_float(hc_lcg_t *r) {
+    /* (float)next(24) * 5.9604645E-8f — i2f; fmul, 전부 float 연산.
+     * 상수는 정확히 2^-24 (비트 0x33800000, A7 §3.3). */
+    return (float)hc_lcg_next(r, 24) * 0x1.0p-24f;
+}

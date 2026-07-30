@@ -49,5 +49,6 @@ int32_t hc_lcg_next(hc_lcg_t *r, int bits);             /* java.util.Random.next
 int64_t hc_lcg_next_long(hc_lcg_t *r);
 int32_t hc_lcg_next_int(hc_lcg_t *r, int32_t bound);    /* nextInt(bound), bound > 0 */
 double  hc_lcg_next_double(hc_lcg_t *r);
+float   hc_lcg_next_float(hc_lcg_t *r);                 /* next(24) * 2^-24f */
 
 #endif /* HC_RNG_H */
