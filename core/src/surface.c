@@ -367,6 +367,22 @@ static int32_t rule_apply(hc_sctx_t *c, int32_t ri, int32_t x, int32_t y,
     return -1;
 }
 
+/* SurfaceSystem.topMaterial (task7 A1 §11, task8 A5 §1) — 카버 전용 진입점.
+ * 바닐라는 호출마다 새 SurfaceRules.Context 를 만든다 (possibleBiomes=null):
+ * 모든 lazy memo 가 초기화된 상태에서 updateXZ → updateY(1, 1,
+ * hasFluid ? y+1 : Integer.MIN_VALUE, y) → rule.tryApply(x,y,z).
+ * 반환 -1 == Optional.empty (교체 없음). x/z 는 절대 블록 좌표. */
+int32_t hc_surface_top_material(hc_surface_t *s, hc_chunk_t *chunk,
+                                hc_noise_chunk_t *nc,
+                                const hc_biome_view_t *view, int32_t x,
+                                int32_t y, int32_t z, int has_fluid) {
+    hc_sctx_t ctx;
+    ctx_init(&ctx, s, chunk, nc, view);
+    ctx_update_xz(&ctx, x, z);
+    ctx_update_y(&ctx, 1, 1, has_fluid ? y + 1 : INT32_MIN, y);
+    return rule_apply(&ctx, s->root_rule, x, y, z);
+}
+
 /* --- erodedBadlandsExtension (A1 §8) — 룰 패스 전, RNG 없음 --- */
 
 static void eroded_badlands_ext(hc_surface_t *s, hc_chunk_t *chunk, int lx,

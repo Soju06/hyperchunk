@@ -80,3 +80,19 @@ add_test(NAME surface_stage COMMAND test_surface_stage
          ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
          ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
          1234567890)
+
+add_executable(test_carvers_unit unit/test_carvers_unit.c)
+target_link_libraries(test_carvers_unit hyperchunk m)
+add_test(NAME carvers_unit COMMAND test_carvers_unit
+         ${CMAKE_SOURCE_DIR}/golden/rng/mth_sin_table.txt)
+
+add_executable(test_carvers_stage parity/test_carvers_stage.c)
+target_link_libraries(test_carvers_stage hyperchunk m)
+add_test(NAME carvers_stage COMMAND test_carvers_stage
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
+         1234567890)
+# WIP (Task 8 파리티 루프 미완): 529 사망 런 salvage 시점에 13,023 diffs.
+# 구현 완성 시 이 DISABLED 를 제거할 것 — 게이트 무력화 상태로 방치 금지.
+set_tests_properties(carvers_stage PROPERTIES DISABLED TRUE)

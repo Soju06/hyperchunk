@@ -179,4 +179,12 @@ uint16_t hc_surface_band(const hc_surface_t *s, int32_t x, int32_t y,
 void hc_gen_surface_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc,
                           hc_surface_t *s, const hc_biome_view_t *view);
 
+/* SurfaceSystem.topMaterial — 06_carvers 의 grass 복구 경로 전용
+ * (task7 A1 §11). 호출마다 새 Context (모든 memo 리셋). 반환 블록 id
+ * 또는 -1 (Optional.empty). */
+int32_t hc_surface_top_material(hc_surface_t *s, hc_chunk_t *chunk,
+                                hc_noise_chunk_t *nc,
+                                const hc_biome_view_t *view, int32_t x,
+                                int32_t y, int32_t z, int has_fluid);
+
 #endif /* HC_SURFACE_H */
