@@ -560,6 +560,17 @@ int main(int argc, char **argv) {
                      golden_dir, cx, cz, kind == 0 ? "blocks" : "heightmaps");
             snprintf(what, sizeof what, "c.%d.%d %s", cx, cz,
                      kind == 0 ? "blocks" : "heightmaps");
+            const char *dump_dir = getenv("HC_DUMP_DIR");
+            if (dump_dir) { /* 디버그: 우리 렌더를 파일로 (패리티 분석용) */
+                char dpath[1024];
+                snprintf(dpath, sizeof dpath, "%s/c.%d.%d.%s.txt", dump_dir,
+                         cx, cz, kind == 0 ? "blocks" : "heightmaps");
+                FILE *df = fopen(dpath, "w");
+                if (df) {
+                    fwrite(sb.buf, 1, sb.len, df);
+                    fclose(df);
+                }
+            }
             size_t glen = 0;
             char  *golden = read_file(path, &glen);
             if (glen < 100 ||

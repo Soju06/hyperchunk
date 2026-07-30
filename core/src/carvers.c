@@ -573,9 +573,20 @@ static int anchor_resolve(const hc_json_t *j, int32_t *out) {
     return -1;
 }
 
-/* 태그 확장: "#minecraft:x" 재귀, 블록 이름은 hc_block_by_name. 테이블에
- * 없는 블록은 우리 파이프라인이 생성 불가 → 멤버십 무의미, 건너뛴다
- * (n_unknown 계상 — fail-loud 는 개수 검증으로). */
+/* 태그 확장: "#minecraft:x" 재귀. 태그 값은 블록 이름 (상태 프로퍼티
+ * 없음) 이고 state.is(tag) 는 블록 단위이므로, 테이블의 캐노니컬 상태명
+ * ("minecraft:deepslate[axis=y]" 등) 에서 '[' 앞부분만 대조해 해당 블록의
+ * 모든 상태에 비트를 세운다. 테이블에 없는 블록은 우리 파이프라인이 생성
+ * 불가 → 멤버십 무의미, 건너뛴다. */
+static void tag_mark_block(uint64_t *bits, const char *name, int32_t len) {
+    for (int32_t id = 0; id < HC_B_COUNT; id++) {
+        const char *full = hc_block_name((uint16_t)id);
+        size_t      base = strcspn(full, "[");
+        if ((int32_t)base == len && memcmp(full, name, (size_t)len) == 0)
+            bits[id >> 6] |= 1ull << (id & 63);
+    }
+}
+
 static int tag_expand(uint64_t *bits, const char *name, int32_t len,
                       const hc_df_source_t *tags, int32_t n_tags, int depth,
                       const char **err) {
@@ -612,9 +623,7 @@ static int tag_expand(uint64_t *bits, const char *name, int32_t len,
         }
         return 0;
     }
-    int32_t id = hc_block_by_name(name, len);
-    if (id >= 0)
-        bits[id >> 6] |= 1ull << (id & 63);
+    tag_mark_block(bits, name, len);
     return 0;
 }
 
