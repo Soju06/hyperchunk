@@ -465,6 +465,157 @@ static int run_octaves_file(const char *path, int mode) {
     return g_fails == 0 ? 0 : 1;
 }
 
+/* -------- blended: old_blended_noise 슬롯 (router golden) -------- */
+
+/* # blended 설정 문자열의 옥타브 튜플 (xo/yo/zo 는 %.3f, p0/p255 는
+ * 부호 있는 byte). 비트정확 게이트는 아래 v 벡터가 담당하고, 이 튜플은
+ * 컴퓨트가 어긋났을 때 시딩 계층 (어느 PerlinNoise 의 어느 옥타브) 을
+ * 격리하는 진단용이다. 순서: min[0..15], max[0..15], main[0..7]. */
+#define BLENDED_TUPLES (16 + 16 + 8)
+
+typedef struct {
+    double xo, yo, zo;
+    int    p0, p255;
+} blended_tuple_t;
+
+static void check_blended_tuple(const char *who, int idx,
+                                const blended_tuple_t *tu,
+                                const hc_perlin_t *oct) {
+    char label[128];
+    g_checks++;
+    if (!oct) {
+        g_fails++;
+        fprintf(stderr, "FAIL blended %s.octave[%d]: got null\n", who, idx);
+        return;
+    }
+    /* %.3f 반올림 오차 한계. 비트 비교는 v 벡터가 담당한다. */
+    const double  tol = 5.1e-4;
+    const double  got[3] = {oct->xo, oct->yo, oct->zo};
+    const double  want[3] = {tu->xo, tu->yo, tu->zo};
+    static const char *axis[3] = {"xo", "yo", "zo"};
+    for (int c = 0; c < 3; c++) {
+        double diff = got[c] - want[c];
+        g_checks++;
+        if (diff < -tol || diff > tol) {
+            g_fails++;
+            snprintf(label, sizeof label, "blended %s.octave[%d].%s", who,
+                     idx, axis[c]);
+            fprintf(stderr, "FAIL %s: got %.6f want ~%.3f\n", label, got[c],
+                    want[c]);
+        }
+    }
+    check_u64("blended perm head", who, idx, (uint64_t)(int8_t)oct->perm[0],
+              (uint64_t)tu->p0);
+    check_u64("blended perm tail", who, idx,
+              (uint64_t)(int8_t)oct->perm[255], (uint64_t)tu->p255);
+}
+
+static int run_blended(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "cannot open golden file: %s\n", path);
+        exit(2);
+    }
+    hc_arena_init(&g_arena, g_backing, sizeof g_backing);
+
+    char            line[16384];
+    int64_t         seed = 0;
+    int             has_seed = 0, instances = -1;
+    int             collecting = 0, n_vec = 0, n_tuples = 0;
+    blended_tuple_t tuples[BLENDED_TUPLES];
+    /* 벡터는 스트리밍 검증한다 — 먼저 인스턴스를 만들어야 하므로 seed
+     * 확인 후 lazy-init 한다. */
+    hc_blended_noise_t bn;
+    int                bn_ready = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        if (strncmp(line, "# blended ", 10) == 0) {
+            const char *pos = line + 10;
+            while ((pos = strstr(pos, "xo=")) != NULL) {
+                if (n_tuples >= BLENDED_TUPLES)
+                    die(path, "too many blended octave tuples");
+                blended_tuple_t *tu = &tuples[n_tuples];
+                if (sscanf(pos, "xo=%lf, yo=%lf, zo=%lf, p0=%d, p255=%d",
+                           &tu->xo, &tu->yo, &tu->zo, &tu->p0,
+                           &tu->p255) != 5)
+                    die(path, "malformed blended octave tuple");
+                n_tuples++;
+                pos += 3;
+            }
+            continue;
+        }
+        if (line[0] == '#' || blank(line))
+            continue;
+
+        int64_t sv;
+        int     x, y, z, n;
+        char    name[128];
+        uint64_t bits;
+
+        if (sscanf(line, "seed %" SCNd64, &sv) == 1) {
+            seed = sv;
+            has_seed = 1;
+        } else if (sscanf(line, "slot %127s", name) == 1) {
+            collecting = (strcmp(name, "old_blended_noise") == 0);
+            if (collecting && !bn_ready) {
+                if (!has_seed)
+                    die(path, "old_blended_noise slot before seed");
+                /* RandomState: BlendedNoise.withNewRandom(
+                 *   forkPositional().fromHashOf("minecraft:terrain")).
+                 * 파라미터는 26.2 오버월드 base_3d_noise JSON
+                 * (reference/density_function/overworld/base_3d_noise.json):
+                 * xz_scale=0.25 y_scale=0.125 xz_factor=80 y_factor=160
+                 * smear_scale_multiplier=8. */
+                hc_xoro_t rand;
+                seed_noise_rand(seed, "minecraft:terrain", &rand);
+                if (hc_blended_init(&bn, &g_arena, &rand, 0.25, 0.125, 80.0,
+                                    160.0, 8.0) != 0)
+                    die(path, "hc_blended_init failed");
+                bn_ready = 1;
+            }
+        } else if (sscanf(line, "v %d %d %d %*s bits=0x%" SCNx64, &x, &y, &z,
+                          &bits) == 4) {
+            if (!collecting)
+                continue; /* 다른 슬롯 값은 6b (라우터 평가) 범위 */
+            char label[64];
+            snprintf(label, sizeof label, "old_blended_noise(%d,%d,%d)", x,
+                     y, z);
+            check_bits(label, hc_blended_compute(&bn, x, y, z), bits);
+            n_vec++;
+        } else if (sscanf(line, "blended_noise_instances %d", &n) == 1) {
+            instances = n;
+        } else {
+            die_line(path, line);
+        }
+    }
+    fclose(f);
+
+    if (!has_seed)
+        die(path, "missing seed");
+    if (instances != 1)
+        die(path, "blended_noise_instances != 1");
+    if (!bn_ready || n_vec < 100)
+        die(path, "old_blended_noise slot missing or too few vectors");
+    if (n_tuples != BLENDED_TUPLES)
+        die(path, "blended config tuples != 40");
+
+    /* 시딩 계층 진단: 설정 문자열 순서 = min[0..15], max[0..15], main[0..7]
+     * (배열 인덱스 순서, getOctaveNoise 역순 아님) */
+    for (int i = 0; i < 16; i++)
+        check_blended_tuple("minLimit", i, &tuples[i],
+                            bn.min_limit.octaves[i]);
+    for (int i = 0; i < 16; i++)
+        check_blended_tuple("maxLimit", i, &tuples[16 + i],
+                            bn.max_limit.octaves[i]);
+    for (int i = 0; i < 8; i++)
+        check_blended_tuple("main", i, &tuples[32 + i],
+                            bn.main_noise.octaves[i]);
+
+    printf("test_noise blended: %d vectors, %d checks, %d failures\n", n_vec,
+           g_checks, g_fails);
+    return g_fails == 0 ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) {
         fprintf(stderr,
@@ -478,6 +629,8 @@ int main(int argc, char **argv) {
         return run_fork(path);
     if (strcmp(mode, "octaves") == 0)
         return run_octaves_file(path, 0);
+    if (strcmp(mode, "blended") == 0)
+        return run_blended(path);
     fprintf(stderr, "unknown mode: %s\n", mode);
     return 2;
 }

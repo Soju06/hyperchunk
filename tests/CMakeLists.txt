@@ -35,3 +35,5 @@ add_test(NAME noise_fork COMMAND test_noise fork
          ${CMAKE_SOURCE_DIR}/golden/rng/fork_seed1234567890.txt)
 add_test(NAME noise_octaves COMMAND test_noise octaves
          ${CMAKE_SOURCE_DIR}/golden/rng/octaves_seed1234567890.txt)
+add_test(NAME noise_blended COMMAND test_noise blended
+         ${CMAKE_SOURCE_DIR}/golden/rng/router_seed1234567890.txt)
