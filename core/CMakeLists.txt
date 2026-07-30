@@ -11,6 +11,10 @@ add_library(hyperchunk STATIC
   src/noise_normal.c
   src/df_eval.c
   src/df_compile.c
+  src/noise_chunk.c
+  src/aquifer.c
+  src/ore_veins.c
+  src/gen_noise_stage.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: libc 외 의존성 없음

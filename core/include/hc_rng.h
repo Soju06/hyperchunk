@@ -19,6 +19,7 @@ void     hc_xoro_init(hc_xoro_t *r, int64_t seed);
 uint64_t hc_xoro_next(hc_xoro_t *r);                    /* nextLong */
 int32_t  hc_xoro_next_int(hc_xoro_t *r, int32_t bound); /* nextInt(bound), bound > 0 */
 double   hc_xoro_next_double(hc_xoro_t *r);
+float    hc_xoro_next_float(hc_xoro_t *r);
 
 /* --- positional fork (XoroshiroPositionalRandomFactory) ---
  *

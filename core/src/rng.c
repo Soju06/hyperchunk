@@ -68,6 +68,12 @@ double hc_xoro_next_double(hc_xoro_t *r) {
     return (double)(hc_xoro_next(r) >> 11) * 0x1.0p-53;
 }
 
+float hc_xoro_next_float(hc_xoro_t *r) {
+    /* nextBits(24) * 5.9604645E-8f (= 2^-24). 24비트 정수의 float 변환과
+     * 2의 거듭제곱 스케일 곱은 둘 다 정확하다. */
+    return (float)(hc_xoro_next(r) >> 40) * 0x1.0p-24f;
+}
+
 /* --- positional fork (XoroshiroPositionalRandomFactory) --- */
 
 #include "hc_md5.h"

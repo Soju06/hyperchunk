@@ -101,4 +101,62 @@ typedef struct {
 double hc_df_eval(const hc_df_graph_t *g, double x, double y, double z,
                   double *scratch);
 
+/* --- NoiseChunk 셀 문맥 (6c) ---
+ *
+ * 바닐라 NoiseChunk.wrapNew 가 마커를 상태 있는 래퍼로 바꾼 것을, 같은
+ * IR 위에 '평가 모드 + 노드별 상태' 로 재현한다. 모드는 바닐라의
+ * FunctionContext 정체성에 대응한다:
+ *
+ *   SP    = SinglePointContext. interpolated/cache_* 는 wrapped 로 폴스루,
+ *           flat_cache 만 쿼트 테이블 (위치 기반이라 ctx 무관).
+ *           [슬라이스 채움, flat_cache 테이블 구축, aquifer/psl 샘플]
+ *   CELL  = ctx==NoiseChunk && fillingCell. interpolated → lerp3(셀 코너).
+ *   BLOCK = ctx==NoiseChunk && !fillingCell. interpolated → 점진 lerp 값
+ *           (updateForY/X/Z 가 갱신). [블록 루프의 vein/barrier 평가]
+ *
+ * cache_2d/cache_once 는 전 모드 pass-through: 26.2 오버월드 그래프에서
+ * 값-중립임을 바이트코드로 증명했다 (cache_2d 하위 트리는 전부 y-독립,
+ * cache_once 는 카운터가 점 단위로 증가하는 문맥에서만 활성). 이 증명은
+ * 이 라우터 한정이다 — 데이터팩 일반화(Task 12)에서 재검토할 것. */
+typedef enum {
+    HC_DF_MODE_SP = 0,
+    HC_DF_MODE_CELL,
+    HC_DF_MODE_BLOCK
+} hc_df_mode_t;
+
+typedef struct {
+    int32_t node;           /* HC_DF_INTERPOLATED 노드 인덱스 */
+    double *slice0, *slice1; /* [(cellCountXZ+1)*(cellCountY+1)], z*(cy+1)+y */
+    /* selectCellYZ 가 고른 셀 코너 (자릿수 = x z y) */
+    double  n000, n001, n100, n101, n010, n011, n110, n111;
+    /* updateForY/X/Z 점진 상태 */
+    double  vxz00, vxz10, vxz01, vxz11, vz0, vz1, value;
+} hc_df_interp_t;
+
+typedef struct {
+    int32_t node;           /* HC_DF_FLAT_CACHE 노드 인덱스 */
+    double *values;         /* [(noiseSizeXZ+1)^2], qx*(n+1)+qz */
+} hc_df_flat_t;
+
+typedef struct {
+    hc_df_mode_t mode;
+    /* 청크 쿼트 창 (FlatCache) */
+    int32_t first_noise_x, first_noise_z, noise_size_xz;
+    /* 셀 기하 */
+    int32_t cell_width, cell_height;
+    /* 현재 셀 내 좌표 (CELL 모드 lerp3 델타) */
+    int32_t in_cell_x, in_cell_y, in_cell_z;
+    /* 노드 → 상태 디스패치. 길이 g->n, 해당 없으면 -1 */
+    const int32_t       *interp_of;
+    const int32_t       *flat_of;
+    const hc_df_interp_t *interp;
+    const hc_df_flat_t   *flat;
+} hc_df_cellctx_t;
+
+/* cc == NULL 이면 hc_df_eval 과 동일 (마커 전부 pass-through — 6b 라우터
+ * 골든이 이 경로를 고정한다). x/y/z 는 블록 좌표 (정수값이어야 한다 —
+ * FlatCache 쿼트 계산이 int 캐스트를 쓴다). */
+double hc_df_eval_ex(const hc_df_graph_t *g, double x, double y, double z,
+                     double *scratch, const hc_df_cellctx_t *cc);
+
 #endif /* HC_DF_H */

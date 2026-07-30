@@ -46,3 +46,12 @@ target_link_libraries(test_router_slots PRIVATE hyperchunk)
 add_test(NAME router_slots COMMAND test_router_slots
          ${CMAKE_SOURCE_DIR}/golden/rng/router_seed1234567890.txt
          ${CMAKE_SOURCE_DIR}/reference)
+
+# 노이즈 스테이지 청크 패리티 (Task 6c). 셀 시맨틱 + aquifer + veins +
+# doFill → golden 스테이지 덤프와 라인 단위 0 diff.
+add_executable(test_noise_stage parity/test_noise_stage.c)
+target_link_libraries(test_noise_stage PRIVATE hyperchunk)
+add_test(NAME noise_stage COMMAND test_noise_stage
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         1234567890)

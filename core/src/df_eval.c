@@ -108,27 +108,56 @@ static float spline_sample(const hc_df_graph_t *g, int32_t si,
     return lerp_f(t, val0, val1) + (t * (1.0f - t)) * lerp_f(t, p, q);
 }
 
+/* --- NoiseChunk 셀 시맨틱 (6c) --- */
+
+/* Mth.lerp(double): a + t*(b-a) — FMA 금지 하에 mul→add 순서 그대로 */
+static double lerp_d(double t, double a, double b) {
+    return a + t * (b - a);
+}
+
+/* Mth.lerp2/lerp3 — 셀 채움 경로의 중첩 순서 (x 안쪽, y 중간, z 바깥).
+ * 블록 루프의 updateForY→X→Z (y 먼저) 와 FP 순서가 다르다 — 두 경로를
+ * 섞으면 비트가 어긋난다. */
+static double lerp2_d(double dx, double dy, double a, double b, double c,
+                      double d) {
+    return lerp_d(dy, lerp_d(dx, a, b), lerp_d(dx, c, d));
+}
+
+static double interp_lerp3(const hc_df_cellctx_t *cc,
+                           const hc_df_interp_t *it) {
+    double dx = (double)cc->in_cell_x / (double)cc->cell_width;
+    double dy = (double)cc->in_cell_y / (double)cc->cell_height;
+    double dz = (double)cc->in_cell_z / (double)cc->cell_width;
+    /* NoiseInterpolator.compute(fillingCell): lerp3(dx,dy,dz,
+     *   n000,n100,n010,n110,n001,n101,n011,n111) — 자릿수는 x z y */
+    return lerp_d(dz,
+                  lerp2_d(dx, dy, it->n000, it->n100, it->n010, it->n110),
+                  lerp2_d(dx, dy, it->n001, it->n101, it->n011, it->n111));
+}
+
 /* 노드 하나 평가. sc 는 활성 scratch (피연산자 값). sc2 는
  * FIND_TOP_SURFACE 전용 보조 버퍼 — NULL 이면 FTS 금지 문맥(콘 내부)이다.
  * 컴파일러가 FTS 콘 안에 FTS 가 없음을 보장한다. */
-static double eval_node(const hc_df_graph_t *g, const hc_df_node_t *nd,
-                        double x, double y, double z, double *sc, double *sc2);
+static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
+                        double y, double z, double *sc, double *sc2,
+                        const hc_df_cellctx_t *cc);
 
 /* FTS density 콘 재평가: ipool[off..off+len) 은 오름차순 노드 인덱스라
  * 위상 순서가 보존된다. 콘 밖 노드는 건드리지 않는다. */
 static double eval_cone(const hc_df_graph_t *g, int32_t off, int32_t len,
                         int32_t root, double x, double y, double z,
-                        double *sc2) {
+                        double *sc2, const hc_df_cellctx_t *cc) {
     for (int32_t j = 0; j < len; j++) {
         int32_t idx = g->ipool[off + j];
-        sc2[idx] = eval_node(g, &g->nodes[idx], x, y, z, sc2, NULL);
+        sc2[idx] = eval_node(g, idx, x, y, z, sc2, NULL, cc);
     }
     return sc2[root];
 }
 
-static double eval_node(const hc_df_graph_t *g, const hc_df_node_t *nd,
-                        double x, double y, double z, double *sc,
-                        double *sc2) {
+static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
+                        double y, double z, double *sc, double *sc2,
+                        const hc_df_cellctx_t *cc) {
+    const hc_df_node_t *nd = &g->nodes[idx];
     switch (nd->op) {
     case HC_DF_CONST:
         return nd->k0;
@@ -267,7 +296,7 @@ static double eval_node(const hc_df_graph_t *g, const hc_df_node_t *nd,
             return (double)lower;
         for (int32_t yy = start; yy >= lower; yy -= cell) {
             double d = eval_cone(g, nd->aux, nd->aux2, nd->a, x, (double)yy,
-                                 z, sc2);
+                                 z, sc2, cc);
             if (d > 0.0)
                 return (double)yy;
         }
@@ -279,13 +308,49 @@ static double eval_node(const hc_df_graph_t *g, const hc_df_node_t *nd,
     case HC_DF_BLEND_ALPHA:
         return 1.0; /* BlendAlpha.compute 상수 (javap) */
 
-    case HC_DF_BLEND_DENSITY: /* 26.2 에선 마커 타입 — 신규 월드 identity */
     case HC_DF_INTERPOLATED:
-    case HC_DF_FLAT_CACHE:
+        /* 바닐라 NoiseInterpolator.compute:
+         *  - SinglePointContext (SP): noiseFiller.compute(ctx) — 하위 트리는
+         *    위상 순서로 이미 평가돼 있으므로 pass-through 가 그 값이다.
+         *  - fillingCell (CELL): 셀 코너 lerp3.
+         *  - 블록 루프 (BLOCK): updateForY/X/Z 의 점진 lerp 값. */
+        if (cc && cc->interp_of[idx] >= 0) {
+            const hc_df_interp_t *it = &cc->interp[cc->interp_of[idx]];
+            if (cc->mode == HC_DF_MODE_CELL)
+                return interp_lerp3(cc, it);
+            if (cc->mode == HC_DF_MODE_BLOCK)
+                return it->value;
+        }
+        return sc[nd->a];
+
+    case HC_DF_FLAT_CACHE: {
+        /* FlatCache.compute 는 ctx 종류와 무관하게 위치 기반이다:
+         * 쿼트 창 안이면 y=0 쿼트-정렬 좌표로 미리 계산한 테이블, 밖이면
+         * 원 좌표로 wrapped 신선 평가 (== pass-through). aquifer 가 청크
+         * 밖 컬럼을 조회할 때 창 밖 경로가 실제로 발생하고 값이 달라진다
+         * (쿼트 정렬 vs 원좌표) — 창 검사는 정확히 재현해야 한다. */
+        if (cc && cc->flat_of[idx] >= 0) {
+            int32_t qx = (int32_t)x >> 2; /* QuartPos.fromBlock */
+            int32_t qz = (int32_t)z >> 2;
+            int32_t i = qx - cc->first_noise_x;
+            int32_t j = qz - cc->first_noise_z;
+            int32_t size = cc->noise_size_xz + 1;
+            if (i >= 0 && j >= 0 && i < size && j < size)
+                return cc->flat[cc->flat_of[idx]].values[i + j * size];
+        }
+        return sc[nd->a];
+    }
+
+    case HC_DF_BLEND_DENSITY: /* 26.2 에선 마커 타입 — 신규 월드 identity */
     case HC_DF_CACHE_2D:
     case HC_DF_CACHE_ONCE:
+        /* 전 모드 pass-through — 값-중립 증명은 hc_df.h 셀 문맥 주석 참조 */
+        return sc[nd->a];
+
     case HC_DF_CACHE_ALL_IN_CELL:
-        /* 6b: NoiseChunk 밖 pass-through. 6c 가 셀 시맨틱을 준다. */
+        /* 26.2 오버월드 JSON 에는 인스턴스가 없다. 바닐라가 쓰는 유일한
+         * cacheAllInCell(final_density+beardifier) 은 noise_chunk.c 가
+         * density_cell 배열로 직접 소유한다. */
         return sc[nd->a];
 
     default:
@@ -294,16 +359,20 @@ static double eval_node(const hc_df_graph_t *g, const hc_df_node_t *nd,
     }
 }
 
-double hc_df_eval(const hc_df_graph_t *g, double x, double y, double z,
-                  double *scratch) {
+double hc_df_eval_ex(const hc_df_graph_t *g, double x, double y, double z,
+                     double *scratch, const hc_df_cellctx_t *cc) {
     assert(g->n > 0 && g->root >= 0 && g->root < g->n);
     double *sc2 = scratch + g->n;
     /* 위상 정렬이라 [0..root] 프리픽스가 의존성 닫힘이다 — 여러 슬롯이
      * 한 그래프를 공유할 때 root 만 바꿔 불필요한 꼬리를 건너뛴다. */
     for (int32_t i = 0; i <= g->root; i++) {
-        const hc_df_node_t *nd = &g->nodes[i];
-        assert(nd->a < i && nd->b < i && nd->c < i);
-        scratch[i] = eval_node(g, nd, x, y, z, scratch, sc2);
+        assert(g->nodes[i].a < i && g->nodes[i].b < i && g->nodes[i].c < i);
+        scratch[i] = eval_node(g, i, x, y, z, scratch, sc2, cc);
     }
     return scratch[g->root];
+}
+
+double hc_df_eval(const hc_df_graph_t *g, double x, double y, double z,
+                  double *scratch) {
+    return hc_df_eval_ex(g, x, y, z, scratch, NULL);
 }
