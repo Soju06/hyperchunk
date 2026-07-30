@@ -4,28 +4,18 @@
 #include "../include/hc_chunk.h"
 #include "../include/hc_df.h"
 #include "../include/hc_rng.h"
+#include "hc_blocks.h"
 
 /* 04_noise 스테이지 — 내부 전용 (core/src). 공개 ABI 는 리전 단위 표면만
  * 유지한다 (ADR-003 D2). 모든 시맨틱은 26.2 바이트코드 (javap) 기준:
  * NoiseChunk / NoiseBasedChunkGenerator.doFill / Aquifer$NoiseBasedAquifer /
  * OreVeinifier. 분석 노트는 커밋 메시지와 tests/parity/test_noise_stage.c
- * 헤더 주석에 요약한다. */
+ * 헤더 주석에 요약한다. 블록 id 는 hc_blocks.h 로 이동했다 (Task 7). */
 
-/* 내부 블록 id. hc_chunk_t.states 의 zero-fill == air (바닐라 ProtoChunk 의
- * 초기 상태 — doFill 은 air 를 쓰지 않고 건너뛴다). */
-enum {
-    HC_B_AIR = 0,
-    HC_B_STONE,
-    HC_B_WATER, /* minecraft:water[level=0] */
-    HC_B_LAVA,  /* minecraft:lava[level=0] */
-    HC_B_COPPER_ORE,
-    HC_B_RAW_COPPER_BLOCK,
-    HC_B_GRANITE,
-    HC_B_DEEPSLATE_IRON_ORE,
-    HC_B_RAW_IRON_BLOCK,
-    HC_B_TUFF,
-    HC_B_COUNT
-};
+/* ProtoChunk.setBlockState 의 하이트맵 갱신 (OCEAN_FLOOR_WG →
+ * WORLD_SURFACE_WG 순). states 기록 후 호출. gen_noise_stage.c 구현 —
+ * 05_surface 가 공유한다. */
+void hc_hm_update_both(hc_chunk_t *c, int x, int y, int z, uint16_t state);
 
 /* 노이즈 스테이지가 쓰는 라우터 슬롯 루트 (컴파일된 공유 그래프의 노드
  * 인덱스). 호출자(테스트/CLI)가 hc_df_compile_expr 로 채운다. */

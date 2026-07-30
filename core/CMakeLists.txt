@@ -15,6 +15,9 @@ add_library(hyperchunk STATIC
   src/aquifer.c
   src/ore_veins.c
   src/gen_noise_stage.c
+  src/blocks.c
+  src/biome_zoom.c
+  src/sha256.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: libc 외 의존성 없음

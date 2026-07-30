@@ -11,38 +11,38 @@
  * 하이트맵: OCEAN_FLOOR_WG(blocksMotion) → WORLD_SURFACE_WG(!isAir) 순.
  * 물/용암은 blocksMotion=false (LiquidBlock 충돌 형상 empty). */
 
-/* blocksMotion — 대상 4+6종 중 유체/공기만 false */
-static int blocks_motion(uint16_t b) {
-    return b != HC_B_AIR && b != HC_B_WATER && b != HC_B_LAVA;
-}
-
-static int not_air(uint16_t b) {
-    return b != HC_B_AIR;
-}
-
 /* Heightmap.update — 비활성 브랜치(하향 재스캔)까지 완전 이식.
- * pred: 0 = MATERIAL_MOTION_BLOCKING, 1 = NOT_AIR */
+ * pred: 0 = MATERIAL_MOTION_BLOCKING(blocksMotion), 1 = NOT_AIR */
 static void hm_update(hc_chunk_t *c, int32_t *hm, int x, int y, int z,
                       uint16_t state, int pred) {
     size_t  col = hc_col_idx(x, z);
     int32_t first = hm[col];
     if (y <= first - 2)
         return;
-    int opaque = pred ? not_air(state) : blocks_motion(state);
+    int opaque =
+        pred ? !hc_block_is_air(state) : hc_block_blocks_motion(state);
     if (opaque) {
         if (y >= first)
             hm[col] = y + 1;
     } else if (first - 1 == y) {
-        /* doFill 에서는 도달 불가 (y 단조 감소 + 단일 기록) — 충실 이식 */
+        /* doFill 에서는 도달 불가 (y 단조 감소 + 단일 기록). surface 가
+         * 기존 블록을 비-불투명으로 교체할 때(air/water 룰) 활성화된다. */
         for (int yy = y - 1; yy >= HC_MIN_Y; yy--) {
             uint16_t s = c->states[hc_idx(x, yy, z)];
-            if (pred ? not_air(s) : blocks_motion(s)) {
+            if (pred ? !hc_block_is_air(s) : hc_block_blocks_motion(s)) {
                 hm[col] = yy + 1;
                 return;
             }
         }
         hm[col] = HC_MIN_Y;
     }
+}
+
+/* ProtoChunk.setBlockState 의 하이트맵 갱신 순서: OCEAN_FLOOR_WG →
+ * WORLD_SURFACE_WG (primeHeightmaps 등록 순서). */
+void hc_hm_update_both(hc_chunk_t *c, int x, int y, int z, uint16_t state) {
+    hm_update(c, c->heightmap_ocean_floor, x, y, z, state, 0);
+    hm_update(c, c->heightmap_ws, x, y, z, state, 1);
 }
 
 void hc_gen_noise_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc) {
@@ -106,13 +106,8 @@ void hc_gen_noise_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc) {
                                 chunk->states[hc_idx(local_x, block_y,
                                                      local_z)] =
                                     (uint16_t)b;
-                                hm_update(chunk,
-                                          chunk->heightmap_ocean_floor,
-                                          local_x, block_y, local_z,
-                                          (uint16_t)b, 0);
-                                hm_update(chunk, chunk->heightmap_ws,
-                                          local_x, block_y, local_z,
-                                          (uint16_t)b, 1);
+                                hc_hm_update_both(chunk, local_x, block_y,
+                                                  local_z, (uint16_t)b);
                                 /* aquifer.shouldScheduleFluidUpdate +
                                  * 유체 postprocess 마킹은 블록 팔레트에
                                  * 영향 없음 (ProtoChunk 메타데이터) —

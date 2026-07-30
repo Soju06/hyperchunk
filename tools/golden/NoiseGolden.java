@@ -60,6 +60,7 @@ public final class NoiseGolden {
         dumpFork(outDir.resolve("fork_seed" + SEED + ".txt"));
         dumpOctaves(outDir.resolve("octaves_seed" + SEED + ".txt"), rs);
         dumpRouter(outDir.resolve("router_seed" + SEED + ".txt"), rs);
+        dumpSurface(outDir.resolve("surface_seed" + SEED + ".txt"), rs, lookup);
         System.out.println("noise golden vectors written to " + outDir.toAbsolutePath());
     }
 
@@ -174,6 +175,124 @@ public final class NoiseGolden {
             w.println("# valueFactor/internals dumped via reflection from the LIVE instance");
             w.println("seed " + SEED);
             w.println("noise_count " + keys.length);
+            for (String k : keys) {
+                NormalNoise n = rs.getOrCreateNoise(
+                        ResourceKey.create(Registries.NOISE, Identifier.parse(k)));
+                w.println("noise \"" + k + "\"");
+                w.println(".valueFactor " + dbl((Double) field(n, "valueFactor")));
+                dumpPerlin(w, ".first", (PerlinNoise) field(n, "first"));
+                dumpPerlin(w, ".second", (PerlinNoise) field(n, "second"));
+                double[][] pts = {{0.0, 0.0, 0.0}, {0.25, -16.0, 0.75},
+                        {1234.5, 63.0, -987.25}, {-8.125, 320.0, 8.5}};
+                for (double[] p : pts) {
+                    w.println(".getValue(" + p[0] + "," + p[1] + "," + p[2] + ") "
+                            + dbl(n.getValue(p[0], p[1], p[2])));
+                }
+            }
+        }
+    }
+
+    /* ---- surface-stage vectors (Plan Task 7) ----
+     *
+     * Everything the 05_surface stage consumes beyond the router:
+     *  - obfuscated seed + raw quart biomes for chunks [-2..2]^2. The golden
+     *    3x3 stage dumps only cover chunks [-1..1]^2, but BiomeManager zoom
+     *    fiddles up to 1 quart outward, so surface of the edge chunks reads
+     *    biomes from the surrounding ring (observed: beach east of c.1.0).
+     *    Raw quarts come from the SAME source stage 03 stores
+     *    (MultiNoiseBiomeSource.getNoiseBiome(qx,qy,qz,sampler)).
+     *  - zoomed BiomeManager.getBiome vectors (validates the C zoom impl;
+     *    the NoiseBiomeSource lambda clamps qy exactly like ChunkAccess).
+     *  - SurfaceSystem.getSurfaceDepth / getSurfaceSecondary per column of
+     *    the 3x3 area (bisect ladder between noise and rule evaluation).
+     *  - clayBands array + the surface NormalNoise instances (reflection). */
+
+    static void dumpSurface(Path out, RandomState rs,
+                            net.minecraft.core.HolderGetter.Provider lookup) throws Exception {
+        var preset = lookup.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
+                .getOrThrow(net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterLists.OVERWORLD);
+        var source = net.minecraft.world.level.biome.MultiNoiseBiomeSource.createFromPreset(preset);
+        var sampler = rs.sampler();
+        var surfaceSystem = rs.surfaceSystem();
+
+        try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(out))) {
+            w.println("# MC 26.2 surface-stage golden vectors, seed " + SEED);
+            w.println("seed " + SEED);
+            w.println("obfuscated_seed "
+                    + net.minecraft.world.level.biome.BiomeManager.obfuscateSeed(SEED));
+            w.println("sea_level " + surfaceSystem.getSeaLevel());
+
+            // raw quart biomes, chunks [-2..2]^2: qx,qz in [-8..11], qy in [-16..79]
+            List<String> pal = new ArrayList<>();
+            StringBuilder data = new StringBuilder();
+            for (int qy = -16; qy <= 79; qy++) {
+                data.append("qy ").append(qy).append('\n');
+                for (int qz = -8; qz <= 11; qz++) {
+                    for (int qx = -8; qx <= 11; qx++) {
+                        String name = source.getNoiseBiome(qx, qy, qz, sampler)
+                                .unwrapKey().orElseThrow().identifier().toString();
+                        int idx = pal.indexOf(name);
+                        if (idx < 0) { idx = pal.size(); pal.add(name); }
+                        data.append(idx);
+                        data.append(qx == 11 ? '\n' : ' ');
+                    }
+                }
+            }
+            w.println("section quart_biomes qx -8 11 qy -16 79 qz -8 11");
+            for (int i = 0; i < pal.size(); i++)
+                w.println("palette " + i + " " + pal.get(i));
+            w.print(data);
+
+            // zoomed biomes exactly as surface sees them: BiomeManager over a
+            // qy-clamping raw source (ChunkAccess.getNoiseBiome clamps qy)
+            var bm = new net.minecraft.world.level.biome.BiomeManager(
+                    (qx, qy, qz) -> source.getNoiseBiome(
+                            qx, Math.max(-16, Math.min(79, qy)), qz, sampler),
+                    net.minecraft.world.level.biome.BiomeManager.obfuscateSeed(SEED));
+            int[][] zoomChunks = {{0, 0}, {1, 0}, {-1, -1}, {1, 1}};
+            int[] zoomYs = {-64, -60, -30, 0, 20, 40, 55, 60, 63, 70, 90, 110};
+            w.println("section zoomed_biomes");
+            for (int[] cc : zoomChunks)
+                for (int y : zoomYs)
+                    for (int z = cc[1] * 16; z < cc[1] * 16 + 16; z++)
+                        for (int x = cc[0] * 16; x < cc[0] * 16 + 16; x++) {
+                            String name = bm.getBiome(new net.minecraft.core.BlockPos(x, y, z))
+                                    .unwrapKey().orElseThrow().identifier().toString();
+                            w.println("zoomed " + x + " " + y + " " + z + " " + name);
+                        }
+
+            // per-column surfaceDepth / surfaceSecondary over the 3x3 area
+            var mDepth = surfaceSystem.getClass()
+                    .getDeclaredMethod("getSurfaceDepth", int.class, int.class);
+            mDepth.setAccessible(true);
+            var mSecondary = surfaceSystem.getClass()
+                    .getDeclaredMethod("getSurfaceSecondary", int.class, int.class);
+            mSecondary.setAccessible(true);
+            w.println("section surface_depth x -16 31 z -16 31");
+            for (int z = -16; z < 32; z++)
+                for (int x = -16; x < 32; x++)
+                    w.println("surface_depth " + x + " " + z + " "
+                            + (Integer) mDepth.invoke(surfaceSystem, x, z) + " "
+                            + dbl((Double) mSecondary.invoke(surfaceSystem, x, z)));
+
+            // clayBands (validates generateBands RNG consumption)
+            Object[] bands = (Object[]) field(surfaceSystem, "clayBands");
+            w.println("section clay_bands " + bands.length);
+            for (int i = 0; i < bands.length; i++)
+                w.println("clay_band " + i + " " + bands[i]);
+
+            // surface NormalNoise instances (same reflection dump as octaves)
+            String[] keys = {
+                "minecraft:surface", "minecraft:surface_secondary",
+                "minecraft:clay_bands_offset", "minecraft:badlands_pillar",
+                "minecraft:badlands_pillar_roof", "minecraft:badlands_surface",
+                "minecraft:iceberg_pillar", "minecraft:iceberg_pillar_roof",
+                "minecraft:iceberg_surface", "minecraft:calcite",
+                "minecraft:gravel", "minecraft:ice", "minecraft:packed_ice",
+                "minecraft:powder_snow", "minecraft:sulfur_cave_gradient",
+                "minecraft:surface_swamp",
+            };
+            w.println("section surface_noises " + keys.length);
             for (String k : keys) {
                 NormalNoise n = rs.getOrCreateNoise(
                         ResourceKey.create(Registries.NOISE, Identifier.parse(k)));
