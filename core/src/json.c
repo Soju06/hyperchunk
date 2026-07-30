@@ -266,7 +266,12 @@ static hc_json_t *parse_value(parser_t *ps) {
             set_err(ps, "bad literal");
         break;
     default: {
-        /* number — strtod 는 correctly-rounded (glibc), Java 와 비트 일치 */
+        /* number — strtod 는 correctly-rounded (glibc): Double.parseDouble
+         * 소비자와는 비트 일치. 주의: Codec.FLOAT 필드는 바닐라가 GSON
+         * LazilyParsedNumber 로 원문 리터럴을 Float.parseFloat 하므로,
+         * (float)num 이중반올림과 1 ulp 어긋나는 리터럴이 존재한다
+         * (Task 8 리뷰 확정 — 출하 데이터는 전부 일치, 데이터팩 갭.
+         * 원문 슬라이스 보존 + strtof 는 Task 12 스키마 파서 몫). */
         char *endp;
         double v = strtod(ps->p, &endp);
         if (endp == ps->p) {

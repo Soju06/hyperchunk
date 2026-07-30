@@ -146,7 +146,7 @@ protected boolean carveEllipsoid(CarvingContext ctx, C config, ChunkAccess chunk
         for (int z0 = minZ0; z0 <= maxZ0; ++z0) {                   // Z middle, ascending, INCLUSIVE
             int blockZ = chunkPos.getBlockZ(z0);
             double dz = ((double)blockZ + 0.5 - z) / hRadius;       // NOTE: divided by hRadius (same as x)
-            if (!(dx * dx + dz * dz < 1.0)) continue;               // dcmpl+iflt: proceed only if < 1.0
+            if (!(dx * dx + dz * dz < 1.0)) continue;               // dcmpl+iflt: proceed if < 1.0 OR NaN — !(x<1.0) 형태는 NaN 극성이 뒤집힌다 (VERIFICATION.md 리뷰 정정: sum >= 1.0 continue 가 정확)
             MutableBoolean reachedSurface = new MutableBoolean(false);  // fresh PER (x0,z0) COLUMN
             for (int y0 = maxY; y0 > minY; --y0) {                  // Y inner, DESCENDING,
                                                                     // maxY INCLUSIVE, minY EXCLUSIVE

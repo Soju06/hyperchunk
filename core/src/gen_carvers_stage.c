@@ -50,9 +50,12 @@ void hc_gen_carvers_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc,
             for (int32_t idx = 0; idx < n_carvers; idx++) {
                 /* 인덱스는 isStartChunk 결과와 무관하게 증가; 시드
                  * 항은 (worldSeed + idx) 이고 청크 좌표는 믹스에서
-                 * 들어간다 (A1 §4.1/§9) */
-                hc_lcg_set_large_feature_seed(&rng, seed + (int64_t)idx, scx,
-                                              scz);
+                 * 들어간다 (A1 §4.1/§9). ladd 는 mod 2^64 랩 —
+                 * INT64_MAX 근방 시드에서 signed UB 가 되지 않도록
+                 * 무부호로 더한다 (리뷰 확정: verify:orchestration). */
+                hc_lcg_set_large_feature_seed(
+                    &rng, (int64_t)((uint64_t)seed + (uint64_t)idx), scx,
+                    scz);
                 env.cv = &carvers[idx];
                 /* isStartChunk: nextFloat() <= probability, 포함 비교
                  * (A3 §2 / A4 §2) */

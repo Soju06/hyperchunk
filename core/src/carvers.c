@@ -203,7 +203,9 @@ static int carve_ellipsoid(hc_carve_env_t *e, double x, double y, double z,
         for (int32_t z0 = min_z0; z0 <= max_z0; z0++) {
             int32_t block_z = min_block_z + z0;
             double  dz = ((double)block_z + 0.5 - z) / h_radius; /* hR! */
-            if (!(dx * dx + dz * dz < 1.0))
+            /* dcmpl+iflt: NaN 이면 컬럼을 '진행'한다 (>= 는 NaN 에서
+             * false — 바이트코드 극성 그대로; 리뷰 확정, A2 §2 정정) */
+            if (dx * dx + dz * dz >= 1.0)
                 continue;
             int reached_surface = 0; /* MutableBoolean — 컬럼당 새로 */
             for (int32_t y0 = max_y; y0 > min_y; y0--) { /* y 내림차순 */
@@ -478,6 +480,19 @@ static void canyon_do_carve(hc_carve_env_t *e, int64_t tunnel_seed, double x,
     }
 }
 
+/* JVM f2i — 포화 변환 (NaN→0, 오버플로→INT_MAX/MIN). C 캐스트는 범위
+ * 밖에서 UB (리뷰 확정: verify:canyon). 바닐라 distance_factor 로는 도달
+ * 불가하지만 mth_floor/d2l 과 같은 규율로 방어한다. */
+static int32_t jvm_f2i(float f) {
+    if (f != f)
+        return 0;
+    if (f >= 2147483648.0f)
+        return INT32_MAX;
+    if (f <= -2147483648.0f)
+        return INT32_MIN;
+    return (int32_t)f;
+}
+
 /* CanyonWorldCarver.carve (A4 §3) */
 void hc_canyon_carve(hc_carve_env_t *e, hc_lcg_t *rng, int32_t scx,
                      int32_t scz) {
@@ -490,7 +505,7 @@ void hc_canyon_carve(hc_carve_env_t *e, hc_lcg_t *rng, int32_t scx,
     double  y_scale = (double)fprov_sample(&cv->y_scale, rng); /* 0 드로우 */
     float   thickness = fprov_sample(&cv->thickness, rng);     /* 2 드로우 */
     int32_t distance =
-        (int32_t)(112.0f * fprov_sample(&cv->distance_factor, rng));
+        jvm_f2i(112.0f * fprov_sample(&cv->distance_factor, rng));
     int64_t tunnel_seed = hc_lcg_next_long(rng);
     canyon_do_carve(e, tunnel_seed, x, (double)y, z, thickness, h_rot, v_rot,
                     0, distance, y_scale);
@@ -525,6 +540,18 @@ static int fprov_parse(hc_fprov_t *p, const hc_json_t *j, const char **err) {
     }
     const hc_json_t *type = hc_json_get(j, "type");
     double           x, y, z;
+    if (type && hc_json_streq(type, "minecraft:constant")) {
+        /* FloatProviders.CODEC = either(FLOAT, dispatch) — 명시적
+         * {"type":"minecraft:constant","value":v} 형태도 유효 (리뷰 확정) */
+        if (json_num_field(j, "value", &x)) {
+            *err = "constant provider value";
+            return -1;
+        }
+        p->kind = HC_FP_CONST;
+        p->a = (float)x;
+        p->b = p->c = 0.0f;
+        return 0;
+    }
     if (type && hc_json_streq(type, "minecraft:uniform")) {
         if (json_num_field(j, "min_inclusive", &x) ||
             json_num_field(j, "max_exclusive", &y)) {
@@ -535,6 +562,11 @@ static int fprov_parse(hc_fprov_t *p, const hc_json_t *j, const char **err) {
         p->a = (float)x;
         p->b = (float)y;
         p->c = 0.0f;
+        /* UniformFloat MapCodec.validate: max > min 엄격 (== 도 거부) */
+        if (!(p->b > p->a)) {
+            *err = "uniform provider max must exceed min";
+            return -1;
+        }
         return 0;
     }
     if (type && hc_json_streq(type, "minecraft:trapezoid")) {
@@ -547,9 +579,20 @@ static int fprov_parse(hc_fprov_t *p, const hc_json_t *j, const char **err) {
         p->a = (float)x;
         p->b = (float)y;
         p->c = (float)z;
+        /* TrapezoidFloat validate: max < min 거부 (== 허용), plateau 는
+         * 스팬 이하 (음수는 바닐라도 통과 — 그대로 둔다) */
+        if (p->b < p->a) {
+            *err = "trapezoid provider max < min";
+            return -1;
+        }
+        if (p->c > p->b - p->a) {
+            *err = "trapezoid plateau exceeds span";
+            return -1;
+        }
         return 0;
     }
-    *err = "unsupported float provider type";
+    *err = "unsupported float provider type"; /* clamped_normal 등:
+        nextGaussian 미구현 — fail-loud, ADR-003 D5 fallback 영역 */
     return -1;
 }
 
@@ -654,6 +697,23 @@ int hc_carver_init(hc_carver_t *cv, const hc_json_t *carver_json,
         return -1;
     }
     cv->probability = (float)prob;
+    /* Codec.floatRange(0,1) — 범위 밖은 바닐라도 로드 거부 (리뷰 확정) */
+    if (!(cv->probability >= 0.0f && cv->probability <= 1.0f)) {
+        *err = "probability out of [0,1]";
+        return -1;
+    }
+
+    /* isDebugEnabled = DEBUG_CARVERS || debugSettings.isDebugMode():
+     * 디버그 카버링 (mask/replaceable 우회 + 디버그 블록 치환) 은 미구현.
+     * 조용한 발산 대신 fail-loud (리뷰 확정: verify:worldcarver-base). */
+    const hc_json_t *dbg = hc_json_get(cfg, "debug_settings");
+    if (dbg && dbg->kind == HC_JSON_OBJ) {
+        const hc_json_t *mode = hc_json_get(dbg, "debug_mode");
+        if (mode && mode->kind == HC_JSON_BOOL && mode->boolean) {
+            *err = "debug_mode carvers unsupported";
+            return -1;
+        }
+    }
 
     /* y: HeightProvider — 설정 4종 전부 minecraft:uniform (A7 §6.1) */
     const hc_json_t *yj = hc_json_get(cfg, "y");

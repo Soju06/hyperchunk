@@ -1,5 +1,7 @@
 #include "hc_rng.h"
 
+#include <assert.h>
+
 /* 두 RNG 모두 golden/rng/ 의 26.2 실측 벡터로 전 구간 검증된다
  * (tests/unit/test_rng.c). 알고리즘은 공개 문서 + golden 대조로 확보했다
  * (ADR-002 R4: 디컴파일 코드 복사 금지). */
@@ -157,6 +159,10 @@ int64_t hc_lcg_next_long(hc_lcg_t *r) {
 }
 
 int32_t hc_lcg_next_int(hc_lcg_t *r, int32_t bound) {
+    /* Java 는 bound<=0 에 IllegalArgumentException — 호출자 버그를 debug
+     * 에서만 잡는다 (ADR-009 D3; bound==0 은 2^n 경로로 조용히 0 을
+     * 반환해 버려 발산이 무증상이 된다) */
+    assert(bound > 0);
     int32_t m = bound - 1;
     if ((bound & m) == 0) /* 2의 거듭제곱 경로: (bound * next(31)) >> 31 */
         return (int32_t)(((int64_t)bound * (int64_t)hc_lcg_next(r, 31)) >> 31);
