@@ -8,6 +8,7 @@ add_library(hyperchunk STATIC
   src/noise_perlin.c
   src/noise_octaves.c
   src/noise_blended.c
+  src/noise_normal.c
   src/df_eval.c
 )
 target_include_directories(hyperchunk PUBLIC include)

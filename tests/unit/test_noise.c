@@ -373,7 +373,21 @@ static void verify_noise_block(const char *path, int64_t seed,
         check_octaves(b->key, ".first", &b->first, &first);
         check_octaves(b->key, ".second", &b->second, &second);
     } else {
-        die(path, "normal mode not implemented yet");
+        hc_normal_noise_t nn;
+        if (hc_normal_noise_init(&nn, &g_arena, &rand, b->first.fo,
+                                 b->first.amp, b->first.n_amp) != 0)
+            die(path, "hc_normal_noise_init failed (arena exhausted?)");
+        char label[256];
+        snprintf(label, sizeof label, "%s.valueFactor", b->key);
+        check_bits(label, nn.value_factor, b->vf_bits);
+        for (int i = 0; i < b->n_val; i++) {
+            snprintf(label, sizeof label, "%s.getValue(%g,%g,%g)", b->key,
+                     b->vx[i], b->vy[i], b->vz[i]);
+            check_bits(label,
+                       hc_normal_noise_value(&nn, b->vx[i], b->vy[i],
+                                             b->vz[i]),
+                       b->vbits[i]);
+        }
     }
 }
 
@@ -629,6 +643,8 @@ int main(int argc, char **argv) {
         return run_fork(path);
     if (strcmp(mode, "octaves") == 0)
         return run_octaves_file(path, 0);
+    if (strcmp(mode, "normal") == 0)
+        return run_octaves_file(path, 1);
     if (strcmp(mode, "blended") == 0)
         return run_blended(path);
     fprintf(stderr, "unknown mode: %s\n", mode);
