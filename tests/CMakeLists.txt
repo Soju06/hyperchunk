@@ -39,3 +39,10 @@ add_test(NAME noise_blended COMMAND test_noise blended
          ${CMAKE_SOURCE_DIR}/golden/rng/router_seed1234567890.txt)
 add_test(NAME noise_normal COMMAND test_noise normal
          ${CMAKE_SOURCE_DIR}/golden/rng/octaves_seed1234567890.txt)
+
+# 라우터 슬롯 패리티 (Task 6b). reference JSON → IR 컴파일 → golden 대조.
+add_executable(test_router_slots parity/test_router_slots.c)
+target_link_libraries(test_router_slots PRIVATE hyperchunk)
+add_test(NAME router_slots COMMAND test_router_slots
+         ${CMAKE_SOURCE_DIR}/golden/rng/router_seed1234567890.txt
+         ${CMAKE_SOURCE_DIR}/reference)

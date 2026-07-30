@@ -10,6 +10,7 @@ add_library(hyperchunk STATIC
   src/noise_blended.c
   src/noise_normal.c
   src/df_eval.c
+  src/df_compile.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: libc 외 의존성 없음
