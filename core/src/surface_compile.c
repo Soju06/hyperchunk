@@ -180,6 +180,9 @@ static int32_t block_state_id(sc_ctx_t *c, const hc_json_t *bs) {
             n += w;
             firstp = 0;
         }
+        /* ']' + NUL 두 바이트 여유 필요 (n==127 에서 OOB 방지) */
+        if ((size_t)n + 2 > sizeof buf)
+            return fail(c->s, "block state too long");
         buf[n++] = ']';
         buf[n] = '\0';
     }
@@ -282,6 +285,11 @@ static int32_t compile_cond_typed(sc_ctx_t *c, const hc_json_t *j,
              e = arr ? e->next : NULL) {
             if (e->kind != HC_JSON_STR)
                 return fail(s, "non-string biome in biome_is");
+            /* 태그(#...)는 확장이 필요하다 — 리터럴로 intern 하면 조용히
+             * 상시-false 가 되므로 fail-loud (데이터팩 일반화는 후속) */
+            if (e->slen > 0 && e->s[0] == '#')
+                return fail(s, "biome tag '%.*s' unsupported", (int)e->slen,
+                            e->s);
             char *name = norm_id(c->arena, e->s, e->slen);
             if (!name)
                 return fail(s, "arena exhausted (biome name)");
@@ -429,7 +437,9 @@ static int32_t compile_rule(sc_ctx_t *c, const hc_json_t *j) {
 
     if (id_eq(type->s, type->slen, "minecraft:sequence")) {
         const hc_json_t *seq = hc_json_get(j, "sequence");
-        if (!seq || seq->kind != HC_JSON_ARR || seq->count < 1)
+        /* 빈 sequence 는 코덱상 합법 — 빈 SequenceRule (상시 null) 이
+         * 된다 (A4 §3.1/§3.3; 길이 검증은 자바 빌더 API 에만 있다) */
+        if (!seq || seq->kind != HC_JSON_ARR)
             return fail(s, "bad sequence");
         /* 싱글턴 붕괴 (A4 §3.2 — 자식 룰을 그대로 돌려준다) */
         if (seq->count == 1)

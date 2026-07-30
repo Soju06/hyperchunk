@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <string.h>
 
 /* SurfaceSystem.buildSurface + SurfaceRules 평가 — 26.2 바이트코드 1:1
  * (.hermes/notes/task7-surface/A1 §7-9, A2, A3).
@@ -25,6 +26,32 @@ static double jmin(double a, double b) {
 
 static int32_t mth_floor(double d) {
     return (int32_t)floor(d);
+}
+
+/* JDK Math.round(double) — JDK-8010430 이후의 비트 알고리즘 그대로.
+ * floor(v+0.5) 와는 v == 0.49999999999999994 (0x3FDFFFFFFFFFFFFF) 한
+ * 비트패턴에서만 다르다 (덧셈의 이중 반올림): floor 형은 1, 진짜
+ * Math.round 는 0. 측도 0 이지만 Tier-1 비트정확이 제품이므로 원본
+ * 알고리즘을 이식한다 (adversarial 리뷰 발견 — A1 §3 주석 정정). */
+static int64_t java_math_round(double a) {
+    uint64_t bits;
+    memcpy(&bits, &a, 8);
+    int64_t biased_exp = (int64_t)((bits & 0x7FF0000000000000ull) >> 52);
+    int64_t shift = 1074 - biased_exp; /* SIGNIFICAND_WIDTH-2+EXP_BIAS */
+    if ((shift & ~63LL) == 0) {        /* 0 <= shift < 64 */
+        int64_t r =
+            (int64_t)((bits & 0x000FFFFFFFFFFFFFull) | 0x0010000000000000ull);
+        if ((int64_t)bits < 0)
+            r = -r;
+        /* 자바 >> 는 산술 시프트 — 음수는 보수 트릭으로 구현정의 회피 */
+        int64_t sh = r < 0 ? ~((int64_t)(~(uint64_t)r >> shift))
+                           : (int64_t)((uint64_t)r >> shift);
+        int64_t t = sh + 1;
+        return t < 0 ? ~((int64_t)(~(uint64_t)t >> 1))
+                     : (int64_t)((uint64_t)t >> 1);
+    }
+    /* |a| < 0.5 또는 |a| >= 2^52: Java d2l — 우리 값 범위에선 단순 캐스트 */
+    return (int64_t)a;
 }
 
 static double mlerp(double t, double a, double b) {
@@ -82,8 +109,8 @@ uint16_t hc_surface_band(const hc_surface_t *s, int32_t x, int32_t y,
                          int32_t z) {
     double v = hc_normal_noise_value(&s->clay_bands_offset_noise, (double)x,
                                      0.0, (double)z);
-    /* Math.round(double) = (long)floor(v+0.5), l2i 절단 */
-    int32_t off = (int32_t)(int64_t)floor(v * 4.0 + 0.5);
+    /* Math.round(double) → long, l2i 절단 */
+    int32_t off = (int32_t)java_math_round(v * 4.0);
     int32_t idx = (y + off + HC_SURF_CLAY_BANDS) % HC_SURF_CLAY_BANDS;
     assert(idx >= 0); /* 바닐라도 음수면 AIOOBE — 도달 불가 (A1 §3) */
     return s->clay_bands[idx];

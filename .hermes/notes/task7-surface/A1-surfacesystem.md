@@ -185,6 +185,10 @@ Bytecode quote (rounding + index math — every op):
 ```
 
 - `Math.round(double)` = `floor(v + 0.5)` semantics (JDK), result long, truncated `l2i` (safe range here).
+  **[CORRECTION, adversarial review 2026-07-30]** Post-JDK-8010430 `Math.round(double)` is a bit
+  algorithm that differs from `floor(v+0.5)` at exactly one double, `v = 0.49999999999999994`
+  (`0x3FDFFFFFFFFFFFFF`): floor-form → 1, real `Math.round` → 0 (double-rounding of the addition).
+  The C port implements the JDK bit algorithm (`java_math_round` in surface.c), not the floor form.
 - `%` is Java `irem` (truncated, sign of dividend). `y + offset + 192` is the only negative-guard;
   for y < -(192 + offset) the index would go negative — cannot happen for band rules (they run near
   badlands surface heights), but replicate irem exactly anyway.
