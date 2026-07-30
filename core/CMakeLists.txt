@@ -17,7 +17,12 @@ add_library(hyperchunk STATIC
   src/gen_noise_stage.c
   src/blocks.c
   src/biome_zoom.c
+  src/biome_temp.c
   src/sha256.c
+  src/surface_compile.c
+  src/surface.c
 )
 target_include_directories(hyperchunk PUBLIC include)
-# ADR-003 D1: libc 외 의존성 없음
+# ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc
+# 2.34+ 에서는 libc 로 통합된 호환 스텁) — D1 위반 아님.
+target_link_libraries(hyperchunk PUBLIC m)

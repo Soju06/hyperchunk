@@ -1,5 +1,8 @@
 #include "hc_biome.h"
 
+#include <assert.h>
+#include <string.h>
+
 /* LinearCongruentialGenerator.next: seed *= seed*MULT + INC; seed += salt.
  * 전부 64-bit 랩어라운드 — uint64 로 계산한다. */
 static uint64_t lcg_next(uint64_t seed, uint64_t salt) {
@@ -61,4 +64,65 @@ void hc_biome_zoom(int64_t zoom_seed, int32_t x, int32_t y, int32_t z,
     *qx = (best & 4) == 0 ? q0x : q0x + 1;
     *qy = (best & 2) == 0 ? q0y : q0y + 1;
     *qz = (best & 1) == 0 ? q0z : q0z + 1;
+}
+
+/* --- 레지스트리 --- */
+
+void hc_biome_reg_init(hc_biome_reg_t *r, hc_arena_t *arena) {
+    r->arena = arena;
+    r->count = 0;
+    for (int i = 0; i < HC_BIOME_MAX; i++) {
+        r->names[i] = 0;
+        r->temperature[i] = 0.0f / 0.0f; /* NaN — 기후 미설정 감시 */
+        r->temp_modifier[i] = HC_BIOME_TEMP_MOD_NONE;
+    }
+}
+
+int32_t hc_biome_find(const hc_biome_reg_t *r, const char *name, int32_t len) {
+    for (int32_t i = 0; i < r->count; i++)
+        if ((int32_t)strlen(r->names[i]) == len &&
+            memcmp(r->names[i], name, (size_t)len) == 0)
+            return i;
+    return -1;
+}
+
+int32_t hc_biome_intern(hc_biome_reg_t *r, const char *name, int32_t len) {
+    int32_t i = hc_biome_find(r, name, len);
+    if (i >= 0)
+        return i;
+    if (r->count >= HC_BIOME_MAX)
+        return -1;
+    char *copy = hc_arena_alloc(r->arena, (size_t)len + 1, 1);
+    if (!copy)
+        return -1;
+    memcpy(copy, name, (size_t)len);
+    copy[len] = '\0';
+    r->names[r->count] = copy;
+    return r->count++;
+}
+
+void hc_biome_set_climate(hc_biome_reg_t *r, int32_t id, float temperature,
+                          uint8_t temp_modifier) {
+    assert(id >= 0 && id < r->count);
+    r->temperature[id] = temperature;
+    r->temp_modifier[id] = temp_modifier;
+}
+
+/* --- 리전 뷰: BiomeManager.getBiome → ChunkAccess.getNoiseBiome ---
+ * 쿼트 y 만 청크 범위로 클램프한다 (A5 §7.2 — x/z 는 마스킹으로 실제
+ * 청크에 라우팅될 뿐이므로 뷰 범위 안이어야 한다). */
+uint16_t hc_biome_view_get(const hc_biome_view_t *v, int32_t x, int32_t y,
+                           int32_t z) {
+    int32_t qx, qy, qz;
+    hc_biome_zoom(v->zoom_seed, x, y, z, &qx, &qy, &qz);
+    if (qy < v->qy0)
+        qy = v->qy0;
+    if (qy > v->qy0 + v->ny - 1)
+        qy = v->qy0 + v->ny - 1;
+    assert(qx >= v->qx0 && qx < v->qx0 + v->nxz);
+    assert(qz >= v->qz0 && qz < v->qz0 + v->nxz);
+    return v->ids[((size_t)(qy - v->qy0) * (size_t)v->nxz +
+                   (size_t)(qz - v->qz0)) *
+                      (size_t)v->nxz +
+                  (size_t)(qx - v->qx0)];
 }

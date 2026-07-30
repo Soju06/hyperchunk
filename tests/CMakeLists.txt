@@ -47,6 +47,14 @@ target_link_libraries(test_biome_zoom PRIVATE hyperchunk)
 add_test(NAME biome_zoom COMMAND test_biome_zoom
          ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt)
 
+# SurfaceSystem 구성요소 (Task 7). 16 노이즈 + clay bands + surfaceDepth
+# 를 surface_seed golden 과 비트 단위 대조.
+add_executable(test_surface_unit unit/test_surface_unit.c)
+target_link_libraries(test_surface_unit PRIVATE hyperchunk)
+add_test(NAME surface_unit COMMAND test_surface_unit
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt)
+
 # 라우터 슬롯 패리티 (Task 6b). reference JSON → IR 컴파일 → golden 대조.
 add_executable(test_router_slots parity/test_router_slots.c)
 target_link_libraries(test_router_slots PRIVATE hyperchunk)
