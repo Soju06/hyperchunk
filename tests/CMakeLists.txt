@@ -70,3 +70,13 @@ add_test(NAME noise_stage COMMAND test_noise_stage
          ${CMAKE_SOURCE_DIR}/reference
          ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
          1234567890)
+
+# surface 스테이지 청크 패리티 (Task 7). 우리 04_noise 상태에서 출발
+# (스테이지 체이닝) + 골든 바이옴 입력 → 05_surface 와 0 diff.
+add_executable(test_surface_stage parity/test_surface_stage.c)
+target_link_libraries(test_surface_stage PRIVATE hyperchunk)
+add_test(NAME surface_stage COMMAND test_surface_stage
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
+         1234567890)
