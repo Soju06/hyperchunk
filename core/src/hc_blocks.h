@@ -49,6 +49,27 @@ enum {
     HC_B_LIGHT_GRAY_TERRACOTTA,
     HC_B_SULFUR,
     HC_B_CINNABAR,
+    /* --- 07_features (Task 9a: ore/blob 패밀리 + underwater_magma) --- */
+    HC_B_ANDESITE,
+    HC_B_DIORITE,
+    HC_B_CLAY,
+    HC_B_COAL_ORE,
+    HC_B_DEEPSLATE_COAL_ORE,
+    HC_B_IRON_ORE, /* deepslate_iron_ore 는 04_noise 구간에 이미 있다 */
+    HC_B_GOLD_ORE,
+    HC_B_DEEPSLATE_GOLD_ORE,
+    HC_B_REDSTONE_ORE,           /* minecraft:redstone_ore[lit=false] */
+    HC_B_DEEPSLATE_REDSTONE_ORE, /* minecraft:deepslate_redstone_ore[lit=false] */
+    HC_B_DIAMOND_ORE,
+    HC_B_DEEPSLATE_DIAMOND_ORE,
+    HC_B_LAPIS_ORE,
+    HC_B_DEEPSLATE_LAPIS_ORE,
+    HC_B_DEEPSLATE_COPPER_ORE, /* copper_ore 는 04_noise 구간에 이미 있다 */
+    HC_B_EMERALD_ORE,
+    HC_B_DEEPSLATE_EMERALD_ORE,
+    HC_B_MAGMA_BLOCK,
+    HC_B_INFESTED_STONE,     /* ore_infested (step 7, 산악) — 그리드 밖 */
+    HC_B_INFESTED_DEEPSLATE, /* minecraft:infested_deepslate[axis=y] */
     HC_B_COUNT
 };
 
@@ -67,5 +88,17 @@ int32_t hc_block_by_name(const char *name, int32_t len);
 int hc_block_is_air(uint16_t id);
 int hc_block_is_fluid(uint16_t id);
 int hc_block_blocks_motion(uint16_t id);
+
+/* BlockState.isSolid (legacySolid) — features 검증 스캔(MonsterRoom)이
+ * 읽는다. 유체/공기/가루눈만 false — 테이블의 나머지는 전부 solid 광물
+ * 블록이다. 26.2 에서 비-solid 인 비유체 블록(잎, glow_lichen, 덩굴 등)
+ * 이 테이블에 들어오는 9b 시점에 개별 재검토 필요. */
+int hc_block_is_solid(uint16_t id);
+
+/* getFaceOcclusionShape(면) 이 완전 폐색(full block)인지 — 면 무관 근사.
+ * 테이블의 블록은 유체/공기/가루눈 제외 전부 완전 큐브다 (underwater_magma
+ * 유효성 검사가 읽는다). 부분 형상 블록(dripstone, 버섯 등)이 들어오면
+ * 면별 테이블로 승격해야 한다. */
+int hc_block_is_full_cube(uint16_t id);
 
 #endif /* HC_BLOCKS_H */

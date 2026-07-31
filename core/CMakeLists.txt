@@ -23,6 +23,11 @@ add_library(hyperchunk STATIC
   src/surface.c
   src/carvers.c
   src/gen_carvers_stage.c
+  src/jdk_trig.c
+  src/features_rng.c
+  src/features_compile.c
+  src/features.c
+  src/gen_features_stage.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc

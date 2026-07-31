@@ -93,3 +93,18 @@ add_test(NAME carvers_stage COMMAND test_carvers_stage
          ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
          ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
          1234567890)
+
+add_executable(test_features_rng unit/test_features_rng.c)
+target_link_libraries(test_features_rng PRIVATE hyperchunk)
+add_test(NAME features_rng COMMAND test_features_rng
+         ${CMAKE_SOURCE_DIR}/golden/rng)
+
+add_executable(test_features_walk parity/test_features_walk.c)
+target_link_libraries(test_features_walk PRIVATE hyperchunk)
+add_test(NAME features_walk COMMAND test_features_walk
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/stages-alt/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/features-trace/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
+         1234567890)

@@ -41,6 +41,26 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:light_gray_terracotta",
     "minecraft:sulfur",
     "minecraft:cinnabar",
+    "minecraft:andesite",
+    "minecraft:diorite",
+    "minecraft:clay",
+    "minecraft:coal_ore",
+    "minecraft:deepslate_coal_ore",
+    "minecraft:iron_ore",
+    "minecraft:gold_ore",
+    "minecraft:deepslate_gold_ore",
+    "minecraft:redstone_ore[lit=false]",
+    "minecraft:deepslate_redstone_ore[lit=false]",
+    "minecraft:diamond_ore",
+    "minecraft:deepslate_diamond_ore",
+    "minecraft:lapis_ore",
+    "minecraft:deepslate_lapis_ore",
+    "minecraft:deepslate_copper_ore",
+    "minecraft:emerald_ore",
+    "minecraft:deepslate_emerald_ore",
+    "minecraft:magma_block",
+    "minecraft:infested_stone",
+    "minecraft:infested_deepslate[axis=y]",
 };
 
 const char *hc_block_name(uint16_t id) {
@@ -64,6 +84,17 @@ int hc_block_is_fluid(uint16_t id) {
 }
 
 int hc_block_blocks_motion(uint16_t id) {
+    return id != HC_B_AIR && id != HC_B_WATER && id != HC_B_LAVA &&
+           id != HC_B_POWDER_SNOW;
+}
+
+int hc_block_is_solid(uint16_t id) {
+    /* 현 테이블에선 blocksMotion 과 동치 (비-solid 비유체 블록이 아직
+     * 없다) — 9b 에서 잎/덩굴/glow_lichen 추가 시 분리 재검토 */
+    return hc_block_blocks_motion(id);
+}
+
+int hc_block_is_full_cube(uint16_t id) {
     return id != HC_B_AIR && id != HC_B_WATER && id != HC_B_LAVA &&
            id != HC_B_POWDER_SNOW;
 }
