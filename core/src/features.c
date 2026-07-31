@@ -147,6 +147,88 @@ int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
     return 1;
 }
 
+/* --- Task 12: 스케줄-틱 레코더 (hc_features.h 주석 참조) --- */
+
+int hc_tick_recorder_init(hc_tick_recorder_t *tr, hc_arena_t *a,
+                          int32_t cap) {
+    tr->recs = hc_arena_alloc(a, sizeof(hc_tick_rec_t) * (size_t)cap,
+                              _Alignof(hc_tick_rec_t));
+    if (!tr->recs)
+        return -1;
+    uint32_t hcap = 16;
+    while (hcap < (uint32_t)cap * 4u)
+        hcap <<= 1;
+    tr->hset = hc_arena_alloc(a, sizeof(int32_t) * hcap, _Alignof(int32_t));
+    if (!tr->hset)
+        return -1;
+    memset(tr->hset, 0xFF, sizeof(int32_t) * hcap); /* -1 = 빈 슬롯 */
+    tr->n = 0;
+    tr->cap = cap;
+    tr->hcap = hcap;
+    return 0;
+}
+
+/* 블록 타입 동일성 — SavedTick 중복 키의 type 은 Block 객체 (상태 아님):
+ * 상태 이름의 '[' 앞 부분이 같으면 같은 블록 */
+static int tick_base_name_eq(uint16_t a, uint16_t b) {
+    const char *na = hc_block_name(a), *nb = hc_block_name(b);
+    for (;; na++, nb++) {
+        int ea = (*na == '\0' || *na == '[');
+        int eb = (*nb == '\0' || *nb == '[');
+        if (ea || eb)
+            return ea && eb;
+        if (*na != *nb)
+            return 0;
+    }
+}
+
+void hc_feat_schedule_tick(hc_feat_region_t *rg, int32_t x, int32_t y,
+                           int32_t z, uint16_t block_state, int kind,
+                           int32_t t) {
+    hc_tick_recorder_t *tr = rg->ticks;
+    if (!tr)
+        return;
+    /* 중복 키 해시: (kind-class, pos, 블록 base-name). base-name 은 상태
+     * id 대신 이름 해시 — 같은 블록의 다른 상태가 같은 키가 되도록. */
+    uint64_t h = 0xcbf29ce484222325ull;
+    if (kind == HC_TICK_BLOCK) {
+        for (const char *p = hc_block_name(block_state);
+             *p != '\0' && *p != '['; p++)
+            h = (h ^ (uint8_t)*p) * 0x100000001b3ull;
+    } else {
+        h = (h ^ (uint8_t)kind) * 0x100000001b3ull;
+    }
+    h ^= ((uint64_t)(uint32_t)x << 38) ^ ((uint64_t)(uint32_t)z << 12) ^
+         (uint64_t)(uint32_t)y;
+    h *= 0x9E3779B97F4A7C15ull;
+    h ^= h >> 29;
+    uint32_t mask = tr->hcap - 1;
+    uint32_t slot = (uint32_t)h & mask;
+    for (;;) {
+        int32_t idx = tr->hset[slot];
+        if (idx < 0)
+            break;
+        const hc_tick_rec_t *r = &tr->recs[idx];
+        if (r->x == x && r->y == y && r->z == z &&
+            (r->kind == HC_TICK_BLOCK) == (kind == HC_TICK_BLOCK) &&
+            (kind == HC_TICK_BLOCK
+                 ? tick_base_name_eq(r->block, block_state)
+                 : r->kind == kind))
+            return; /* first-wins */
+        slot = (slot + 1) & mask;
+    }
+    if (tr->n >= tr->cap)
+        die("tick recorder capacity exceeded", NULL);
+    hc_tick_rec_t *r = &tr->recs[tr->n];
+    r->x = x;
+    r->y = y;
+    r->z = z;
+    r->block = block_state;
+    r->kind = (uint8_t)kind;
+    r->t = t;
+    tr->hset[slot] = tr->n++;
+}
+
 /* *_WG 리프라임 (rg->wg_dropped 이후): OF_WG 는 blocksMotion, WS_WG 는
  * !isAir — FINAL 짝과 같은 술어지만 동결 시점이 다르므로 별도 저장. */
 static void wg_prime_one(hc_chunk_t *c, int wg) {
@@ -577,7 +659,11 @@ static int spring_place(feat_env_t *e, const hc_spring_cfg_t *cfg, int32_t ox,
                                                    oy + N[i][1], oz + N[i][2]));
     if (rocks == cfg->rock_count && holes == cfg->hole_count) {
         hc_feat_set_block(e->rg, ox, oy, oz, cfg->fluid_block);
-        /* scheduleTick → fluid_ticks NBT — 07 blocks/heightmaps 덤프 밖 */
+        /* scheduleTick(pos, fluid, 0) → fluid_ticks NBT (task9a A4 §3) */
+        hc_feat_schedule_tick(e->rg, ox, oy, oz, cfg->fluid_block,
+                              cfg->fluid_block == HC_B_LAVA ? HC_TICK_LAVA
+                                                            : HC_TICK_WATER,
+                              0);
         return 1;
     }
     return 0;
@@ -903,7 +989,11 @@ static int can_attach_to(uint16_t id) {
 static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
                              int32_t z) {
     if (s == HC_B_SHORT_GRASS || s == HC_B_FERN || s == HC_B_POPPY ||
-        s == HC_B_DANDELION || s == HC_B_TALL_GRASS_LOWER)
+        s == HC_B_DANDELION || s == HC_B_TALL_GRASS_LOWER ||
+        s == HC_B_BUSH || s == HC_B_FIREFLY_BUSH)
+        /* bush/firefly_bush: Bush/FireflyBushBlock 은 VegetationBlock 의
+         * canSurvive/mayPlaceOn 무오버라이드 (26.2 javap) — 기본
+         * mayPlaceOn = below.is(#supports_vegetation) */
         return mask_test(e->reg->tag_supports_vegetation,
                          hc_feat_get_block(e->rg, x, y - 1, z));
     if (s == HC_B_AZALEA || s == HC_B_FLOWERING_AZALEA)

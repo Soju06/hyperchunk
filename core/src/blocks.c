@@ -692,6 +692,10 @@ int hc_block_is_leaves(uint16_t id) {
     return (FLAGS[id] & F_LEAVES) != 0;
 }
 
+int hc_block_is_waterlogged(uint16_t id) {
+    return (FLAGS[id] & F_WLOG) != 0;
+}
+
 int hc_block_is_replaceable(uint16_t id) {
     return (FLAGS[id] & F_REPL) != 0;
 }

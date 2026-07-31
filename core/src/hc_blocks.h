@@ -198,6 +198,8 @@ int hc_block_is_full_cube(uint16_t id);
 int hc_block_fluid_nonempty(uint16_t id);
 /* FluidState 가 (소스) 물인가 — water[level=0] + waterlogged=true 상태 */
 int hc_block_fluid_is_water(uint16_t id);
+/* 상태 문자열에 waterlogged=true (Task 12 — 잎 updateShape 유체 틱) */
+int hc_block_is_waterlogged(uint16_t id);
 /* LeavesBlock 인가 (MOTION_BLOCKING_NO_LEAVES 술어) */
 int hc_block_is_leaves(uint16_t id);
 /* BlockState.canBeReplaced() — 나무/초목 배치가 읽는다 */

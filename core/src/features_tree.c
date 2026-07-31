@@ -874,8 +874,37 @@ static uint16_t edge_vine_update(feat_env_t *e, uint16_t s, int32_t x,
     return HC_B_AIR;
 }
 
-/* BlockState.updateShape 디스패치 — 즉시 상태 변경만 (tick 스케줄 = 불변).
- * ns 는 전달된 이웃 상태 (재읽기 아님 — R5 §2). */
+/* Task 12: updateShape 가 스케줄하는 틱 기록 (즉시 상태 변경과 별개).
+ * 바이트코드 근거 (task12-region/R-D):
+ *  - LeavesBlock.updateShape: waterlogged → 물 소스 틱 (@0-29); 이어
+ *    i = getDistanceAt(ns)+1, (i==1 && distance==1) 이 아니면 자기 블록
+ *    틱 (@34-72, delay 1 — 저장 t 는 proto 경로에서 0 고정).
+ *  - LiquidBlock.updateShape: 자신 또는 이웃 유체가 소스면 getType 틱
+ *    (@0-39; 우리 팔레트 유체는 전부 소스라 항상).
+ * 그 외 (모래 등 FallingBlock) 는 골든 리전 전체에 월드젠 틱 0건 —
+ * 미기록. */
+static void edge_schedule_ticks(feat_env_t *e, uint16_t s, int32_t x,
+                                int32_t y, int32_t z, uint16_t ns) {
+    if (!e->rg->ticks)
+        return;
+    if (leaf_family_base(s)) {
+        if (hc_block_is_waterlogged(s))
+            hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_WATER, 0);
+        int32_t od = optional_distance_at(e, ns);
+        int32_t i = (od < 0 ? 7 : od) + 1;
+        int32_t dist = (s - leaf_family_base(s)) % 7 + 1;
+        if (!(i == 1 && dist == 1))
+            hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_BLOCK, 0);
+        return;
+    }
+    if (s == HC_B_WATER || s == HC_B_LAVA)
+        hc_feat_schedule_tick(e->rg, x, y, z, s,
+                              s == HC_B_LAVA ? HC_TICK_LAVA : HC_TICK_WATER,
+                              0);
+}
+
+/* BlockState.updateShape 디스패치 — 즉시 상태 변경만 (tick 스케줄 =
+ * edge_schedule_ticks). ns 는 전달된 이웃 상태 (재읽기 아님 — R5 §2). */
 static uint16_t edge_update_state(feat_env_t *e, uint16_t s, int32_t x,
                                   int32_t y, int32_t z, int dir, uint16_t ns) {
     if (s == HC_B_AIR)
@@ -914,9 +943,10 @@ static uint16_t edge_update_state(feat_env_t *e, uint16_t s, int32_t x,
             return HC_B_AIR;
         return s;
     }
-    /* VegetationBlock 단순 계열: !canSurvive → AIR (방향 무관) */
+    /* VegetationBlock 단순 계열: !canSurvive → AIR (방향 무관).
+     * bush/firefly_bush 는 VegetationBlock 무오버라이드 (26.2 javap) */
     if (s == HC_B_SHORT_GRASS || s == HC_B_FERN || s == HC_B_POPPY ||
-        s == HC_B_DANDELION)
+        s == HC_B_DANDELION || s == HC_B_BUSH || s == HC_B_FIREFLY_BUSH)
         return mask_test(e->reg->tag_supports_vegetation,
                          hc_feat_get_block(e->rg, x, y - 1, z))
                    ? s
@@ -1066,9 +1096,11 @@ static void edge_face(feat_env_t *e, int32_t x, int32_t y, int32_t z,
             nz = z + DIR6[dir][2];
     uint16_t s1 = hc_feat_get_block(e->rg, x, y, z);
     uint16_t s2 = hc_feat_get_block(e->rg, nx, ny, nz);
+    edge_schedule_ticks(e, s1, x, y, z, s2);
     uint16_t s3 = edge_update_state(e, s1, x, y, z, dir, s2);
     if (s3 != s1)
         hc_feat_set_block(e->rg, x, y, z, s3);
+    edge_schedule_ticks(e, s2, nx, ny, nz, s3);
     uint16_t s4 = edge_update_state(e, s2, nx, ny, nz, D_OPP6[dir], s3);
     if (s4 != s2)
         hc_feat_set_block(e->rg, nx, ny, nz, s4);
