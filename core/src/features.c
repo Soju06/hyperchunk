@@ -256,6 +256,12 @@ int32_t hc_featx_iprov_sample(hc_wgr_t *r, const hc_iprov_t *p) {
         return p->a + hc_mth_random_between_inclusive(r, 0, upper) +
                hc_mth_random_between_inclusive(r, 0, half);
     }
+    case HC_IP_BIASED_TO_BOTTOM: {
+        /* BiasedToBottomInt.sample@0-30: min + nextInt(nextInt(b-a+1)+1)
+         * — 안쪽 드로우 먼저 */
+        int32_t inner = hc_wgr_next_int(r, p->b - p->a + 1);
+        return p->a + hc_wgr_next_int(r, inner + 1);
+    }
     case HC_IP_WEIGHTED_LIST: {
         /* WeightedList.getRandom: nextInt(total) 1 드로우 후 순회 (R4) */
         int32_t roll = hc_wgr_next_int(r, p->total_weight);
@@ -838,6 +844,8 @@ static int32_t cf_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
         return hc_featx_rootsys_place(e, e->pf->cf.rootsys, x, y, z);
     case HC_CF_GEODE:
         return hc_featx_geode_place(e, e->pf->cf.geode, x, y, z);
+    case HC_CF_KELP:
+        return hc_featx_kelp_place(e, x, y, z);
     default:
         e->unknown = 1;
         return -1;

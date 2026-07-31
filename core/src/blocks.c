@@ -447,6 +447,16 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:chest[facing=south,type=single,waterlogged=false]",
     "minecraft:chest[facing=west,type=single,waterlogged=false]",
     "minecraft:chest[facing=east,type=single,waterlogged=false]",
+    /* 밴드 링 초목 (hc_blocks.h 주석 참조) */
+    "minecraft:bush",
+    "minecraft:pumpkin",
+    "minecraft:sugar_cane[age=0]",
+    "minecraft:firefly_bush",
+    "minecraft:kelp[age=20]",
+    "minecraft:kelp[age=21]",
+    "minecraft:kelp[age=22]",
+    "minecraft:kelp[age=23]",
+    "minecraft:kelp_plant",
 };
 
 const char *hc_block_name(uint16_t id) {
@@ -635,6 +645,18 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     F_MOTION | F_SOLID,          /* chest S */
     F_MOTION | F_SOLID,          /* chest W */
     F_MOTION | F_SOLID,          /* chest E */
+    /* 밴드 링 초목: bush 만 replaceable() (Blocks.<clinit> bc 4441);
+     * firefly_bush/sugar_cane/kelp 는 replaceable 없음; kelp 계열은
+     * 유체가 항상 물 (F_WLOG = fluid_nonempty); pumpkin 은 평범한 풀 큐브 */
+    F_REPL,                      /* bush */
+    F_MOTION | F_SOLID | F_FULL, /* pumpkin */
+    0,                           /* sugar_cane[age=0] */
+    0,                           /* firefly_bush */
+    F_WLOG,                      /* kelp[age=20] */
+    F_WLOG,                      /* kelp[age=21] */
+    F_WLOG,                      /* kelp[age=22] */
+    F_WLOG,                      /* kelp[age=23] */
+    F_WLOG,                      /* kelp_plant */
 };
 
 int hc_block_is_air(uint16_t id) {

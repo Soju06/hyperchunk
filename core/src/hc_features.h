@@ -101,6 +101,8 @@ enum {
     HC_IP_UNIFORM,
     HC_IP_TRAPEZOID,     /* [a,b], plateau c — TrapezoidInt (9b R4) */
     HC_IP_WEIGHTED_LIST, /* WeightedListInt — nextInt(total) 픽 후 중첩 샘플 */
+    HC_IP_BIASED_TO_BOTTOM, /* min + nextInt(nextInt(b-a+1)+1) — 2 드로우
+                             * (BiasedToBottomInt.sample@0-30, sugar_cane) */
     /* clamped_normal 등 (가우시안 드로우) — 그리드 밖 feature 가 참조.
      * 컴파일 허용, 샘플 도달 시 즉사. */
     HC_IP_UNSUPPORTED,
@@ -239,6 +241,7 @@ enum {
     HC_CF_LAKE,        /* minecraft:lake (lake_lava_underground) */
     HC_CF_ROOT_SYSTEM, /* minecraft:root_system (rooted_azalea_tree) */
     HC_CF_GEODE,       /* minecraft:geode (amethyst_geode) */
+    HC_CF_KELP,        /* minecraft:kelp (kelp_warm/cold — config 없음) */
     HC_CF_UNIMPLEMENTED,     /* 파이프라인만 — 본문 도달 시 placed=-1 */
 };
 

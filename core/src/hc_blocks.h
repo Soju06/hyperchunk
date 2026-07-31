@@ -144,7 +144,18 @@ enum {
     HC_B_MOSSY_COBBLESTONE,
     HC_B_SPAWNER,
     HC_B_CHEST_BASE, /* +0 N, +1 S, +2 W, +3 E */
-    HC_B_COUNT = HC_B_CHEST_BASE + 4
+    /* 밴드 링 초목 (patch_bush/pumpkin/sugar_cane/firefly + kelp_warm):
+     * 등록 세그먼트는 Blocks.<clinit> bc 4424(bush)/12468(pumpkin)/
+     * 21014(kelp)/21058(kelp_plant)/31766(firefly_bush). bush 만
+     * replaceable(); kelp/kelp_plant 는 유체가 항상 물 (KelpBlock
+     * .getFluidState — seagrass 와 동류). */
+    HC_B_BUSH = HC_B_CHEST_BASE + 4,
+    HC_B_PUMPKIN,
+    HC_B_SUGAR_CANE,    /* [age=0] — 월드젠 유일 상태 */
+    HC_B_FIREFLY_BUSH,  /* 발광 2 (R4 §4 lambda$static$410) */
+    HC_B_KELP_BASE,     /* [age=20..23] — KelpFeature nextInt(4)+20 */
+    HC_B_KELP_PLANT = HC_B_KELP_BASE + 4,
+    HC_B_COUNT
 };
 
 /* 수평 방향 인덱스 (팔레트 오프셋용 내부 규약 — MC Direction 값과의

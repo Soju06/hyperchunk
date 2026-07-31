@@ -753,6 +753,46 @@ int main(int argc, char **argv) {
                          g_n_placed, g_configured, g_n_configured, g_tags,
                          g_n_tags, &g_reg, /*walk_max_step=*/10, &ferr) != 0)
         die(ferr ? ferr : "feature registry init failed", NULL);
+    /* HC_LIST_UNIMPL=1: 남은 UNIMPLEMENTED 본문을 전부 나열하고 종료 —
+     * 링 프리픽스에서 한 번에 하나씩 fail-loud 로 발견하는 대신 미리
+     * 파악하는 진단 (레지스트리 초기화 직후라 수 초) */
+    if (getenv("HC_LIST_UNIMPL")) {
+        /* 밴드 그리드에 실재하는 바이옴만 대상으로 멤버십을 교차한다 —
+         * 링 프리픽스에서 발화 가능한 UNIMPLEMENTED 만 남긴다 */
+        static uint8_t present[HC_BIOME_MAX];
+        for (int32_t qy = 0; qy < QG_NY; qy++)
+            for (int32_t qz = 0; qz < QG_NXZ; qz++)
+                for (int32_t qx = 0; qx < QG_NXZ; qx++) {
+                    int16_t id = g_grid[qy][qz][qx];
+                    if (id >= 0 && id < HC_BIOME_MAX)
+                        present[id] = 1;
+                }
+        for (int32_t st = 0; st < HC_FEAT_STEPS; st++)
+            for (int32_t i = 0; i < freg->counts[st]; i++) {
+                const hc_pfeat_t *p = &freg->steps[st][i];
+                if (p->cf_kind != HC_CF_UNIMPLEMENTED)
+                    continue;
+                int32_t w = freg->words[st];
+                char    hosts[512];
+                hosts[0] = '\0';
+                for (int32_t b = 0; b < HC_BIOME_MAX; b++) {
+                    if (!present[b])
+                        continue;
+                    if (!(freg->member[st][b * w + (i >> 6)] >>
+                              (i & 63) &
+                          1u))
+                        continue;
+                    strncat(hosts, " ", sizeof hosts - strlen(hosts) - 1);
+                    strncat(hosts, g_reg.names[b],
+                            sizeof hosts - strlen(hosts) - 1);
+                }
+                if (hosts[0])
+                    printf("UNIMPL-IN-BAND step %d index %d %s (%s):%s\n",
+                           st, i, p->name ? p->name : "<inline>",
+                           p->unimpl_why ? p->unimpl_why : "?", hosts);
+            }
+        return 0;
+    }
 
     load_climate(ref_dir);
 

@@ -57,6 +57,10 @@ static void build_tables(void) {
     g_damp[HC_B_ICE] = DAMP_DIE;
     g_damp[HC_B_POWDER_SNOW] = DAMP_DIE;
     g_damp[HC_B_MUD] = DAMP_DIE;
+    /* spawner: noOcclusion (solidRender 아님) 인데 getShape 오버라이드가
+     * 없어 형상은 풀 큐브 → PSD false → dampening 1 (R4 §3/§5 — F_FULL
+     * 유도가 못 잡는 유일 케이스) */
+    g_damp[HC_B_SPAWNER] = 1;
 
     /* emission — Blocks.<clinit> (R4 §4). 팔레트에 없는 발광 블록은 0 유지
      * (redstone_ore lit=false → 0 은 유도 그대로). */
@@ -72,6 +76,7 @@ static void build_tables(void) {
     for (int size = 0; size < 4; size++)
         for (int i = 0; i < 12; i++)
             g_emit[HC_B_AMETHYST_BUD_BASE + size * 12 + i] = AME_EM[size];
+    g_emit[HC_B_FIREFLY_BUSH] = 2; /* R4 §4 lambda$static$410 */
 
     g_tables_ready = 1;
 }

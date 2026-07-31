@@ -253,6 +253,16 @@ static int iprov_compile(fc_t *fc, const hc_json_t *j, hc_iprov_t *p,
             FAIL("weighted_list zero total weight");
         return 0;
     }
+    if (t && hc_json_streq(t, "minecraft:biased_to_bottom")) {
+        const hc_json_t *mn = hc_json_get(j, "min_inclusive");
+        const hc_json_t *mx = hc_json_get(j, "max_inclusive");
+        if (!mn || mn->kind != HC_JSON_NUM || !mx || mx->kind != HC_JSON_NUM)
+            FAIL("biased_to_bottom bounds missing");
+        p->kind = HC_IP_BIASED_TO_BOTTOM;
+        p->a = (int32_t)mn->num;
+        p->b = (int32_t)mx->num;
+        return 0;
+    }
     /* clamped_normal 등 — 샘플 도달 시 즉사 */
     p->kind = HC_IP_UNSUPPORTED;
     return 0;
@@ -1379,8 +1389,16 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
             bpred_compile(fc, tgt, &d->target, 0))
             return -1;
         const hc_json_t *spt = hc_json_get(sp, "type");
-        if (!spt || !hc_json_streq(spt, "minecraft:rule_based_state_provider"))
-            FAIL("disk state_provider kind unsupported");
+        if (!spt)
+            FAIL("disk state_provider without type");
+        if (!hc_json_streq(spt, "minecraft:rule_based_state_provider")) {
+            /* withAlternative 코덱: 맨 BlockStateProvider =
+             * RuleBasedBlockStateProvider.simple (fallback = provider,
+             * rules = []) — disk_gravel/disk_clay 가 이 형태 */
+            d->n_rules = 0;
+            d->rules = NULL;
+            return sprov_compile(fc, sp, &d->fallback, 0);
+        }
         const hc_json_t *fb = hc_json_get(sp, "fallback");
         const hc_json_t *rules = hc_json_get(sp, "rules");
         if (!fb || !rules || rules->kind != HC_JSON_ARR)
@@ -1412,6 +1430,12 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
         if (!prob || prob->kind != HC_JSON_NUM)
             FAIL("seagrass config malformed");
         pf->cf.seagrass.probability = (float)prob->num;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:kelp")) {
+        /* KelpFeature — NoneFeatureConfiguration (본 세션 javap;
+         * 시맨틱 인용은 features_ring.c) */
+        pf->cf_kind = HC_CF_KELP;
         return 0;
     }
     if (hc_json_streq(t, "minecraft:lake")) {

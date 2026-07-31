@@ -539,3 +539,63 @@ int hc_featx_geode_place(feat_env_t *e, const hc_geode_cfg_t *c, int32_t ox,
     }
     return 1; /* place@1432 */
 }
+
+/* ===================== minecraft:kelp (본 세션 javap) =====================
+ *
+ * KelpFeature.place@0-334: y = getHeight(OCEAN_FLOOR) 컬럼이 물이면
+ * h = 1 + nextInt(10) (DRAW); i = 0..h 등반: 셀이 물 && 위가 물 &&
+ * canSurvive 면 i==h 에 kelp[age=nextInt(4)+20] (DRAW), 아니면
+ * kelp_plant; 실패 시 i>0 이면 아래 칸(kelp_plant 였던)을 kelp 톱으로
+ * 캡 시도 (canSurvive(아래) && 그 아래가 kelp 아님 → age DRAW) 후 종료
+ * — i==0 실패는 계속 등반 (@228-230 ifle). 반환 = 하나라도 놓았는가. */
+
+/* GrowingPlantBlock.canSurvive@0-78 (kelp/kelp_plant 동일: head=KELP,
+ * body=KELP_PLANT, growthDirection=UP): 아래 블록이
+ * !#cannot_support_kelp(=magma_block 뿐) && (kelp || kelp_plant ||
+ * isFaceSturdy(UP)) */
+static int kelp_can_survive(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
+    uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+    if (below == HC_B_MAGMA_BLOCK)
+        return 0;
+    if ((below >= HC_B_KELP_BASE && below < HC_B_KELP_BASE + 4) ||
+        below == HC_B_KELP_PLANT)
+        return 1;
+    return hc_featx_face_sturdy_full(below, /*UP*/ 1);
+}
+
+int hc_featx_kelp_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
+    (void)oy;
+    int     placed = 0;
+    int32_t py = hc_feat_height(e->rg, HC_HM_OCEAN_FLOOR, ox, oz);
+    if (hc_feat_get_block(e->rg, ox, py, oz) != HC_B_WATER)
+        return 0;
+    int32_t h = 1 + hc_wgr_next_int(e->rng, 10); /* DRAW */
+    for (int32_t i = 0; i <= h; i++) {
+        if (hc_feat_get_block(e->rg, ox, py, oz) == HC_B_WATER &&
+            hc_feat_get_block(e->rg, ox, py + 1, oz) == HC_B_WATER &&
+            kelp_can_survive(e, ox, py, oz)) {
+            if (i == h) {
+                int32_t age = hc_wgr_next_int(e->rng, 4); /* DRAW */
+                hc_feat_set_block(e->rg, ox, py, oz,
+                                  (uint16_t)(HC_B_KELP_BASE + age));
+                placed++;
+            } else {
+                hc_feat_set_block(e->rg, ox, py, oz, HC_B_KELP_PLANT);
+            }
+        } else if (i > 0) {
+            /* 캡: 아래 칸(py-1) 에 kelp 톱 — canSurvive(py-1) 는 py-2 를
+             * 읽고, py-2 가 kelp 톱이면 스킵 (@233-268) */
+            uint16_t bb = hc_feat_get_block(e->rg, ox, py - 2, oz);
+            if (kelp_can_survive(e, ox, py - 1, oz) &&
+                !(bb >= HC_B_KELP_BASE && bb < HC_B_KELP_BASE + 4)) {
+                int32_t age = hc_wgr_next_int(e->rng, 4); /* DRAW */
+                hc_feat_set_block(e->rg, ox, py - 1, oz,
+                                  (uint16_t)(HC_B_KELP_BASE + age));
+                placed++;
+            }
+            break;
+        }
+        py++;
+    }
+    return placed > 0;
+}

@@ -48,6 +48,7 @@ int hc_featx_rootsys_place(feat_env_t *e, const hc_rootsys_cfg_t *c,
                            int32_t x, int32_t y, int32_t z);
 int hc_featx_geode_place(feat_env_t *e, const hc_geode_cfg_t *c, int32_t x,
                          int32_t y, int32_t z);
+int hc_featx_kelp_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
 
 /* features_lush.c — R3 본문 */
 int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t x,
