@@ -1194,6 +1194,8 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
             c->trunk_kind = HC_TRUNK_MEGA_JUNGLE;
         else if (hc_json_streq(tt, "minecraft:fancy_trunk_placer"))
             c->trunk_kind = HC_TRUNK_FANCY;
+        else if (hc_json_streq(tt, "minecraft:bending_trunk_placer"))
+            c->trunk_kind = HC_TRUNK_BENDING;
         else
             FAIL("unsupported trunk placer");
         const hc_json_t *bh = hc_json_get(tp, "base_height");
@@ -1204,6 +1206,18 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
         c->base_height = (int32_t)bh->num;
         c->rand_a = (int32_t)ra->num;
         c->rand_b = (int32_t)rb->num;
+        if (c->trunk_kind == HC_TRUNK_BENDING) {
+            /* min_height_for_leaves 코덱 기본 1 (BendingTrunkPlacer
+             * lambda$static$0@8-14 — R5c §1.3) */
+            const hc_json_t *mh = hc_json_get(tp, "min_height_for_leaves");
+            const hc_json_t *bl = hc_json_get(tp, "bend_length");
+            c->min_height_for_leaves =
+                mh && mh->kind == HC_JSON_NUM ? (int32_t)mh->num : 1;
+            if (!bl)
+                FAIL("bending_trunk_placer bend_length missing");
+            if (iprov_compile(fc, bl, &c->bend_length, 0))
+                return -1;
+        }
         /* foliage placer */
         const hc_json_t *ft = hc_json_get(fp, "type");
         if (!ft)
@@ -1216,17 +1230,30 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
             c->fol_kind = HC_FOL_MEGA_JUNGLE;
         else if (hc_json_streq(ft, "minecraft:fancy_foliage_placer"))
             c->fol_kind = HC_FOL_FANCY;
+        else if (hc_json_streq(ft, "minecraft:random_spread_foliage_placer"))
+            c->fol_kind = HC_FOL_RANDOM_SPREAD;
         else
             FAIL("unsupported foliage placer");
         const hc_json_t *fr = hc_json_get(fp, "radius");
         const hc_json_t *fo = hc_json_get(fp, "offset");
-        const hc_json_t *fhh = hc_json_get(fp, "height");
+        /* random_spread 는 height 가 없고 foliage_height +
+         * leaf_placement_attempts 를 갖는다 (R5c §7.3.5) */
+        const hc_json_t *fhh =
+            hc_json_get(fp, c->fol_kind == HC_FOL_RANDOM_SPREAD
+                                ? "foliage_height"
+                                : "height");
         if (!fr || !fo || !fhh || fhh->kind != HC_JSON_NUM)
             FAIL("foliage placer fields missing");
         if (iprov_compile(fc, fr, &c->fol_radius, 0) ||
             iprov_compile(fc, fo, &c->fol_offset, 0))
             return -1;
         c->fol_height = (int32_t)fhh->num;
+        if (c->fol_kind == HC_FOL_RANDOM_SPREAD) {
+            const hc_json_t *la = hc_json_get(fp, "leaf_placement_attempts");
+            if (!la || la->kind != HC_JSON_NUM)
+                FAIL("random_spread leaf_placement_attempts missing");
+            c->leaf_attempts = (int32_t)la->num;
+        }
         /* providers — simple 전용 */
         hc_sprov_t sp;
         if (sprov_compile(fc, tpr, &sp, 0))
@@ -1250,11 +1277,20 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
             FAIL("tree foliage provider kind unsupported");
         }
         /* below_trunk: rule_based {rules:[{if_true: not(matching_block_tag),
-         * then: simple}]} — 정확히 이 형태만 */
+         * then: simple}]} — 또는 simple (azalea, R5c §7.3.4: getOptionalState
+         * == getState, 무조건 쓰기 = below_not_mask 전부 0) */
         if (!btp)
             FAIL("below_trunk_provider missing");
         {
             const hc_json_t *bt = hc_json_get(btp, "type");
+            if (bt && hc_json_streq(bt, "minecraft:simple_state_provider")) {
+                if (sprov_compile(fc, btp, &sp, 0))
+                    return -1;
+                if (sp.kind != HC_SP_SIMPLE)
+                    FAIL("below_trunk simple provider not simple");
+                c->below_state = sp.state;
+                goto below_trunk_done;
+            }
             const hc_json_t *rules = hc_json_get(btp, "rules");
             if (!bt ||
                 !hc_json_streq(bt, "minecraft:rule_based_state_provider") ||
@@ -1284,6 +1320,7 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
                 FAIL("below_trunk then-provider not simple");
             c->below_state = sp.state;
         }
+    below_trunk_done:
         c->ignore_vines =
             iv ? (uint8_t)(iv->kind == HC_JSON_BOOL && iv->boolean) : 0;
         /* minimum_size: two_layers_feature_size */
@@ -1375,6 +1412,251 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
         if (!prob || prob->kind != HC_JSON_NUM)
             FAIL("seagrass config malformed");
         pf->cf.seagrass.probability = (float)prob->num;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:lake")) {
+        /* LakeFeature (R5b §0-§1). fluid/barrier 는 데이터 전부 simple. */
+        pf->cf_kind = HC_CF_LAKE;
+        hc_lake_cfg_t *l =
+            hc_arena_alloc(fc->arena, sizeof *l, _Alignof(hc_lake_cfg_t));
+        if (!l)
+            FAIL("arena exhausted (lake)");
+        memset(l, 0, sizeof *l);
+        pf->cf.lake = l;
+        const hc_json_t *fl = hc_json_get(cfg, "fluid");
+        const hc_json_t *ba = hc_json_get(cfg, "barrier");
+        const hc_json_t *cp = hc_json_get(cfg, "can_place_feature");
+        const hc_json_t *ca =
+            hc_json_get(cfg, "can_replace_with_air_or_fluid");
+        const hc_json_t *cb = hc_json_get(cfg, "can_replace_with_barrier");
+        if (!fl || !ba || !cp || !ca || !cb)
+            FAIL("lake config malformed");
+        hc_sprov_t sp;
+        if (sprov_compile(fc, fl, &sp, 0))
+            return -1;
+        if (sp.kind != HC_SP_SIMPLE)
+            FAIL("lake fluid provider not simple");
+        l->fluid = sp.state;
+        if (sprov_compile(fc, ba, &sp, 0))
+            return -1;
+        if (sp.kind != HC_SP_SIMPLE)
+            FAIL("lake barrier provider not simple");
+        l->barrier = sp.state;
+        if (bpred_compile(fc, cp, &l->can_place, 0) ||
+            bpred_compile(fc, ca, &l->can_replace_airfluid, 0) ||
+            bpred_compile(fc, cb, &l->can_replace_barrier, 0))
+            return -1;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:root_system")) {
+        /* RootSystemFeature (R5c §1.1/§7.1) */
+        pf->cf_kind = HC_CF_ROOT_SYSTEM;
+        hc_rootsys_cfg_t *r =
+            hc_arena_alloc(fc->arena, sizeof *r, _Alignof(hc_rootsys_cfg_t));
+        if (!r)
+            FAIL("arena exhausted (root_system)");
+        memset(r, 0, sizeof *r);
+        pf->cf.rootsys = r;
+        static const struct {
+            const char *key;
+            size_t      off;
+        } RS_INTS[] = {
+            {"required_vertical_space_for_tree",
+             offsetof(hc_rootsys_cfg_t, required_vertical_space)},
+            {"allowed_vertical_water_for_tree",
+             offsetof(hc_rootsys_cfg_t, allowed_vertical_water)},
+            {"root_radius", offsetof(hc_rootsys_cfg_t, root_radius)},
+            {"root_placement_attempts",
+             offsetof(hc_rootsys_cfg_t, root_attempts)},
+            {"root_column_max_height",
+             offsetof(hc_rootsys_cfg_t, root_column_max_height)},
+            {"hanging_root_radius",
+             offsetof(hc_rootsys_cfg_t, hanging_radius)},
+            {"hanging_roots_vertical_span",
+             offsetof(hc_rootsys_cfg_t, hanging_span)},
+            {"hanging_root_placement_attempts",
+             offsetof(hc_rootsys_cfg_t, hanging_attempts)},
+        };
+        for (size_t i = 0; i < sizeof RS_INTS / sizeof RS_INTS[0]; i++) {
+            const hc_json_t *v = hc_json_get(cfg, RS_INTS[i].key);
+            if (!v || v->kind != HC_JSON_NUM)
+                FAIL("root_system int field missing");
+            *(int32_t *)((char *)r + RS_INTS[i].off) = (int32_t)v->num;
+        }
+        /* level_test_distance/max_level_deviation != 0 이면 placeDirtAndTree
+         * @56-158 의 4방향 레벨 테스트가 살아난다 — 데이터는 0 (죽은 분기,
+         * R5c §2.3); 미구현이므로 0 만 허용 */
+        const hc_json_t *ltd = hc_json_get(cfg, "level_test_distance");
+        const hc_json_t *mld = hc_json_get(cfg, "max_level_deviation");
+        if (!ltd || ltd->kind != HC_JSON_NUM || (int32_t)ltd->num != 0 ||
+            !mld || mld->kind != HC_JSON_NUM || (int32_t)mld->num != 0)
+            FAIL("root_system level test unsupported (nonzero)");
+        const hc_json_t *rr = hc_json_get(cfg, "root_replaceable");
+        if (!rr || rr->kind != HC_JSON_STR)
+            FAIL("root_replaceable malformed");
+        if (tag_expand(fc, r->root_replaceable, rr->s, rr->slen, 0))
+            return -1;
+        hc_sprov_t sp;
+        const hc_json_t *rsp = hc_json_get(cfg, "root_state_provider");
+        const hc_json_t *hsp = hc_json_get(cfg, "hanging_root_state_provider");
+        const hc_json_t *atp = hc_json_get(cfg, "allowed_tree_position");
+        const hc_json_t *fj = hc_json_get(cfg, "feature");
+        if (!rsp || !hsp || !atp || !fj)
+            FAIL("root_system config malformed");
+        if (sprov_compile(fc, rsp, &sp, 0))
+            return -1;
+        if (sp.kind != HC_SP_SIMPLE)
+            FAIL("root_state provider not simple");
+        r->root_state = sp.state;
+        if (sprov_compile(fc, hsp, &sp, 0))
+            return -1;
+        if (sp.kind != HC_SP_SIMPLE)
+            FAIL("hanging_root_state provider not simple");
+        r->hanging_state = sp.state;
+        if (bpred_compile(fc, atp, &r->allowed_tree_position, 0))
+            return -1;
+        /* 인라인 placed feature {"feature": "...", "placement": []} —
+         * PlacedFeature.CODEC.fieldOf("feature") (R5c §1.1/§3) */
+        r->tree = compile_placed_ref(fc, fj, depth + 1);
+        if (!r->tree)
+            return -1;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:geode")) {
+        /* GeodeFeature (R5a §1 — 코덱 기본값 포함) */
+        pf->cf_kind = HC_CF_GEODE;
+        hc_geode_cfg_t *g =
+            hc_arena_alloc(fc->arena, sizeof *g, _Alignof(hc_geode_cfg_t));
+        if (!g)
+            FAIL("arena exhausted (geode)");
+        memset(g, 0, sizeof *g);
+        pf->cf.geode = g;
+        const hc_json_t *bl = hc_json_get(cfg, "blocks");
+        if (!bl)
+            FAIL("geode blocks missing");
+        static const struct {
+            const char *key;
+            size_t      off;
+        } GB_PROV[] = {
+            {"filling_provider", offsetof(hc_geode_cfg_t, fill)},
+            {"inner_layer_provider", offsetof(hc_geode_cfg_t, inner)},
+            {"alternate_inner_layer_provider",
+             offsetof(hc_geode_cfg_t, alt_inner)},
+            {"middle_layer_provider", offsetof(hc_geode_cfg_t, middle)},
+            {"outer_layer_provider", offsetof(hc_geode_cfg_t, outer)},
+        };
+        hc_sprov_t sp;
+        for (size_t i = 0; i < sizeof GB_PROV / sizeof GB_PROV[0]; i++) {
+            const hc_json_t *v = hc_json_get(bl, GB_PROV[i].key);
+            if (!v)
+                FAIL("geode layer provider missing");
+            if (sprov_compile(fc, v, &sp, 0))
+                return -1;
+            if (sp.kind != HC_SP_SIMPLE)
+                FAIL("geode layer provider not simple");
+            *(uint16_t *)((char *)g + GB_PROV[i].off) = sp.state;
+        }
+        const hc_json_t *ip = hc_json_get(bl, "inner_placements");
+        if (!ip || ip->kind != HC_JSON_ARR || ip->count < 1 ||
+            ip->count > (int32_t)(sizeof g->placements /
+                                  sizeof g->placements[0]))
+            FAIL("geode inner_placements malformed");
+        g->n_placements = ip->count;
+        {
+            int32_t i = 0;
+            for (const hc_json_t *st = ip->child; st; st = st->next, i++) {
+                int32_t id = compile_blockstate(fc, st);
+                if (id < 0)
+                    FAIL("geode inner placement state unregistered");
+                g->placements[i] = (uint16_t)id;
+            }
+        }
+        const hc_json_t *cr = hc_json_get(bl, "cannot_replace");
+        const hc_json_t *ib = hc_json_get(bl, "invalid_blocks");
+        if (!cr || cr->kind != HC_JSON_STR || !ib || ib->kind != HC_JSON_STR)
+            FAIL("geode tags malformed");
+        if (tag_expand(fc, g->cannot_replace, cr->s, cr->slen, 0) ||
+            tag_expand(fc, g->invalid_blocks, ib->s, ib->slen, 0))
+            return -1;
+        /* layers/crack/chances — optionalFieldOf 기본값 (R5a §1) */
+        const hc_json_t *ly = hc_json_get(cfg, "layers");
+        const hc_json_t *v;
+        g->layer_fill = 1.7;
+        g->layer_inner = 2.2;
+        g->layer_middle = 3.2;
+        g->layer_outer = 4.2;
+        if (ly) {
+            if ((v = hc_json_get(ly, "filling")))
+                g->layer_fill = v->num;
+            if ((v = hc_json_get(ly, "inner_layer")))
+                g->layer_inner = v->num;
+            if ((v = hc_json_get(ly, "middle_layer")))
+                g->layer_middle = v->num;
+            if ((v = hc_json_get(ly, "outer_layer")))
+                g->layer_outer = v->num;
+        }
+        const hc_json_t *ck = hc_json_get(cfg, "crack");
+        g->crack_chance = 1.0;
+        g->crack_base = 2.0;
+        g->crack_offset = 2;
+        if (ck) {
+            if ((v = hc_json_get(ck, "generate_crack_chance")))
+                g->crack_chance = v->num;
+            if ((v = hc_json_get(ck, "base_crack_size")))
+                g->crack_base = v->num;
+            if ((v = hc_json_get(ck, "crack_point_offset")))
+                g->crack_offset = (int32_t)v->num;
+        }
+        g->use_potential =
+            (v = hc_json_get(cfg, "use_potential_placements_chance"))
+                ? v->num
+                : 0.35;
+        g->use_alt = (v = hc_json_get(cfg, "use_alternate_layer0_chance"))
+                         ? v->num
+                         : 0.0;
+        g->require_alt =
+            (v = hc_json_get(cfg, "placements_require_layer0_alternate"))
+                ? (v->kind == HC_JSON_BOOL && v->boolean)
+                : 1;
+        if ((v = hc_json_get(cfg, "outer_wall_distance"))) {
+            if (iprov_compile(fc, v, &g->outer_wall, 0))
+                return -1;
+        } else {
+            g->outer_wall.kind = HC_IP_UNIFORM;
+            g->outer_wall.a = 4;
+            g->outer_wall.b = 5;
+        }
+        /* d = nPoints / (double)outerWallDistance.maxInclusive()
+         * (place@98-111) — UniformInt 전용 액세서 */
+        if (g->outer_wall.kind != HC_IP_UNIFORM)
+            FAIL("geode outer_wall_distance not uniform");
+        g->outer_wall_max = g->outer_wall.b;
+        if ((v = hc_json_get(cfg, "distribution_points"))) {
+            if (iprov_compile(fc, v, &g->dist_points, 0))
+                return -1;
+        } else {
+            g->dist_points.kind = HC_IP_UNIFORM;
+            g->dist_points.a = 3;
+            g->dist_points.b = 4;
+        }
+        if ((v = hc_json_get(cfg, "point_offset"))) {
+            if (iprov_compile(fc, v, &g->point_offset, 0))
+                return -1;
+        } else {
+            g->point_offset.kind = HC_IP_UNIFORM;
+            g->point_offset.a = 1;
+            g->point_offset.b = 2;
+        }
+        g->min_gen =
+            (v = hc_json_get(cfg, "min_gen_offset")) ? (int32_t)v->num : -16;
+        g->max_gen =
+            (v = hc_json_get(cfg, "max_gen_offset")) ? (int32_t)v->num : 16;
+        g->noise_mult =
+            (v = hc_json_get(cfg, "noise_multiplier")) ? v->num : 0.05;
+        v = hc_json_get(cfg, "invalid_blocks_threshold");
+        if (!v || v->kind != HC_JSON_NUM)
+            FAIL("geode invalid_blocks_threshold missing");
+        g->invalid_threshold = (int32_t)v->num;
         return 0;
     }
     if (hc_json_streq(t, "minecraft:fallen_tree")) {
@@ -1510,6 +1792,8 @@ int hc_feat_reg_init(hc_feat_reg_t *reg, hc_arena_t *arena,
          offsetof(hc_feat_reg_t, tag_prevents_leaf_decay)},
         {"#minecraft:cannot_support_seagrass",
          offsetof(hc_feat_reg_t, tag_cannot_support_seagrass)},
+        {"#minecraft:features_cannot_replace",
+         offsetof(hc_feat_reg_t, tag_features_cannot_replace)},
     };
     for (size_t i = 0; i < sizeof RT_TAGS / sizeof RT_TAGS[0]; i++)
         if (tag_expand(fc, (uint64_t *)((char *)reg + RT_TAGS[i].off),

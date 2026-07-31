@@ -137,7 +137,14 @@ enum {
     /* lake 가 상반부에 cave_air 를 쓴다 (LakeFeature <clinit> — R5b).
      * BlockState.isAir 참: hc_block_is_air 가 포함한다. */
     HC_B_CAVE_AIR = HC_B_AMETHYST_BUD_BASE + 48,
-    HC_B_COUNT
+    /* monster_room (던전 — R5d): 방 셸/바닥 + 스포너 + 전리품 상자.
+     * chest 는 BASE + facing (N,S,W,E — StructurePiece.reorient 가 고른다;
+     * type=single, waterlogged=false 고정: 월드젠은 공기에만 놓는다). */
+    HC_B_COBBLESTONE,
+    HC_B_MOSSY_COBBLESTONE,
+    HC_B_SPAWNER,
+    HC_B_CHEST_BASE, /* +0 N, +1 S, +2 W, +3 E */
+    HC_B_COUNT = HC_B_CHEST_BASE + 4
 };
 
 /* 수평 방향 인덱스 (팔레트 오프셋용 내부 규약 — MC Direction 값과의

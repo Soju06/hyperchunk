@@ -547,7 +547,64 @@ static int spring_place(feat_env_t *e, const hc_spring_cfg_t *cfg, int32_t ox,
     return 0;
 }
 
-/* --- MonsterRoomFeature 검증 단계 (본 태스크 javap, place 0..263) --- */
+/* --- MonsterRoomFeature (본 태스크 javap, place@0-848 + R5d:
+ * StructurePiece.reorient@0-227, RandomizableContainer
+ * .setBlockEntityLootTable@0-38, BaseSpawner.setEntityId /
+ * getOrCreateNextSpawnData — 빈 spawnPotentials 는 WeightedList.getRandom
+ * 셀렉터 null 조기 반환이라 0 드로우) --- */
+
+/* Plane.HORIZONTAL 순서 N,E,S,W; 청크 팔레트 chest facing 오프셋과 회전 */
+static const int8_t  MR_DX[4] = {0, 1, 0, -1};
+static const int8_t  MR_DZ[4] = {-1, 0, 1, 0};
+static const uint8_t MR_OPP[4] = {2, 3, 0, 1};
+static const uint8_t MR_CW[4] = {1, 2, 3, 0};
+static const uint8_t MR_CHEST_OFF[4] = {0, 3, 1, 2}; /* N,E,S,W → N0,E3,S1,W2 */
+
+static int mr_is_chest(uint16_t s) {
+    return s >= HC_B_CHEST_BASE && s < HC_B_CHEST_BASE + 4;
+}
+
+/* safeSetBlock(predicate = !#features_cannot_replace(현재 블록)) */
+static void mr_safe_set(feat_env_t *e, int32_t x, int32_t y, int32_t z,
+                        uint16_t st) {
+    if (!mask_test(e->reg->tag_features_cannot_replace,
+                   hc_feat_get_block(e->rg, x, y, z)))
+        hc_feat_set_block(e->rg, x, y, z, st);
+}
+
+/* StructurePiece.reorient: 이웃에 CHEST 있으면 기본(facing=north) 그대로;
+ * solidRender(풀 큐브) 이웃 정확히 1개면 그 반대; 아니면 폴백 워크
+ * (기본 N 에서 opp → cw → opp 순으로 solidRender 를 피한다) */
+static uint16_t mr_reorient_chest(feat_env_t *e, int32_t x, int32_t y,
+                                  int32_t z) {
+    int found = -1;
+    for (int d = 0; d < 4; d++) {
+        uint16_t s = hc_feat_get_block(e->rg, x + MR_DX[d], y, z + MR_DZ[d]);
+        if (mr_is_chest(s))
+            return (uint16_t)(HC_B_CHEST_BASE + 0); /* @61-62: 상태 그대로 */
+        if (hc_block_is_full_cube(s)) { /* isSolidRender */
+            if (found < 0)
+                found = d;
+            else {
+                found = -2; /* 둘 이상 → 폴백 (@81-83) */
+                break;
+            }
+        }
+    }
+    if (found >= 0)
+        return (uint16_t)(HC_B_CHEST_BASE + MR_CHEST_OFF[MR_OPP[found]]);
+    int dir = 0; /* 기본 facing = NORTH (@108-118) */
+    if (hc_block_is_full_cube(
+            hc_feat_get_block(e->rg, x + MR_DX[dir], y, z + MR_DZ[dir])))
+        dir = MR_OPP[dir];
+    if (hc_block_is_full_cube(
+            hc_feat_get_block(e->rg, x + MR_DX[dir], y, z + MR_DZ[dir])))
+        dir = MR_CW[dir];
+    if (hc_block_is_full_cube(
+            hc_feat_get_block(e->rg, x + MR_DX[dir], y, z + MR_DZ[dir])))
+        dir = MR_OPP[dir];
+    return (uint16_t)(HC_B_CHEST_BASE + MR_CHEST_OFF[dir]);
+}
 
 static int monster_room_place(feat_env_t *e, int32_t ox, int32_t oy,
                               int32_t oz) {
@@ -574,12 +631,69 @@ static int monster_room_place(feat_env_t *e, int32_t ox, int32_t oy,
             }
     if (doors < 1 || doors > 5)
         return 0;
-    /* 성공 경로(방 설치 + 이끼/스포너 드로우)는 9b — 그리드 골든에서
-     * 검증 통과 사례 0 (trace f-placed=0). 도달하면 조용한 발산 대신
-     * 즉사한다. */
-    die("monster_room validation passed — success path unimplemented (9b)",
-        NULL);
-    return 0;
+    /* --- 성공 경로 (place@264-848; 링 프리픽스에서 실제 발화 — R5d) --- */
+    /* 방 셸/내부: x 밖, y 3→-1 내림차순, z 안 (@264-531). dy==4 는 y 범위
+     * 밖이라 셸 판정에서 도달 불가. */
+    for (int32_t dx = xmin; dx <= xmax; dx++)
+        for (int32_t dy = 3; dy >= -1; dy--)
+            for (int32_t dz = zmin; dz <= zmax; dz++) {
+                int32_t  x = ox + dx, y = oy + dy, z = oz + dz;
+                uint16_t st = hc_feat_get_block(e->rg, x, y, z);
+                int shell = dx == xmin || dy == -1 || dz == zmin ||
+                            dx == xmax || dz == zmax;
+                if (!shell) {
+                    /* 내부: chest/spawner (겹친 이전 던전) 만 보존 (@480-511) */
+                    if (!mr_is_chest(st) && st != HC_B_SPAWNER)
+                        mr_safe_set(e, x, y, z, HC_B_CAVE_AIR);
+                    continue;
+                }
+                /* 아래가 비고체면 직접 setBlock(cave_air) — safeSet 아님,
+                 * y<minY 는 스킵 (@358-404) */
+                if (y >= HC_MIN_Y &&
+                    !hc_block_is_solid(
+                        hc_feat_get_block(e->rg, x, y - 1, z))) {
+                    hc_feat_set_block(e->rg, x, y, z, HC_B_CAVE_AIR);
+                    continue;
+                }
+                if (!hc_block_is_solid(st) || mr_is_chest(st))
+                    continue;
+                /* 바닥(dy==-1)만 nextInt(4) 드로우: 0 → cobble, 그 외 mossy
+                 * (@427-477) */
+                if (dy == -1 && hc_wgr_next_int(e->rng, 4) != 0)
+                    mr_safe_set(e, x, y, z, HC_B_MOSSY_COBBLESTONE);
+                else
+                    mr_safe_set(e, x, y, z, HC_B_COBBLESTONE);
+            }
+    /* 상자 2개 × 시도 3회 (@532-748): 시도당 x,z 드로우 무조건; 공기 +
+     * 수평 고체 이웃 정확히 1개면 reorient 된 chest + 전리품 시드
+     * nextLong (RandomizableContainer.setBlockEntityLootTable@28 — 상자는
+     * 공기 위에만 놓이므로 블록엔티티 존재가 보장된다) 후 다음 상자로. */
+    for (int32_t ci = 0; ci < 2; ci++)
+        for (int32_t attempt = 0; attempt < 3; attempt++) {
+            int32_t px = ox + hc_wgr_next_int(e->rng, j * 2 + 1) - j;
+            int32_t pz = oz + hc_wgr_next_int(e->rng, k * 2 + 1) - k;
+            if (!hc_block_is_air(hc_feat_get_block(e->rg, px, oy, pz)))
+                continue;
+            int solids = 0;
+            for (int d = 0; d < 4; d++)
+                if (hc_block_is_solid(hc_feat_get_block(
+                        e->rg, px + MR_DX[d], oy, pz + MR_DZ[d])))
+                    solids++;
+            if (solids != 1)
+                continue;
+            mr_safe_set(e, px, oy, pz, mr_reorient_chest(e, px, oy, pz));
+            (void)hc_wgr_next_long(e->rng); /* 전리품 테이블 시드 */
+            break;
+        }
+    /* 스포너 (@749-801): safeSet 후 getBlockEntity 가 SpawnerBlockEntity
+     * 일 때만 randomEntityId = MOBS[nextInt(4)] 1 드로우 — 즉 최종 블록이
+     * 스포너면 드로우 (safeSet 이 이전 던전의 스포너에 막힌 경우 포함;
+     * chest/bedrock 에 막히면 드로우 없음). setEntityId 자체는 0 드로우
+     * (빈 spawnPotentials → WeightedList.getRandom 셀렉터 null 조기 반환). */
+    mr_safe_set(e, ox, oy, oz, HC_B_SPAWNER);
+    if (hc_feat_get_block(e->rg, ox, oy, oz) == HC_B_SPAWNER)
+        (void)hc_wgr_next_int(e->rng, 4);
+    return 1;
 }
 
 /* --- UnderwaterMagmaFeature (task9a A4 §5) --- */
@@ -718,6 +832,12 @@ static int32_t cf_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
         return hc_featx_disk_place(e, e->pf->cf.disk, x, y, z);
     case HC_CF_SEAGRASS:
         return hc_featx_seagrass_place(e, &e->pf->cf.seagrass, x, y, z);
+    case HC_CF_LAKE:
+        return hc_featx_lake_place(e, e->pf->cf.lake, x, y, z);
+    case HC_CF_ROOT_SYSTEM:
+        return hc_featx_rootsys_place(e, e->pf->cf.rootsys, x, y, z);
+    case HC_CF_GEODE:
+        return hc_featx_geode_place(e, e->pf->cf.geode, x, y, z);
     default:
         e->unknown = 1;
         return -1;

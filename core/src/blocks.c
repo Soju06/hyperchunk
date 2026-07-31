@@ -439,6 +439,14 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:amethyst_cluster[facing=east,waterlogged=false]",
     "minecraft:amethyst_cluster[facing=east,waterlogged=true]",
     "minecraft:cave_air",
+    /* monster_room (R5d) */
+    "minecraft:cobblestone",
+    "minecraft:mossy_cobblestone",
+    "minecraft:spawner",
+    "minecraft:chest[facing=north,type=single,waterlogged=false]",
+    "minecraft:chest[facing=south,type=single,waterlogged=false]",
+    "minecraft:chest[facing=west,type=single,waterlogged=false]",
+    "minecraft:chest[facing=east,type=single,waterlogged=false]",
 };
 
 const char *hc_block_name(uint16_t id) {
@@ -617,6 +625,16 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
     F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
     F_REPL, /* cave_air */
+    /* monster_room (R5d): cobble/mossy 풀 큐브; spawner 는 noOcclusion
+     * (Blocks.<clinit> — 렌더 비고체, 라이트 dampening 0); chest 는 부분
+     * 형상 (F_FULL 없음), 월드젠 상태는 wl=false 뿐 */
+    F_MOTION | F_SOLID | F_FULL, /* cobblestone */
+    F_MOTION | F_SOLID | F_FULL, /* mossy_cobblestone */
+    F_MOTION | F_SOLID,          /* spawner */
+    F_MOTION | F_SOLID,          /* chest N */
+    F_MOTION | F_SOLID,          /* chest S */
+    F_MOTION | F_SOLID,          /* chest W */
+    F_MOTION | F_SOLID,          /* chest E */
 };
 
 int hc_block_is_air(uint16_t id) {

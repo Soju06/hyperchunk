@@ -489,6 +489,7 @@ typedef struct {
     uint64_t tag_prevents_leaf_decay[(HC_B_COUNT + 63) / 64];
     /* Task 10 링 본문 */
     uint64_t tag_cannot_support_seagrass[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_features_cannot_replace[(HC_B_COUNT + 63) / 64];
     /* 멤버십 비트셋: member[step][biome_id * words + w]. biome_id 는
      * hc_biome_reg_t 인턴 id — reg_init 이 biome_features 의 전 바이옴을
      * 인턴한다. */

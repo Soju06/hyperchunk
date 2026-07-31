@@ -81,6 +81,23 @@ void hc_perlin_init(hc_perlin_t *p, int64_t seed) {
     hc_perlin_init_from(p, &r);
 }
 
+void hc_perlin_init_from_lcg(hc_perlin_t *p, hc_lcg_t *r) {
+    /* LegacyRandomSource 플레이버 — ImprovedNoise.<init> 의 소비 순서는
+     * 소스 종류와 무관하게 동일: xo,yo,zo (nextDouble*256) 후
+     * Fisher-Yates nextInt(256-i) (R5a §4.2, ImprovedNoise.<init>@0-137) */
+    p->xo = hc_lcg_next_double(r) * 256.0;
+    p->yo = hc_lcg_next_double(r) * 256.0;
+    p->zo = hc_lcg_next_double(r) * 256.0;
+    for (int i = 0; i < 256; i++)
+        p->perm[i] = (uint8_t)i;
+    for (int i = 0; i < 256; i++) {
+        int j = hc_lcg_next_int(r, 256 - i);
+        uint8_t t = p->perm[i];
+        p->perm[i] = p->perm[i + j];
+        p->perm[i + j] = t;
+    }
+}
+
 double hc_perlin_sample_scaled(const hc_perlin_t *p, double x, double y,
                                double z, double yscale, double ymax) {
     double dx = x + p->xo;

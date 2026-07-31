@@ -232,6 +232,24 @@ static void create_foliage(tree_ctx_t *t, const attach_t *att, int32_t fh,
                              att->double_trunk);
         }
         return;
+    case HC_FOL_RANDOM_SPREAD: {
+        /* RandomSpreadFoliagePlacer.createFoliage@0-102 (R5c §6.1):
+         * 시도당 6 드로우 (x,y,z 순 nextInt(r)−nextInt(r) 삼각형), 오프셋은
+         * 항상 고정 attachment 기준 (비누적). 위에서 샘플한 offset 값은 이
+         * placer 가 쓰지 않는다 (드로우만 유효 — 상수라 0). C 피연산자
+         * 평가 순서는 미지정이라 드로우를 명시적으로 순서화한다. */
+        for (int32_t a = 0; a < t->cfg->leaf_attempts; a++) {
+            int32_t x1 = hc_wgr_next_int(e->rng, rad);
+            int32_t x2 = hc_wgr_next_int(e->rng, rad);
+            int32_t y1 = hc_wgr_next_int(e->rng, fh);
+            int32_t y2 = hc_wgr_next_int(e->rng, fh);
+            int32_t z1 = hc_wgr_next_int(e->rng, rad);
+            int32_t z2 = hc_wgr_next_int(e->rng, rad);
+            try_place_leaf(t, att->x + (x1 - x2), att->y + (y1 - y2),
+                           att->z + (z1 - z2));
+        }
+        return;
+    }
     }
     die("unknown foliage placer kind", NULL);
 }
@@ -464,6 +482,49 @@ static const struct {
     {-1, 0, 0}, /* WEST: opposite=E */
 };
 
+/* bending (azalea — R5c §5, BendingTrunkPlacer.placeTrunk@0-227).
+ * Direction.Plane.HORIZONTAL.getRandomDirection = faces[nextInt(4)],
+ * faces = [N,E,S,W] — HORIZ 인덱스와 1:1. */
+static int32_t trunk_bending(tree_ctx_t *t, int32_t x, int32_t y, int32_t z,
+                             int32_t free, attach_t *out) {
+    feat_env_t *e = t->e;
+    int32_t d = hc_wgr_next_int(e->rng, 4); /* DRAW: 방향 */
+    int32_t h = free - 1;
+    /* below = pos.below() — 커서 이동 전 (@15-27). simple provider 는
+     * getOptionalState==getState 로 무조건 쓰기 (below_not_mask 전부 0). */
+    place_below_trunk(t, x, y - 1, z);
+    int32_t cx = x, cy = y, cz = z;
+    int32_t n = 0;
+    for (int32_t i = 0; i <= h; i++) {
+        /* nextInt(2) 는 매 반복 무조건 드로우 (@54-78); 조건 참이면 수평
+         * 이동이 '누적'된다 (mutable cursor) */
+        if (i + 1 >= h + hc_wgr_next_int(e->rng, 2)) {
+            cx += HORIZ[d].dx;
+            cz += HORIZ[d].dz;
+        }
+        if (valid_tree_pos(e, cx, cy, cz))
+            place_log(t, cx, cy, cz);
+        if (i >= t->cfg->min_height_for_leaves) {
+            if (n >= MAX_ATTACH)
+                die("bending trunk attachment overflow", NULL);
+            out[n++] = (attach_t){cx, cy, cz, 0, 0};
+        }
+        cy++;
+    }
+    int32_t bend = iprov_sample(e->rng, &t->cfg->bend_length); /* DRAW */
+    for (int32_t j = 0; j <= bend; j++) {
+        if (valid_tree_pos(e, cx, cy, cz))
+            place_log(t, cx, cy, cz);
+        /* attachment 는 로그 스킵과 무관하게 무조건 (@189-210) */
+        if (n >= MAX_ATTACH)
+            die("bending trunk attachment overflow", NULL);
+        out[n++] = (attach_t){cx, cy, cz, 0, 0};
+        cx += HORIZ[d].dx;
+        cz += HORIZ[d].dz;
+    }
+    return n;
+}
+
 static void dec_cocoa(tree_ctx_t *t, jset_t *deco, const cpos_t *logs,
                       int32_t n_logs, float prob) {
     feat_env_t *e = t->e;
@@ -662,19 +723,31 @@ static void box_extend(shape_t *b, const jset_t *s, int *any) {
 static const int8_t DIR6[6][3] = {{0, -1, 0}, {0, 1, 0},  {0, 0, -1},
                                   {0, 0, 1},  {-1, 0, 0}, {1, 0, 0}};
 
+/* 잎 패밀리 베이스: oak/jungle 또는 azalea/flowering — 각각 [base, +28),
+ * 레이아웃 base + 종*14 + wl*7 + (distance-1) (R5c §7.3.6). 잎 아니면 0. */
+static uint16_t leaf_family_base(uint16_t s) {
+    if (s >= HC_B_OAK_LEAVES_BASE && s < HC_B_OAK_LEAVES_BASE + 28)
+        return HC_B_OAK_LEAVES_BASE;
+    if (s >= HC_B_AZALEA_LEAVES_BASE && s < HC_B_AZALEA_LEAVES_BASE + 28)
+        return HC_B_AZALEA_LEAVES_BASE;
+    return 0;
+}
+
 /* getOptionalDistanceAt: #prevents_nearby_leaf_decay → 0; DISTANCE 프로퍼티
  * (잎) → 값; 그 외 empty(-1) */
 static int32_t optional_distance_at(feat_env_t *e, uint16_t s) {
     if (mask_test(e->reg->tag_prevents_leaf_decay, s))
         return 0;
-    if (s >= HC_B_OAK_LEAVES_BASE && s < HC_B_OAK_LEAVES_BASE + 28)
-        return (s - HC_B_OAK_LEAVES_BASE) % 7 + 1;
+    uint16_t fam = leaf_family_base(s);
+    if (fam)
+        return (s - fam) % 7 + 1;
     return -1;
 }
 
 /* 잎 상태의 distance 재기록 (wl/종 보존) */
 static uint16_t leaf_with_distance(uint16_t s, int32_t d) {
-    int32_t base = (s - HC_B_OAK_LEAVES_BASE) / 7 * 7 + HC_B_OAK_LEAVES_BASE;
+    uint16_t fam = leaf_family_base(s);
+    int32_t  base = (s - fam) / 7 * 7 + fam;
     return (uint16_t)(base + (d - 1));
 }
 
@@ -734,8 +807,7 @@ static shape_t *update_leaves(tree_ctx_t *t) {
             /* setValue(DISTANCE, i) — 잎이 아니면 프로퍼티 없음: 바닐라는
              * setValue 가 IllegalArgument 를 던질 상황이지만 여기 도달하는
              * 상태는 항상 잎이다 (enqueue 게이트) */
-            if (!(cur >= HC_B_OAK_LEAVES_BASE &&
-                  cur < HC_B_OAK_LEAVES_BASE + 28))
+            if (!leaf_family_base(cur))
                 die("updateLeaves rewrite on non-leaf", hc_block_name(cur));
             hc_feat_set_block(e->rg, x, y, z, leaf_with_distance(cur, i));
         }
@@ -1120,6 +1192,9 @@ int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
         break;
     case HC_TRUNK_FANCY:
         n_att = trunk_fancy(t, ox, oy, oz, max_free, atts);
+        break;
+    case HC_TRUNK_BENDING:
+        n_att = trunk_bending(t, ox, oy, oz, max_free, atts);
         break;
     default:
         die("unknown trunk placer kind", NULL);
