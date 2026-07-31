@@ -705,6 +705,13 @@ static int tdec_compile(fc_t *fc, const hc_json_t *j, hc_tdec_t *d) {
 
 /* --- placed feature (파이프라인 + 본문), 중첩/인라인 지원 --- */
 
+/* 잎 패밀리: [OAK_BASE, +28) = oak/jungle × {d1..7, wl}, [AZALEA_BASE, +28)
+ * = azalea/flowering 동일 레이아웃 (hc_blocks.h) */
+static int leaf_state_ok(uint16_t s) {
+    return (s >= HC_B_OAK_LEAVES_BASE && s < HC_B_OAK_LEAVES_BASE + 28) ||
+           (s >= HC_B_AZALEA_LEAVES_BASE && s < HC_B_AZALEA_LEAVES_BASE + 28);
+}
+
 static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
                       int depth);
 
@@ -1227,14 +1234,21 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
         if (sp.kind != HC_SP_SIMPLE)
             FAIL("tree trunk provider not simple");
         c->trunk_state = sp.state;
-        if (sprov_compile(fc, fpr, &sp, 0))
+        if (sprov_compile(fc, fpr, &c->foliage, 0))
             return -1;
-        if (sp.kind != HC_SP_SIMPLE)
-            FAIL("tree foliage provider not simple");
-        c->foliage_state = sp.state;
-        if (!(c->foliage_state >= HC_B_OAK_LEAVES_BASE &&
-              c->foliage_state < HC_B_OAK_LEAVES_BASE + 28))
-            FAIL("tree foliage state not a leaf");
+        /* 전 상태가 잎 패밀리 [base, base+28) (oak/jungle 또는
+         * azalea/flowering) 안이어야 한다 — try_place_leaf 의 wl +7 과
+         * updateLeaves 의 distance 재산출이 이 레이아웃을 전제 (R5c §7.3). */
+        if (c->foliage.kind == HC_SP_SIMPLE) {
+            if (!leaf_state_ok(c->foliage.state))
+                FAIL("tree foliage state not a leaf");
+        } else if (c->foliage.kind == HC_SP_WEIGHTED) {
+            for (int32_t fi = 0; fi < c->foliage.n_entries; fi++)
+                if (!leaf_state_ok(c->foliage.entries[fi].state))
+                    FAIL("tree foliage weighted entry not a leaf");
+        } else {
+            FAIL("tree foliage provider kind unsupported");
+        }
         /* below_trunk: rule_based {rules:[{if_true: not(matching_block_tag),
          * then: simple}]} — 정확히 이 형태만 */
         if (!btp)

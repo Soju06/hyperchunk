@@ -130,7 +130,9 @@ static int try_place_leaf(tree_ctx_t *t, int32_t x, int32_t y, int32_t z) {
      * persistent=false 상태만 존재 → 항상 false */
     if (!valid_tree_pos(t->e, x, y, z))
         return 0;
-    uint16_t st = t->cfg->foliage_state;
+    /* foliageProvider.getState — 게이트 통과 후에만 샘플 (weighted 는
+     * 조건부 1 드로우, R5c §6.2; simple 은 0 드로우라 순서 무해) */
+    uint16_t st = sprov_sample(t->e->rng, &t->cfg->foliage);
     /* 잎은 WATERLOGGED 보유 — isSourceOfType(WATER) */
     if (hc_block_fluid_is_water(cur))
         st = (uint16_t)(st + 7); /* wl 변형 (+7, hc_blocks 레이아웃) */
