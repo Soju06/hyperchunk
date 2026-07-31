@@ -71,6 +71,15 @@ does not equal itself across runs. The gate is redefined in **ADR-007** as:
       block parity on both 07 dump sets; trace golden bundle under
       golden/features-trace/, see its FORMAT.md).
 
+**Tier-2 result (Task 9b, 2026-07-31): GREEN.** The full features stage
+(steps 0..10) replays BOTH bundles' recorded orders and matches BOTH
+`07_features.{blocks,heightmaps}` dump sets cell-for-cell (36,864 blocks +
+6 heightmaps × 256 columns × 9 grid chunks, 0 diff; 55,658 / 56,322 blocks
+placed per replay). The same code reproducing two different recorded orders
+is the ADR-007 D3 evidence. The vanilla p/f trace additionally matches
+line-exactly (positions, npos, placed bits; steps ≤10) for the primary
+bundle. Gate: tests/parity/test_features_walk.c (CI-enabled, strict).
+
 ## Order manifest (Task 9-pre, 2026-07-31)
 
 Design + full bytecode evidence: `.hermes/notes/task9pre-order/` (A0–A6).
