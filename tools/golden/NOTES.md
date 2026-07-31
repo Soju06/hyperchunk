@@ -59,10 +59,115 @@ does not equal itself across runs. The gate is redefined in **ADR-007** as:
 
 ## Open items
 
-- [ ] Extend stage-dump mod to emit `order.manifest` (sequence of
-      (chunk, stage) applications during the golden run).
-- [ ] Regenerate golden bundle with the order manifest included.
+- [x] Extend stage-dump mod to emit `order.manifest` (2026-07-31, Task 9-pre;
+      granularity is per-chunk, not per-(chunk,stage) — see below and
+      `.hermes/notes/task9pre-order/A0-manifest-design-decision.md`).
+- [x] Regenerate golden bundle with the order manifest included
+      (2026-07-31; plus a second bundle `golden/stages-alt/` with a distinct
+      recorded order, ADR-007 D3).
 - [ ] Plan Task 9 (features) consumes the manifest for replay verification.
+
+## Order manifest (Task 9-pre, 2026-07-31)
+
+Design + full bytecode evidence: `.hermes/notes/task9pre-order/` (A0–A6).
+Probe: `tools/golden/order_probe.py` (run it on the two bundles; evidence
+snapshot in A7 of the notes dir).
+
+### Files per bundle
+
+- `order.manifest` (tracked) — one line per features-stage chunk application
+  in actual execution order:
+  `seq chunkX chunkZ decorationSeedHex thread nanos`, `#` header records
+  target_version / seed / dimension / dump grid / hook point / columns.
+  Captured at `WorldgenRandom#setDecorationSeed(JII)J@RETURN` — the
+  RNG-determining instant of a chunk's decoration — armed per-thread by
+  `ChunkStatusTasks#generateFeatures` HEAD (setDecorationSeed has a second,
+  SPAWN-stage caller that must not record; the arm plus a block-origin
+  cross-check excludes it). Records EVERY features application in the dump
+  dimension (spawn area + dependency ring, not just the grid) because
+  ring decorations write into grid chunks.
+- `order.snapshots` (tracked) — positions every (chunk, stage) dump in the
+  features order: `stage chunkX chunkZ seqBegin seqEnd thread nanos`,
+  seq counter sampled before/after the dump's file writes.
+  `seqBegin == seqEnd` ⇒ the dump saw exactly the first seqBegin features
+  applications; `!=` ⇒ torn snapshot (features landed mid-dump; observed
+  only for async-completing stages: 09_light, 11_full).
+
+### Granularity: per-chunk total order is minimal AND sufficient
+
+- Within-chunk decoration is a pure function of (seed, registries, chunk
+  pos, pre-features state): FeatureSorter order is deterministic, the RNG is
+  re-seeded via `setFeatureSeed(decoSeed, idx, step)` before every structure
+  and feature (A2). Nothing sub-chunk to record.
+- 26.2 serializes ALL worldgen step bodies of a dimension on one
+  `ConsecutiveExecutor` (A5) — the manifest is the actual total execution
+  history even at `max.bg.threads=255`, not an imposed linearization.
+- The decoration seed is a pure function of (levelSeed, cx·16, cz·16) (A3);
+  the manifest's seed column is a consistency check the replay must verify,
+  not extra information. Cross-bundle check: identical per chunk. ✓
+
+### What the manifest does / does not determine
+
+- DOES: each chunk's `07_features` dump (snapshot taken synchronously at its
+  own decoration completion = own manifest event + all spill-ins with
+  smaller seq), and the final features-complete block state.
+- DOES NOT alone: `08..11` dumps — those are snapshots at async-completing
+  moments; which later spill-ins they contain is the timing that
+  `order.snapshots` records (per dump: the features-order prefix it saw).
+  A light/spawn/full-stage replay gate (Task 10+) must consume BOTH files,
+  or gate on the features-converged final state instead of mid-snapshots.
+
+### Bundles (both: 9-chunk grid around (0,0), seed 1234567890, 315 dump files)
+
+- `golden/stages/seed1234567890` — recorded with `max.bg.threads=1`
+  (all applications on Worker-Main-1), 81 applications, 0 torn snapshots.
+- `golden/stages-alt/seed1234567890` — recorded with
+  `HYPERCHUNK_BG_THREADS=4` (Worker-Main-1..4), 81 applications, 5 torn
+  snapshots (flagged in order.snapshots), own `stages-alt/SHA256SUMS`.
+- Orders diverge from seq 0; 8/9 grid chunks differ in `07_features`.
+  Empirical nugget: with one bg worker the grid neighborhood order is
+  STICKY (two 1-thread runs + the old bundle share identical grid
+  distance-2 prefixes ⇒ identical 07 dumps) because the grid sits inside
+  the boot-time spawn area whose dependency cascade pins the first wave;
+  the 4-worker recording is what makes the two bundles a real Tier-2 pair.
+- Stages 01–06: byte-identical across ALL of (old pre-manifest bundle,
+  new 1-thread bundle, 4-thread alt bundle) — re-validates ADR-007 D1
+  under both scheduler configs. (The regeneration added 18 header-only
+  `01/02 *.heightmaps.txt` files absent from the old bundle: the old bundle
+  predated the committed dumper, which always writes the file; header-only,
+  no worldgen content.)
+- A bundle is a coherent (dumps + order.manifest + order.snapshots) pair —
+  REGENERATION REPLACES IT WHOLESALE; 07+ dumps can never be reproduced
+  without replaying the recorded order. Manifests/snapshots are tracked in
+  git; raw dumps stay local with hashes in SHA256SUMS.
+
+### Sufficiency probe results (order_probe.py, 2026-07-31)
+
+- Decoration seeds: identical per chunk across bundles (order-free). ✓
+- Every grid chunk whose 07 dump differs between bundles has a differing
+  distance-2 decoration-order prefix — zero unexplained diffs. ✓
+- Concrete spill evidence: c.-1.0 — neighbor (-1,1) decorated before it in
+  the alt bundle only; alt's 07 dump shows that neighbor's ore-vein spills
+  (deepslate_redstone_ore / deepslate_iron_ore / tuff) along the z=15
+  border facing (-1,1); absent in primary. 2191 differing blocks, 434 on
+  borders. ✓
+- 07 snapshots: clean (seqBegin==seqEnd) and exactly at own manifest
+  event + 1 in both bundles. ✓
+- No vanilla out-of-window access warnings in either run's log (the A4
+  detector strings) — the 3×3 write-window argument held empirically. ✓
+
+### What the C replay (Task 9) must consume
+
+1. Replay features applications in manifest seq order (single-threaded
+   replay is the actual recorded order).
+2. Before decorating a chunk: recompute the decoration seed per A3
+   (Xoroshiro128++ delegate; WorldgenRandom.nextLong burns two xoro draws)
+   and assert equality with the manifest's seed column.
+3. Snapshot each grid chunk's blocks/heightmaps at ITS OWN decoration
+   completion (not after all decorations) and compare to `07_features.*` —
+   spill-ins with smaller seq included, larger seq excluded.
+4. Do this for BOTH bundles; matching both distinct orders bit-exactly is
+   the Tier-2 evidence (ADR-007 D3).
 
 ## Environment
 

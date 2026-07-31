@@ -115,6 +115,45 @@ but each row is 16 **hex digits** (no separators), one digit per block,
 value 0–15 as returned by the corresponding
 `LevelLightEngine.getLayerListener(<BLOCK|SKY>).getLightValue(pos)`.
 
+## `order.manifest` — features-stage execution order (v1, tracked in git)
+
+One line per features-stage chunk application, in the actual execution
+order of the recording run (ADR-007 Tier-2 replay input):
+
+```
+# hyperchunk features order manifest v1
+# target_version 26.2
+# seed <level seed, decimal>
+# dimension minecraft:overworld
+# grid center=(0,0) radius=1
+# hook net.minecraft.world.level.levelgen.WorldgenRandom#setDecorationSeed(JII)J@RETURN armed-by net.minecraft.world.level.chunk.status.ChunkStatusTasks#generateFeatures
+# columns seq chunkX chunkZ decorationSeedHex thread nanos
+0 -1 -1 4ffcca0c0308cf12 Worker-Main-1 1080045214459802
+```
+
+- `seq` — dense from 0, assigned and appended under one lock (file order ==
+  seq order). Records ALL features applications in the dump dimension
+  (spawn area + dependency ring), not only the grid.
+- `decorationSeedHex` — the value `setDecorationSeed` actually returned,
+  16 hex digits two's complement. A pure function of (seed, chunk pos):
+  replay recomputes it and must match.
+- `thread` — recording thread, whitespace replaced by `_`.
+- `# ERROR` lines mean a capture miss; the harness fails on them.
+
+## `order.snapshots` — dump positions in the features order (v1, tracked)
+
+```
+# columns stage chunkX chunkZ seqBegin seqEnd thread nanos
+07_features 0 0 5 5 Worker-Main-1 1080045535659712
+```
+
+`seqBegin`/`seqEnd` are the manifest seq counter sampled before/after that
+(chunk, stage) dump's file writes. Equal values mean the dump saw exactly
+the first `seqBegin` features applications; unequal values flag a torn
+snapshot (only async-completing stages: `09_light`, `11_full`).
+`07_features` dumps always satisfy `seqBegin == seqEnd ==` (own manifest
+seq + 1): they are taken synchronously inside the serialized features step.
+
 ## Reproducing
 
 ```
@@ -122,7 +161,14 @@ bash tools/golden/make_stage_dumps.sh
 ```
 
 wipes `golden/stages/seed<seed>/`, regenerates a fresh world with the pinned
-server + pinned Fabric loader, and rewrites the hashes in
-`golden/SHA256SUMS`. Worldgen is seed-deterministic, so regenerated dumps
-must hash identically; if they do not, that is a parity-relevant finding —
-see `tools/golden/NOTES.md`.
+server + pinned Fabric loader, and rewrites the hashes in `golden/SHA256SUMS`
+(`HYPERCHUNK_DUMP_DIR=.../golden/stages-alt/seed<seed>` writes an alt bundle
+with its own `golden/stages-alt/SHA256SUMS`; `HYPERCHUNK_BG_THREADS` >1 gives
+the scheduler more ordering freedom).
+
+Stages `01..06` are order-free: regenerated dumps must hash identically, and
+a mismatch there is a parity-relevant finding. `07_features`+ depend on the
+features execution order, which vanilla does not fix run to run
+(`tools/golden/NOTES.md`, ADR-007): a bundle is a coherent
+(dumps + order.manifest + order.snapshots) triple that regeneration replaces
+wholesale — 07+ dumps are only reproducible by REPLAYING the recorded order.
