@@ -86,6 +86,17 @@ typedef struct {
     int32_t          b, e;
 } hc_jit_t;
 
+/* isFaceSturdy(SupportType.FULL) — 팔레트 축약: 완전 큐브는 전 면; azalea/
+ * flowering_azalea 는 UP 면만 (SHAPE = or(column(16, 8..16), column(4,
+ * 0..8)) — 상부가 완전 16x16 슬랩, 본 세션 javap; R1 §7 열린 항목 확정.
+ * vegetation_patch 의 floor 판정이 이 면을 실제로 조회한다). 잎은 지지
+ * 형상 EMPTY 라 제외 (R1 §2.5). dir_mc: 0=DOWN,1=UP,2=N,3=S,4=W,5=E. */
+static inline int hc_featx_face_sturdy_full(uint16_t s, int dir_mc) {
+    if (hc_block_is_full_cube(s))
+        return 1;
+    return (s == HC_B_AZALEA || s == HC_B_FLOWERING_AZALEA) && dir_mc == 1;
+}
+
 void hc_jset_init(hc_jset_t *s);
 /* HashSet.add — 이미 있으면 false (순서 불변) */
 int  hc_jset_add(hc_jset_t *s, int32_t x, int32_t y, int32_t z);

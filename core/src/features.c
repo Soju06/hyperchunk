@@ -182,8 +182,7 @@ int hc_featx_mask_test(const uint64_t *mask, uint16_t id) {
  * CENTER/RIGID 도 완전 큐브에서 전부 true — 한 판정으로 축약. */
 static int face_sturdy(feat_env_t *e, int32_t x, int32_t y, int32_t z,
                        int dir) {
-    (void)dir;
-    return hc_block_is_full_cube(hc_feat_get_block(e->rg, x, y, z));
+    return hc_featx_face_sturdy_full(hc_feat_get_block(e->rg, x, y, z), dir);
 }
 
 /* would_survive: state.canSurvive(level, pos) — 블록별 디스패치 (R2) */

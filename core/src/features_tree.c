@@ -60,9 +60,11 @@ static int is_vine_pos(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
     return s >= HC_B_VINE_BASE && s < HC_B_VINE_BASE + 5;
 }
 
-/* isOverSolidGround = 아래 블록 isFaceSturdy(UP) — support shape (잎 제외) */
+/* isOverSolidGround = 아래 블록 isFaceSturdy(UP) — support shape (잎 제외,
+ * azalea 상부 슬랩 포함) */
 static int over_solid_ground(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
-    return hc_block_is_full_cube(hc_feat_get_block(e->rg, x, y - 1, z));
+    return hc_featx_face_sturdy_full(hc_feat_get_block(e->rg, x, y - 1, z),
+                                     1);
 }
 
 /* 나무 실행 상태: 4개 포지션 셋 + setter 들 */
@@ -674,7 +676,7 @@ static uint16_t leaf_with_distance(uint16_t s, int32_t d) {
     return (uint16_t)(base + (d - 1));
 }
 
-static void update_leaves(tree_ctx_t *t) {
+static shape_t *update_leaves(tree_ctx_t *t) {
     feat_env_t *e = t->e;
     shape_t    *box;
     static shape_t box_storage;
@@ -686,7 +688,7 @@ static void update_leaves(tree_ctx_t *t) {
     box_extend(box, &t->leaves, &any);
     box_extend(box, &t->deco, &any);
     if (!any)
-        return;
+        return NULL;
     if (box->max_x - box->min_x >= BOX_MAX_SPAN ||
         box->max_y - box->min_y >= BOX_MAX_SPAN ||
         box->max_z - box->min_z >= BOX_MAX_SPAN)
@@ -719,7 +721,7 @@ static void update_leaves(tree_ctx_t *t) {
         while (i < 7 && levels[i].size == 0)
             i++;
         if (i >= 7)
-            return;
+            return box;
         int32_t x = 0, y = 0, z = 0;
         if (!jset_poll_first(&levels[i], &x, &y, &z))
             die("updateLeaves poll on empty level", NULL);
@@ -755,6 +757,293 @@ static void update_leaves(tree_ctx_t *t) {
             }
         }
     }
+}
+
+/* ================= StructureTemplate.updateShapeAtEdge (R5) =================
+ *
+ * 나무 상자 경계의 두 셀에 BlockState.updateShape 를 돌리는 마무리 패스.
+ * 앞선 면 이벤트의 쓰기가 뒤 이벤트에 보인다 — 열거 순서가 진리.
+ * 모든 쓰기는 flag 2 경로 (hc_feat_set_block). */
+
+static const uint8_t D_OPP6[6] = {1, 0, 3, 2, 5, 4}; /* DOWN,UP,N,S,W,E */
+
+/* canAttachTo: 지지면 완전 || 충돌면 완전 — 완전 큐브와 잎 (R5 §7) */
+static int edge_attach_ok(uint16_t s) {
+    return hc_block_is_full_cube(s) || hc_block_is_leaves(s);
+}
+
+/* vine face 팔레트 오프셋(E,N,S,U,W) → 지지 이웃 방향 (dx,dz) */
+static const int8_t VINE_FACE_STEP[5][2] = {
+    {1, 0},  /* E: 지지는 동쪽 */
+    {0, -1}, /* N */
+    {0, 1},  /* S */
+    {0, 0},  /* U: 위 (특별 처리) */
+    {-1, 0}, /* W */
+};
+
+/* VineBlock.updateShape (dir != DOWN): getUpdatedState + hasFaces (R5 §4).
+ * 팔레트는 단면 vine 뿐 — 그 한 면의 판정으로 축약. */
+static uint16_t edge_vine_update(feat_env_t *e, uint16_t s, int32_t x,
+                                 int32_t y, int32_t z) {
+    int off = s - HC_B_VINE_BASE;
+    if (off == 3) { /* up 면: isAcceptableNeighbour(above, DOWN) */
+        return edge_attach_ok(hc_feat_get_block(e->rg, x, y + 1, z))
+                   ? s
+                   : HC_B_AIR;
+    }
+    /* 수평 면: canSupportAtFace(d) — 이웃 attach || 위 vine 같은 면 */
+    if (edge_attach_ok(hc_feat_get_block(e->rg, x + VINE_FACE_STEP[off][0], y,
+                                         z + VINE_FACE_STEP[off][1])))
+        return s;
+    if (hc_feat_get_block(e->rg, x, y + 1, z) == s)
+        return s; /* 위 vine 이 같은 단면 상태 (getValue(prop) 동치) */
+    return HC_B_AIR;
+}
+
+/* BlockState.updateShape 디스패치 — 즉시 상태 변경만 (tick 스케줄 = 불변).
+ * ns 는 전달된 이웃 상태 (재읽기 아님 — R5 §2). */
+static uint16_t edge_update_state(feat_env_t *e, uint16_t s, int32_t x,
+                                  int32_t y, int32_t z, int dir, uint16_t ns) {
+    if (s == HC_B_AIR)
+        return s;
+    /* vine */
+    if (s >= HC_B_VINE_BASE && s < HC_B_VINE_BASE + 5) {
+        if (dir == 0) /* DOWN → 불변 */
+            return s;
+        return edge_vine_update(e, s, x, y, z);
+    }
+    /* glow_lichen (MultifaceBlock) */
+    if (s >= HC_B_GLOW_LICHEN_BASE && s < HC_B_GLOW_LICHEN_BASE + 126) {
+        /* facemask 비트 = down,east,north,south,up,west; dir(MC 서수) 매핑 */
+        static const uint8_t LB[6] = {0, 4, 2, 3, 5, 1};
+        int wl = (s - HC_B_GLOW_LICHEN_BASE) / 63;
+        int mask = (s - HC_B_GLOW_LICHEN_BASE) % 63 + 1;
+        if ((mask >> LB[dir]) & 1) {
+            if (!edge_attach_ok(ns)) {
+                mask &= ~(1 << LB[dir]);
+                if (mask == 0)
+                    return HC_B_AIR;
+                return hc_block_glow_lichen(mask, wl);
+            }
+        }
+        return s;
+    }
+    /* cocoa: dir == FACING && 그 방향 블록이 #supports_cocoa 아니면 AIR */
+    if (s >= HC_B_COCOA_BASE && s < HC_B_COCOA_BASE + 12) {
+        static const uint8_t FD[4] = {2, 5, 3, 4}; /* N,E,S,W → MC 서수 */
+        static const int8_t FS[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+        int f = (s - HC_B_COCOA_BASE) % 4;
+        if (dir == FD[f] &&
+            !mask_test(e->reg->tag_supports_cocoa,
+                       hc_feat_get_block(e->rg, x + FS[f][0], y,
+                                         z + FS[f][1])))
+            return HC_B_AIR;
+        return s;
+    }
+    /* VegetationBlock 단순 계열: !canSurvive → AIR (방향 무관) */
+    if (s == HC_B_SHORT_GRASS || s == HC_B_FERN || s == HC_B_POPPY ||
+        s == HC_B_DANDELION)
+        return mask_test(e->reg->tag_supports_vegetation,
+                         hc_feat_get_block(e->rg, x, y - 1, z))
+                   ? s
+                   : HC_B_AIR;
+    if (s == HC_B_AZALEA || s == HC_B_FLOWERING_AZALEA)
+        return mask_test(e->reg->tag_supports_azalea,
+                         hc_feat_get_block(e->rg, x, y - 1, z))
+                   ? s
+                   : HC_B_AIR;
+    /* DoublePlantBlock: tall_grass + small_dripleaf (R5 §4) */
+    if (s == HC_B_TALL_GRASS_LOWER || s == HC_B_TALL_GRASS_UPPER ||
+        (s >= HC_B_SMALL_DRIPLEAF_BASE && s < HC_B_SMALL_DRIPLEAF_BASE + 16)) {
+        int dp_grass = (s == HC_B_TALL_GRASS_LOWER || s == HC_B_TALL_GRASS_UPPER);
+        int upper = dp_grass ? (s == HC_B_TALL_GRASS_UPPER)
+                             : (((s - HC_B_SMALL_DRIPLEAF_BASE) / 2) & 1);
+        int ns_same = dp_grass ? (ns == HC_B_TALL_GRASS_LOWER ||
+                                  ns == HC_B_TALL_GRASS_UPPER)
+                               : (ns >= HC_B_SMALL_DRIPLEAF_BASE &&
+                                  ns < HC_B_SMALL_DRIPLEAF_BASE + 16);
+        int ns_upper = 0;
+        if (ns_same)
+            ns_upper = dp_grass ? (ns == HC_B_TALL_GRASS_UPPER)
+                                : (((ns - HC_B_SMALL_DRIPLEAF_BASE) / 2) & 1);
+        if ((dir == 0 || dir == 1) && (!upper) == (dir == 1)) {
+            if (!ns_same || ns_upper == upper)
+                return HC_B_AIR;
+        }
+        /* canSurvive (LOWER&&DOWN 검사와 super 검사가 같은 판정으로 합침 —
+         * 두 경로 다 !canSurvive → AIR) */
+        uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+        int ok;
+        if (upper) {
+            int below_same = dp_grass ? (below == HC_B_TALL_GRASS_LOWER)
+                                      : (below >= HC_B_SMALL_DRIPLEAF_BASE &&
+                                         below < HC_B_SMALL_DRIPLEAF_BASE + 16 &&
+                                         !(((below - HC_B_SMALL_DRIPLEAF_BASE) /
+                                            2) &
+                                           1));
+            ok = below_same;
+        } else if (dp_grass) {
+            ok = mask_test(e->reg->tag_supports_vegetation, below);
+        } else {
+            /* SmallDripleafBlock.mayPlaceOn (R1 §5) */
+            ok = mask_test(e->reg->tag_supports_small_dripleaf, below) ||
+                 (hc_block_fluid_is_water(
+                      hc_feat_get_block(e->rg, x, y + 1, z)) &&
+                  mask_test(e->reg->tag_supports_vegetation, below));
+        }
+        return ok ? s : HC_B_AIR;
+    }
+    /* moss_carpet (CarpetBlock): 아래 공기 → AIR */
+    if (s == HC_B_MOSS_CARPET)
+        return hc_block_is_air(hc_feat_get_block(e->rg, x, y - 1, z))
+                   ? HC_B_AIR
+                   : s;
+    /* spore_blossom: dir==UP && !canSurvive → AIR */
+    if (s == HC_B_SPORE_BLOSSOM) {
+        if (dir == 1) {
+            uint16_t above = hc_feat_get_block(e->rg, x, y + 1, z);
+            if (!hc_block_is_full_cube(above) ||
+                hc_block_fluid_is_water(hc_feat_get_block(e->rg, x, y, z)))
+                return HC_B_AIR;
+        }
+        return s;
+    }
+    /* cave_vines 머리 (GrowingPlantHead, growth DOWN) */
+    if (s >= HC_B_CAVE_VINES_BASE && s < HC_B_CAVE_VINES_BASE + 52) {
+        int berries = (s - HC_B_CAVE_VINES_BASE) / 26;
+        if (dir == 1) { /* growthDirection.getOpposite() = UP */
+            /* canSurvive: 위가 head|body || isFaceSturdy(위) */
+            uint16_t above = hc_feat_get_block(e->rg, x, y + 1, z);
+            int can = (above >= HC_B_CAVE_VINES_BASE &&
+                       above < HC_B_CAVE_VINES_PLANT_BASE + 2) ||
+                      hc_block_is_full_cube(above);
+            if (can) {
+                uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+                if (below >= HC_B_CAVE_VINES_BASE &&
+                    below < HC_B_CAVE_VINES_PLANT_BASE + 2)
+                    return (uint16_t)(HC_B_CAVE_VINES_PLANT_BASE + berries);
+            }
+        }
+        if (dir == 0 && ns >= HC_B_CAVE_VINES_BASE &&
+            ns < HC_B_CAVE_VINES_PLANT_BASE + 2)
+            return (uint16_t)(HC_B_CAVE_VINES_PLANT_BASE + berries);
+        return s;
+    }
+    /* cave_vines_plant (GrowingPlantBody): head 전환은 region random 을
+     * 소비 (worldgen_region_random — 미모델) — 도달 시 즉사 */
+    if (s >= HC_B_CAVE_VINES_PLANT_BASE && s < HC_B_CAVE_VINES_PLANT_BASE + 2) {
+        if (dir == 0 && !(ns >= HC_B_CAVE_VINES_BASE &&
+                          ns < HC_B_CAVE_VINES_PLANT_BASE + 2))
+            die("edge update: cave_vines_plant→head conversion "
+                "(region random) reached",
+                NULL);
+        return s;
+    }
+    /* bamboo: dir==UP && 이웃 bamboo 의 age 가 크면 age cycle */
+    if (s >= HC_B_BAMBOO_BASE && s < HC_B_BAMBOO_BASE + 12) {
+        if (dir == 1 && ns >= HC_B_BAMBOO_BASE && ns < HC_B_BAMBOO_BASE + 12) {
+            int sage = (s - HC_B_BAMBOO_BASE) / 6;
+            int nage = (ns - HC_B_BAMBOO_BASE) / 6;
+            if (nage > sage)
+                return (uint16_t)(s + 6); /* age 0→1 (cycle) */
+        }
+        return s;
+    }
+    /* big_dripleaf: DOWN&&!canSurvive → AIR; UP&&이웃 big_dripleaf → stem */
+    if (s >= HC_B_BIG_DRIPLEAF_BASE && s < HC_B_BIG_DRIPLEAF_BASE + 8) {
+        if (dir == 0) {
+            uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+            int ok = (below >= HC_B_BIG_DRIPLEAF_BASE &&
+                      below < HC_B_BIG_DRIPLEAF_STEM_BASE + 8) ||
+                     mask_test(e->reg->tag_supports_big_dripleaf, below);
+            if (!ok)
+                return HC_B_AIR;
+        }
+        if (dir == 1 && ns >= HC_B_BIG_DRIPLEAF_BASE &&
+            ns < HC_B_BIG_DRIPLEAF_BASE + 8)
+            return (uint16_t)(HC_B_BIG_DRIPLEAF_STEM_BASE +
+                              (s - HC_B_BIG_DRIPLEAF_BASE));
+        return s;
+    }
+    /* 소형 버섯: MushroomBlock canSurvive 가 light 를 읽는다 — 미모델 */
+    if (s == HC_B_RED_MUSHROOM || s == HC_B_BROWN_MUSHROOM)
+        die("edge update on small mushroom (light-dependent canSurvive)",
+            NULL);
+    /* 그 외 (잎/통나무/물/돌/흙/이끼 등): tick 스케줄만 — 불변 */
+    return s;
+}
+
+/* 한 면 이벤트: s1/s2 사전 읽기, s3/s4 계산·조건부 쓰기 (R5 §2) */
+static void edge_face(feat_env_t *e, int32_t x, int32_t y, int32_t z,
+                      int dir) {
+    int32_t nx = x + DIR6[dir][0], ny = y + DIR6[dir][1],
+            nz = z + DIR6[dir][2];
+    uint16_t s1 = hc_feat_get_block(e->rg, x, y, z);
+    uint16_t s2 = hc_feat_get_block(e->rg, nx, ny, nz);
+    uint16_t s3 = edge_update_state(e, s1, x, y, z, dir, s2);
+    if (s3 != s1)
+        hc_feat_set_block(e->rg, x, y, z, s3);
+    uint16_t s4 = edge_update_state(e, s2, nx, ny, nz, D_OPP6[dir], s3);
+    if (s4 != s2)
+        hc_feat_set_block(e->rg, nx, ny, nz, s4);
+}
+
+/* forAllFaces: Z 패스 → Y 패스 → X 패스 (R5 §3) */
+static void update_shape_at_edge(feat_env_t *e, const shape_t *box) {
+    int32_t sx = box->max_x - box->min_x + 1;
+    int32_t sy = box->max_y - box->min_y + 1;
+    int32_t sz = box->max_z - box->min_z + 1;
+    /* Z 패스: rising→NORTH(2), falling→SOUTH(3) */
+    for (int32_t x = 0; x < sx; x++)
+        for (int32_t y = 0; y < sy; y++) {
+            int prev = 0;
+            for (int32_t z = 0; z <= sz; z++) {
+                int cur = z != sz && shape_full(box, box->min_x + x,
+                                                box->min_y + y,
+                                                box->min_z + z);
+                if (!prev && cur)
+                    edge_face(e, box->min_x + x, box->min_y + y,
+                              box->min_z + z, 2);
+                if (prev && !cur)
+                    edge_face(e, box->min_x + x, box->min_y + y,
+                              box->min_z + z - 1, 3);
+                prev = cur;
+            }
+        }
+    /* Y 패스: rising→DOWN(0), falling→UP(1) */
+    for (int32_t z = 0; z < sz; z++)
+        for (int32_t x = 0; x < sx; x++) {
+            int prev = 0;
+            for (int32_t y = 0; y <= sy; y++) {
+                int cur = y != sy && shape_full(box, box->min_x + x,
+                                                box->min_y + y,
+                                                box->min_z + z);
+                if (!prev && cur)
+                    edge_face(e, box->min_x + x, box->min_y + y,
+                              box->min_z + z, 0);
+                if (prev && !cur)
+                    edge_face(e, box->min_x + x, box->min_y + y - 1,
+                              box->min_z + z, 1);
+                prev = cur;
+            }
+        }
+    /* X 패스: rising→WEST(4), falling→EAST(5) */
+    for (int32_t y = 0; y < sy; y++)
+        for (int32_t z = 0; z < sz; z++) {
+            int prev = 0;
+            for (int32_t x = 0; x <= sx; x++) {
+                int cur = x != sx && shape_full(box, box->min_x + x,
+                                                box->min_y + y,
+                                                box->min_z + z);
+                if (!prev && cur)
+                    edge_face(e, box->min_x + x, box->min_y + y,
+                              box->min_z + z, 4);
+                if (prev && !cur)
+                    edge_face(e, box->min_x + x - 1, box->min_y + y,
+                              box->min_z + z, 5);
+                prev = cur;
+            }
+        }
 }
 
 /* ================= TreeFeature.place (R2 §3) ================= */
@@ -830,8 +1119,11 @@ int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
         return 0;
     run_decorators(t, cfg->decorators, cfg->n_decorators, &t->logs,
                    &t->leaves, &t->deco);
-    update_leaves(t);
-    /* StructureTemplate.updateShapeAtEdge — 팔레트상 no-op 가정 (R2 §8) */
+    shape_t *box = update_leaves(t);
+    /* StructureTemplate.updateShapeAtEdge — 경계 vine 등 지지 재계산 (R5;
+     * R2 §8 의 no-op 가정은 golden 07 diff 로 반증됐다) */
+    if (box)
+        update_shape_at_edge(e, box);
     return 1;
 }
 

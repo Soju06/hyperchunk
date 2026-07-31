@@ -1,5 +1,7 @@
 #include "features_internal.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* R3 본문: multiface_growth(glow_lichen) / block_column / vegetation_patch
@@ -298,9 +300,32 @@ static int wv_exposed(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
 
 int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t ox,
                           int32_t oy, int32_t oz) {
+    /* 디버그: HC_VPATCH_DEBUG="ox,oy,oz" 인 호출의 컬럼 이벤트 로그 */
+    int dbg = 0;
+    {
+        const char *dv = getenv("HC_VPATCH_DEBUG");
+        int32_t     dx_, dy_, dz_;
+        if (dv && sscanf(dv, "%d,%d,%d", &dx_, &dy_, &dz_) == 3 &&
+            dx_ == ox && dy_ == oy && dz_ == oz)
+            dbg = 1;
+    }
     int32_t xr = iprov_sample(e->rng, &c->xz_radius) + 1; /* X 먼저 */
     int32_t zr = iprov_sample(e->rng, &c->xz_radius) + 1;
     int32_t dir = c->surface_ceiling ? 1 : -1; /* surface 방향의 dy */
+    if (dbg) {
+        fprintf(stderr, "vpatch (%d,%d,%d) wl=%d xr=%d zr=%d\n", ox, oy, oz,
+                c->waterlogged, xr, zr);
+        FILE *wf = fopen("/tmp/vpworld.txt", "a");
+        if (wf) {
+            fprintf(wf, "INVOCATION\n");
+            for (int32_t wx = ox - 10; wx <= ox + 10; wx++)
+                for (int32_t wz = oz - 10; wz <= oz + 10; wz++)
+                    for (int32_t wy = oy - 14; wy <= oy + 10; wy++)
+                        fprintf(wf, "%d %d %d %s\n", wx, wy, wz,
+                                hc_block_name(get(e, wx, wy, wz)));
+            fclose(wf);
+        }
+    }
 
     static hc_jset_t ground, water;
     hc_jset_init(&ground);
@@ -312,11 +337,17 @@ int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t ox,
             int zedge = (z == -zr || z == zr);
             if (xedge && zedge)
                 continue; /* 모서리: 드로우 0 */
+            float ef = -1.0f;
             if (xedge || zedge) {
                 if (c->extra_edge_chance == 0.0f)
                     continue; /* 드로우 0 */
-                if (hc_wgr_next_float(e->rng) > c->extra_edge_chance)
+                ef = hc_wgr_next_float(e->rng);
+                if (ef > c->extra_edge_chance) {
+                    if (dbg)
+                        fprintf(stderr, " col (%+d,%+d) edge %.4f SKIP\n", x,
+                                z, (double)ef);
                     continue; /* 유지 조건은 f <= chance (포함) */
+                }
             }
             int32_t mx = ox + x, mz = oz + z, my = oy;
             for (int32_t k = 0;
@@ -329,13 +360,30 @@ int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t ox,
                 my -= dir;
             int32_t  sy = my + dir; /* mutable2: 표면 첫 블록 */
             uint16_t surf = get(e, mx, sy, mz);
+            /* isFaceSturdy(FULL, dir.getOpposite()) — floor 는 UP 면 판정:
+             * azalea 상부 슬랩이 통과한다 (수락 후 placeGround 가 비치환
+             * 블록에서 i=0 중단 — 드로우만 태우는 보이지 않는 수락) */
             if (!hc_block_is_air(get(e, mx, my, mz)) ||
-                !hc_block_is_full_cube(surf)) /* isFaceSturdy(FULL) */
+                !hc_featx_face_sturdy_full(surf, c->surface_ceiling ? 0 : 1)) {
+                if (dbg)
+                    fprintf(stderr,
+                            " col (%+d,%+d) edge %.4f my=%d surf(%d)=%s "
+                            "REJ\n",
+                            x, z, (double)ef, my, sy, hc_block_name(surf));
                 continue;
+            }
             int32_t depth = iprov_sample(e->rng, &c->depth);
-            if (c->extra_bottom_chance > 0.0f &&
-                hc_wgr_next_float(e->rng) < c->extra_bottom_chance)
-                depth += 1;
+            float   bf = -1.0f;
+            if (c->extra_bottom_chance > 0.0f) {
+                bf = hc_wgr_next_float(e->rng);
+                if (bf < c->extra_bottom_chance)
+                    depth += 1;
+            }
+            if (dbg)
+                fprintf(stderr,
+                        " col (%+d,%+d) edge %.4f my=%d sy=%d depth=%d "
+                        "bf=%.4f\n",
+                        x, z, (double)ef, my, sy, depth, (double)bf);
             int32_t ty = sy; /* topPos — placeGround 전에 캡처 */
             /* placeGround (R3 §3.1) */
             int     placed = 1;
