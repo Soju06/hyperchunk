@@ -9,10 +9,18 @@
 #   5. install a Fabric server into a scratch dir (fabric-installer)
 #   6. run it on a FRESH world (level-seed=1234567890) with the harness
 #      enabled, forceload chunk (0,0) + its 3x3 neighborhood to FULL
-#   7. collect per-(chunk,stage) dumps under golden/stages/seed<seed>/
+#   7. collect per-(chunk,stage) dumps under golden/stages/seed<seed>/ plus
+#      order.manifest — the features-stage execution order of THIS run
+#      (ADR-007 Tier-2 replay input; see .hermes/notes/task9pre-order/)
 #   8. record every dump file's sha256 in golden/SHA256SUMS
+#      (or golden/stages-alt/SHA256SUMS when dumping an alt bundle)
 #
 # The dump format is documented in golden/stages/FORMAT.md (tracked).
+#
+# NOTE (ADR-007): stages 01-06 are order-free and must be byte-identical
+# across runs; 07_features+ depend on the recorded order and are expected to
+# differ run to run. A regenerated bundle REPLACES the old one as a coherent
+# (dumps + order.manifest) pair.
 #
 # Env overrides:
 #   HYPERCHUNK_RUN_DIR   scratch dir (default tools/golden/work/stagedump-run)
@@ -179,21 +187,61 @@ exec 3>&-
 Y_RANGE="$(grep -m1 'observed y-range' "$LOG" | sed 's/.*observed y-range: //')"
 echo "== observed y-range: ${Y_RANGE:-<not reported>}"
 
+echo "== verifying order.manifest"
+MANIFEST="$DUMP_DIR/order.manifest"
+[ -f "$MANIFEST" ] || { echo "FATAL: no order.manifest produced" >&2; exit 1; }
+if grep -q '^# ERROR' "$MANIFEST"; then
+    echo "FATAL: order.manifest contains ERROR lines (seed capture missed):" >&2
+    grep '^# ERROR' "$MANIFEST" >&2
+    exit 1
+fi
+# seq must be dense ascending from 0 in file order (assigned under the writer lock)
+awk '!/^#/ { if ($1 != n++) { print "FATAL: seq gap at line " NR ": got " $1 " want " n-1; exit 1 } }' "$MANIFEST" || exit 1
+# every grid chunk decorates exactly once
+for CX in $(seq "-$RADIUS" "$RADIUS"); do
+    for CZ in $(seq "-$RADIUS" "$RADIUS"); do
+        N=$(awk -v x="$CX" -v z="$CZ" '!/^#/ && $2==x && $3==z {n++} END{print n+0}' "$MANIFEST")
+        [ "$N" -eq 1 ] || { echo "FATAL: chunk ($CX,$CZ) has $N manifest lines (want 1)" >&2; exit 1; }
+    done
+done
+# decoration seed of chunk (0,0) degenerates to the level seed (block origin
+# 0,0 — recon A3), so it is checkable without reimplementing the RNG here
+if [[ "$SEED" =~ ^[0-9]+$ ]]; then
+    WANT=$(printf '%016x' "$SEED")
+    GOT=$(awk '!/^#/ && $2==0 && $3==0 {print $4}' "$MANIFEST")
+    [ "$GOT" = "$WANT" ] || { echo "FATAL: chunk (0,0) decoration seed $GOT != level seed $WANT" >&2; exit 1; }
+fi
+# out-of-window worldgen access would falsify the 3x3-window sufficiency
+# argument (recon A4) — vanilla logs these; require none
+if grep -qE 'Detected unsafe terrain read during worldgen|Detected setBlock in a far chunk' "$LOG"; then
+    echo "FATAL: out-of-window worldgen access in server log:" >&2
+    grep -E 'Detected unsafe terrain read during worldgen|Detected setBlock in a far chunk' "$LOG" | head >&2
+    exit 1
+fi
+MANIFEST_LINES=$(grep -vc '^#' "$MANIFEST")
+echo "   order.manifest OK: $MANIFEST_LINES features applications, grid covered, seq dense, (0,0) seed check passed"
+
+SUMS=""
 if [ "$DUMP_DIR" = "$ROOT/golden/stages/seed$SEED" ]; then
-    echo "== updating golden/SHA256SUMS with dump hashes"
-    SUMS="$GOLDEN_DIR/SHA256SUMS"
+    SUMS="$GOLDEN_DIR/SHA256SUMS"; SUMS_BASE="$GOLDEN_DIR"; SUMS_PREFIX="stages/seed$SEED"
+elif [ "$DUMP_DIR" = "$ROOT/golden/stages-alt/seed$SEED" ]; then
+    SUMS="$ROOT/golden/stages-alt/SHA256SUMS"; SUMS_BASE="$ROOT/golden/stages-alt"; SUMS_PREFIX="seed$SEED"
+fi
+if [ -n "$SUMS" ]; then
+    echo "== updating $SUMS with dump + manifest hashes"
     touch "$SUMS"
-    grep -v "^[0-9a-f]*  stages/seed$SEED/" "$SUMS" > "$SUMS.tmp" || true
-    (cd "$GOLDEN_DIR" && find "stages/seed$SEED" -name '*.txt' -not -name 'FORMAT*' | sort | xargs sha256sum) >> "$SUMS.tmp"
+    grep -v "^[0-9a-f]*  $SUMS_PREFIX/" "$SUMS" > "$SUMS.tmp" || true
+    (cd "$SUMS_BASE" && find "$SUMS_PREFIX" \( -name '*.txt' -o -name 'order.manifest' \) -not -name 'FORMAT*' | sort | xargs sha256sum) >> "$SUMS.tmp"
     sort -k2 "$SUMS.tmp" > "$SUMS"
     rm -f "$SUMS.tmp"
 else
-    echo "== custom HYPERCHUNK_DUMP_DIR; skipping golden/SHA256SUMS update"
+    echo "== custom HYPERCHUNK_DUMP_DIR; skipping SHA256SUMS update"
 fi
 
 DUMPED_STAGES=$(find "$DUMP_DIR" -name '*.blocks.txt' -printf '%f\n' | sed 's/\.blocks\.txt//' | sort -u | tr '\n' ' ')
 echo "== stage dumps complete"
-echo "   dir:    $DUMP_DIR"
-echo "   chunks: $(find "$DUMP_DIR" -maxdepth 1 -type d -name 'c.*' | wc -l)"
-echo "   stages: $DUMPED_STAGES"
-echo "   files:  $(find "$DUMP_DIR" -name '*.txt' | wc -l) (hashes in golden/SHA256SUMS)"
+echo "   dir:      $DUMP_DIR"
+echo "   chunks:   $(find "$DUMP_DIR" -maxdepth 1 -type d -name 'c.*' | wc -l)"
+echo "   stages:   $DUMPED_STAGES"
+echo "   files:    $(find "$DUMP_DIR" -name '*.txt' | wc -l) (hashes: ${SUMS:-not updated})"
+echo "   manifest: $MANIFEST_LINES applications, sha256 $(sha256sum "$MANIFEST" | cut -d' ' -f1)"

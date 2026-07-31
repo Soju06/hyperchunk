@@ -87,6 +87,27 @@ public final class StageDumper {
         return DUMP_DIR != null;
     }
 
+    // Configuration accessors for OrderManifest (same run parameters, one source).
+    public static Path dumpDir() {
+        return DUMP_DIR;
+    }
+
+    public static String dimension() {
+        return DIMENSION;
+    }
+
+    public static int centerX() {
+        return CENTER_X;
+    }
+
+    public static int centerZ() {
+        return CENTER_Z;
+    }
+
+    public static int radius() {
+        return RADIUS;
+    }
+
     /** Only steps of the generation pyramid — never dump on chunk *loading*. */
     public static boolean isGenerationStep(ChunkStep step, ChunkStatus status) {
         try {
