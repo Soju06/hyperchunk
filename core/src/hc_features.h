@@ -69,36 +69,76 @@ hc_chunk_t *hc_feat_region_chunk(const hc_feat_region_t *rg, int32_t cx,
                                  int32_t cz);
 uint16_t    hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
                               int32_t z);
-/* ensureCanWrite + states 쓰기. 하이트맵 안 건드림 (ore 벌크 경로; spring/
- * magma 의 flag-2 경로도 9a 에선 동일 — FINAL 맵 유지는 9b). 성공 1. */
+/* ensureCanWrite + states 쓰기 + FINAL 하이트맵 4종 유지 (ProtoChunk
+ * .setBlockState 의 flag-2/3 경로 — 지연 프라임 후 증분 update, task9pre
+ * A4 §4). ore 본문은 BulkSectionAccess 등가로 이 함수를 우회한다 (맵
+ * 무갱신 — 광석은 불투명→불투명 치환이라 순수함수 등가). 성공 1. */
 int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
                       uint16_t id);
-/* ctx.getHeight(type,x,z) = getFirstAvailable (top blocking y + 1) — 청크
- * 저장값 그대로 (task9a A2 §5) */
-int32_t hc_feat_height_wg(const hc_feat_region_t *rg, int hm_type, int32_t x,
-                          int32_t z);
+/* ctx.getHeight(type,x,z) = getFirstAvailable (top blocking y + 1).
+ * *_WG 는 frozen 저장값; FINAL 4종은 지연 프라임 (읽기 = 단일 타입 프라임,
+ * ChunkAccess.getHeight 의 lazy 경로) — 그래서 region 이 non-const. */
+int32_t hc_feat_height(hc_feat_region_t *rg, int hm_type, int32_t x,
+                       int32_t z);
+/* 데코 시작 시 센터 청크 FINAL 4종 재프라임 (ChunkStatusTasks
+ * .generateFeatures 진입부의 primeHeightmaps — 블록 순수함수 재계산) */
+void hc_feat_prime_final_maps(hc_chunk_t *c);
 
 /* --- 컴파일된 배치 파이프라인 --- */
 
 enum {
     HC_HM_OCEAN_FLOOR_WG = 0,
     HC_HM_WORLD_SURFACE_WG = 1,
-    /* FINAL(live) 맵 — step 9 유지관리와 함께 9b. 컴파일은 허용하고
-     * (그리드 밖 바이옴의 step<=8 feature 가 참조) 실행 도달 시 즉사. */
-    HC_HM_LIVE_9B = 2,
+    /* FINAL(live) 맵 — hc_chunk_t.heightmap_final[type-2] */
+    HC_HM_OCEAN_FLOOR = 2,
+    HC_HM_WORLD_SURFACE = 3,
+    HC_HM_MOTION_BLOCKING = 4,
+    HC_HM_MOTION_BLOCKING_NO_LEAVES = 5,
 };
 
 enum {
     HC_IP_CONST = 0,
     HC_IP_UNIFORM,
-    /* clamped_normal 등 (가우시안 드로우) — 그리드 밖 step<=8 feature 가
-     * 참조. 컴파일 허용, 샘플 도달 시 즉사 (9b). */
-    HC_IP_UNSUPPORTED_9B,
+    HC_IP_TRAPEZOID,     /* [a,b], plateau c — TrapezoidInt (9b R4) */
+    HC_IP_WEIGHTED_LIST, /* WeightedListInt — nextInt(total) 픽 후 중첩 샘플 */
+    /* clamped_normal 등 (가우시안 드로우) — 그리드 밖 feature 가 참조.
+     * 컴파일 허용, 샘플 도달 시 즉사. */
+    HC_IP_UNSUPPORTED,
 };
-typedef struct {
+typedef struct hc_iprov hc_iprov_t;
+typedef struct hc_iprov_entry hc_iprov_entry_t;
+struct hc_iprov {
+    uint8_t           kind;
+    int32_t           a, b, c; /* CONST: a / UNIFORM: [a,b] / TRAP: +plateau c */
+    int32_t           n_entries, total_weight; /* WEIGHTED_LIST */
+    hc_iprov_entry_t *entries;
+};
+struct hc_iprov_entry {
+    int32_t   weight;
+    hc_iprov_t prov;
+};
+
+/* --- BlockState provider (step 9 본문용, task9b R3/R4) --- */
+enum {
+    HC_SP_SIMPLE = 0,     /* 드로우 0 */
+    HC_SP_WEIGHTED,       /* WeightedRandom: nextInt(total) 1 드로우 */
+    HC_SP_RANDOMIZED_INT, /* source 샘플 후 property 값 IntProvider 샘플 */
+};
+typedef struct hc_sprov hc_sprov_t;
+struct hc_sprov {
     uint8_t kind;
-    int32_t a, b; /* CONST: a / UNIFORM: [a,b] */
-} hc_iprov_t;
+    uint16_t state; /* SIMPLE */
+    int32_t n_entries, total_weight; /* WEIGHTED */
+    struct {
+        int32_t  weight;
+        uint16_t state;
+    } *entries;
+    hc_sprov_t *source; /* RANDOMIZED_INT */
+    hc_iprov_t  values;
+    /* randomized_int 의 property — 현 데이터는 cave_vines "age" 뿐.
+     * 적용은 블록 패밀리별 명시 매핑 (features.c) — 모르면 컴파일 실패. */
+    uint8_t     prop_age;
+};
 
 enum { HC_HP_UNIFORM = 0, HC_HP_TRAPEZOID, HC_HP_VERY_BIASED_TO_BOTTOM };
 typedef struct {
@@ -108,19 +148,25 @@ typedef struct {
     int32_t inner;        /* very_biased_to_bottom */
 } hc_hprov_t;
 
-/* 블록 술어 (task9a A2 §6) — 전부 RNG 무소비 */
+/* 블록 술어 (task9a A2 §6 + task9b R2/R4) — 전부 RNG 무소비 */
 enum {
-    HC_BP_MATCHING_FLUIDS_WATER = 0, /* 소스 물만 (flowing 불일치) */
+    HC_BP_MATCHING_FLUIDS_WATER = 0, /* FluidState.is(water) — 소스+waterlogged */
     HC_BP_MATCHING_BLOCK_TAG, /* matching_block_tag + matching_blocks (블록 단위) */
     HC_BP_NOT,
     HC_BP_ALL_OF,
+    HC_BP_ANY_OF, /* 단락 OR, 리스트 순 */
     HC_BP_INSIDE_WORLD_BOUNDS,
-    HC_BP_SOLID, /* state.isSolid() */
+    HC_BP_SOLID,           /* state.isSolid() */
+    HC_BP_WOULD_SURVIVE,   /* state.canSurvive — 블록별 디스패치 (R2) */
+    HC_BP_HAS_STURDY_FACE, /* isFaceSturdy(pos, direction) */
+    HC_BP_TRUE,
 };
 typedef struct hc_bpred hc_bpred_t;
 struct hc_bpred {
     uint8_t    kind;
     int8_t     off[3]; /* StateTestingPredicate/inside_world_bounds offset */
+    const char *ws_name; /* WOULD_SURVIVE 대상 블록 이름 (arena 사본) */
+    int8_t     dir;    /* HAS_STURDY_FACE: 0=down,1=up,2=N,3=S,4=W,5=E */
     uint64_t   tag_mask[(HC_B_COUNT + 63) / 64];
     hc_bpred_t *children;
     int32_t    n_children;
@@ -137,6 +183,12 @@ enum {
     HC_PM_BLOCK_PRED,
     HC_PM_BIOME,
     HC_PM_RANDOM_OFFSET,
+    HC_PM_SURFACE_WATER_DEPTH, /* WS−OF (live) <= max — 드로우 0 (9b) */
+    HC_PM_NOISE_THRESHOLD_COUNT, /* BIOME_INFO_NOISE 카운트 — 드로우 0 (9b) */
+    /* 그리드 밖 바이옴 전용 modifier — 컴파일 허용, 실행 도달 시 즉사.
+     * (합집합에 든 feature 의 파이프라인은 전부 실행되므로, 합집합 밖
+     * feature 만 이 마커를 가질 수 있다.) */
+    HC_PM_DIE,
 };
 typedef struct {
     uint8_t    kind;
@@ -145,21 +197,39 @@ typedef struct {
     hc_iprov_t y_spread;  /* random_offset */
     hc_hprov_t height;    /* height_range */
     uint8_t    hm_type;   /* heightmap / surf_rel */
-    int32_t    min_incl, max_incl; /* surf_rel (미지정: INT32_MIN/MAX) */
+    int32_t    min_incl, max_incl; /* surf_rel / surface_water_depth(max) */
     int8_t     scan_dy;   /* env_scan: +1 up / -1 down */
     int32_t    max_steps; /* env_scan */
     uint8_t    has_allowed; /* env_scan: allowed_search_condition 존재 */
     hc_bpred_t pred;      /* block_pred / env_scan target */
     hc_bpred_t allowed;   /* env_scan allowed (has_allowed) */
+    double     noise_level; /* noise_threshold_count */
+    int32_t    below_noise, above_noise;
+    const char *die_what; /* HC_PM_DIE */
 } hc_pmod_t;
 
 /* --- 컴파일된 configured feature 본문 --- */
+
+typedef struct hc_pfeat hc_pfeat_t;
 
 enum {
     HC_CF_ORE = 0,           /* minecraft:ore (task9a A3) */
     HC_CF_SPRING,            /* minecraft:spring_feature (A4, 드로우 0) */
     HC_CF_UNDERWATER_MAGMA,  /* minecraft:underwater_magma (A4) */
-    HC_CF_MONSTER_ROOM,      /* 검증 단계만 — 성공 시 fail-loud (9b) */
+    HC_CF_MONSTER_ROOM,      /* 검증 단계만 — 성공 시 fail-loud */
+    /* --- step 9 (task9b R2/R3/R4) --- */
+    HC_CF_TREE,              /* minecraft:tree */
+    HC_CF_FALLEN_TREE,
+    HC_CF_RANDOM_SELECTOR,
+    HC_CF_RANDOM_BOOLEAN,
+    HC_CF_SIMPLE_RANDOM_SELECTOR,
+    HC_CF_VEGETATION_PATCH,  /* +waterlogged 플래그 */
+    HC_CF_BLOCK_COLUMN,
+    HC_CF_MULTIFACE_GROWTH,
+    HC_CF_SIMPLE_BLOCK,
+    HC_CF_VINES,
+    HC_CF_BAMBOO,
+    HC_CF_FREEZE_TOP_LAYER,
     HC_CF_UNIMPLEMENTED,     /* 파이프라인만 — 본문 도달 시 placed=-1 */
 };
 
@@ -188,8 +258,70 @@ typedef struct {
     float   placement_prob;
 } hc_umagma_cfg_t;
 
+/* --- step 9 본문 config (arena 할당, 포인터로 연결) --- */
+
 typedef struct {
-    const char *name; /* "minecraft:ore_dirt" (arena 사본) */
+    int32_t n_entries;
+    struct {
+        float       chance;
+        hc_pfeat_t *pf; /* 중첩 placed feature (place() 경로 — biome 금지) */
+    } *entries;
+    hc_pfeat_t *dflt;
+} hc_rsel_cfg_t;
+
+typedef struct {
+    hc_pfeat_t *on_true, *on_false;
+} hc_rbool_cfg_t;
+
+typedef struct {
+    int32_t      n;
+    hc_pfeat_t **feats;
+} hc_srsel_cfg_t;
+
+typedef struct {
+    uint8_t    waterlogged;     /* waterlogged_vegetation_patch */
+    uint8_t    surface_ceiling; /* surface: 0 floor / 1 ceiling */
+    hc_iprov_t xz_radius, depth;
+    float      extra_bottom_chance, extra_edge_chance, veg_chance;
+    int32_t    vertical_range;
+    uint64_t   replaceable[(HC_B_COUNT + 63) / 64];
+    hc_sprov_t ground;
+    hc_pfeat_t *vegetation;
+} hc_vpatch_cfg_t;
+
+typedef struct {
+    int32_t n_layers;
+    struct {
+        hc_iprov_t height;
+        hc_sprov_t prov;
+    } *layers;
+    int8_t     dir_dy; /* +1 up / -1 down */
+    uint8_t    prioritize_tip;
+    hc_bpred_t allowed;
+} hc_bcol_cfg_t;
+
+typedef struct {
+    int32_t  search_range;
+    uint8_t  can_place_on_floor, can_place_on_ceiling, can_place_on_wall;
+    float    chance_of_spreading;
+    uint64_t can_place_on[(HC_B_COUNT + 63) / 64];
+} hc_mface_cfg_t;
+
+typedef struct {
+    hc_sprov_t to_place;
+} hc_sblock_cfg_t;
+
+typedef struct {
+    float probability;
+} hc_bamboo_cfg_t;
+
+/* tree / fallen_tree config — R2 recon 확정 후 features_tree.c 와 함께 */
+typedef struct hc_tree_cfg hc_tree_cfg_t;
+typedef struct hc_ftree_cfg hc_ftree_cfg_t;
+
+struct hc_pfeat {
+    const char *name; /* "minecraft:ore_dirt" (arena 사본; 인라인은 NULL) */
+    const char *unimpl_why; /* UNIMPLEMENTED 로 강등된 이유 (진단용) */
     int32_t     n_mods;
     hc_pmod_t  *mods;
     uint8_t     cf_kind;
@@ -197,8 +329,18 @@ typedef struct {
         hc_ore_cfg_t    ore;
         hc_spring_cfg_t spring;
         hc_umagma_cfg_t umagma;
+        hc_rsel_cfg_t   *rsel;
+        hc_rbool_cfg_t  *rbool;
+        hc_srsel_cfg_t  *srsel;
+        hc_vpatch_cfg_t *vpatch;
+        hc_bcol_cfg_t   *bcol;
+        hc_mface_cfg_t  *mface;
+        hc_sblock_cfg_t *sblock;
+        hc_bamboo_cfg_t *bamboo;
+        hc_tree_cfg_t   *tree;
+        hc_ftree_cfg_t  *ftree;
     } cf;
-} hc_pfeat_t;
+};
 
 /* --- feature 레지스트리 (FeatureSorter 테이블 + 바이옴 멤버십) --- */
 
@@ -206,8 +348,16 @@ enum { HC_FEAT_STEPS = 11 };
 
 typedef struct {
     int32_t    counts[HC_FEAT_STEPS];
-    hc_pfeat_t *steps[HC_FEAT_STEPS];   /* step 9/10 은 파이프라인 미컴파일
-                                         * (mods NULL, walk_max_step 로 배제) */
+    hc_pfeat_t *steps[HC_FEAT_STEPS];   /* walk_max_step 초과 step 은
+                                         * 파이프라인 미컴파일 (mods NULL) */
+    /* 본문 canSurvive 가 읽는 태그 마스크 (reg_init 이 확장) */
+    uint64_t tag_supports_vegetation[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_supports_bamboo[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_podzol_replaceable[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_supports_azalea[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_supports_small_dripleaf[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_supports_big_dripleaf[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_supports_cocoa[(HC_B_COUNT + 63) / 64];
     /* 멤버십 비트셋: member[step][biome_id * words + w]. biome_id 는
      * hc_biome_reg_t 인턴 id — reg_init 이 biome_features 의 전 바이옴을
      * 인턴한다. */
@@ -245,21 +395,24 @@ typedef struct {
 /* 데코 시드 — 순수 함수 (manifest 시드 열 검증용) */
 int64_t hc_features_decoration_seed(int64_t level_seed, int32_t cx, int32_t cz);
 
-/* 한 placed feature 의 파이프라인+본문 실행 (features.c — walk 내부용) */
+/* 한 placed feature 의 파이프라인+본문 실행 (features.c — walk 내부용).
+ * biomes/sea_level 은 freeze_top_layer 온도 게이트가 읽는다. */
 void hc_feat_run_placed(hc_feat_region_t *rg, hc_wgr_t *rng,
                         const hc_feat_reg_t *reg, const hc_biome_view_t *view,
+                        const hc_biome_reg_t *biomes, int32_t sea_level,
                         const hc_pfeat_t *pf, int32_t step, int32_t index,
                         int32_t origin_x, int32_t origin_y, int32_t origin_z,
                         const hc_feat_trace_t *trace);
 
 /* 한 청크의 데코 적용. 호출자가 manifest seq 순서로 부른다 (ADR-008 D2
  * REPLAY). rg->center 는 이 함수가 설정. walk_max_step: 이 step 까지만
- * 파이프라인 실행 (9a: 8; RNG 는 feature 마다 재시드라 상위 step 생략이
+ * 파이프라인 실행 (RNG 는 feature 마다 재시드라 상위 step 생략이
  * 하위에 영향 없음 — task9a A5 §"skipping is RNG-safe"). trace NULL 허용. */
 void hc_gen_features_chunk(hc_feat_region_t *rg, int32_t cx, int32_t cz,
                            int64_t level_seed, const hc_feat_reg_t *reg,
                            const hc_biome_view_t *view,
-                           const hc_biome_reg_t *biomes, int32_t walk_max_step,
+                           const hc_biome_reg_t *biomes, int32_t sea_level,
+                           int32_t walk_max_step,
                            const hc_feat_trace_t *trace);
 
 #endif /* HC_FEATURES_H */

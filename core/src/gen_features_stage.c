@@ -24,12 +24,18 @@ int64_t hc_features_decoration_seed(int64_t level_seed, int32_t cx,
 void hc_gen_features_chunk(hc_feat_region_t *rg, int32_t cx, int32_t cz,
                            int64_t level_seed, const hc_feat_reg_t *reg,
                            const hc_biome_view_t *view,
-                           const hc_biome_reg_t *biomes, int32_t walk_max_step,
+                           const hc_biome_reg_t *biomes, int32_t sea_level,
+                           int32_t walk_max_step,
                            const hc_feat_trace_t *trace) {
-    (void)biomes;
     hc_mth_trig_init();
     rg->center_cx = cx;
     rg->center_cz = cz;
+
+    /* ChunkStatusTasks.generateFeatures 진입부: 센터 청크 FINAL 하이트맵
+     * 4종을 현재 블록에서 재프라임 (task9pre A4 §4.2 — 이웃 데코가 남긴
+     * 증분 상태는 여기서 재계산으로 대체된다; 결과는 등가지만 바닐라
+     * 순서를 그대로 둔다). */
+    hc_feat_prime_final_maps(hc_feat_region_chunk(rg, cx, cz));
 
     hc_wgr_t rng;
     int64_t deco = hc_wgr_set_decoration_seed(&rng, level_seed, cx * 16,
@@ -75,8 +81,9 @@ void hc_gen_features_chunk(hc_feat_region_t *rg, int32_t cx, int32_t cz,
             if (!((idxset[i >> 6] >> (i & 63)) & 1u))
                 continue;
             hc_wgr_set_feature_seed(&rng, deco, i, step);
-            hc_feat_run_placed(rg, &rng, reg, view, &reg->steps[step][i], step,
-                               i, origin_x, origin_y, origin_z, trace);
+            hc_feat_run_placed(rg, &rng, reg, view, biomes, sea_level,
+                               &reg->steps[step][i], step, i, origin_x,
+                               origin_y, origin_z, trace);
         }
     }
 }

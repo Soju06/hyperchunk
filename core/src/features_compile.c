@@ -1,5 +1,6 @@
 #include "hc_features.h"
 
+#include <stdio.h>
 #include <string.h>
 
 /* reference JSON → 컴파일된 feature 레지스트리.
@@ -11,18 +12,40 @@
  *    테이블 (hc_df_source_t 규약 — 이름은 "minecraft:..." 정규화)
  *  - tags: reference/tags/block
  *
- * 실패는 전부 -1 + *err (정적 문자열) — fail-loud (ADR-009 D3).
- * walk_max_step 이하 step 의 feature 만 파이프라인/본문을 컴파일한다.
- * 모르는 modifier/앵커/프로바이더는 즉시 실패다. 본문은 ore/spring/
- * underwater_magma/monster_room 만 구현이고 나머지는 UNIMPLEMENTED
- * (파이프라인은 실행되고 본문 도달 시 placed=-1 로 표시 — 9a 그리드에선
- * npos==0 검증으로 도달하지 않음이 golden 트레이스로 증명된다). */
+ * 실패 정책 (ADR-009 D3 fail-loud, 9b 확장):
+ *  - 알려진 타입의 config 이 어긋나면 즉시 -1 + *err (데이터팩은 고정).
+ *  - 모르는 modifier/provider 타입은 HC_PM_DIE 마커로 컴파일 — 3x3 바이옴
+ *    합집합에 든 feature 의 파이프라인은 전 청크에서 실행되므로, 마커가
+ *    실행에 도달하면 그 즉시 죽는다 (컴파일-시 실패와 같은 소리 크기).
+ *    합집합 밖 feature (다른 바이옴 전용) 만 마커를 안고 살아남는다.
+ *  - 모르는 본문 타입은 UNIMPLEMENTED — 본문 도달 시 placed=-1 트레이스
+ *    (그리드 골든에서 도달 0 이 증명된 것만 남는다). */
 
 #define FAIL(msg)          \
     do {                   \
-        *err = (msg);      \
+        *fc->err = (msg);  \
         return -1;         \
     } while (0)
+
+enum { FC_MAX_DEPTH = 10, FC_CACHE = 128 };
+
+typedef struct {
+    hc_arena_t           *arena;
+    const hc_df_source_t *placed;
+    int32_t               n_placed;
+    const hc_df_source_t *configured;
+    int32_t               n_configured;
+    const hc_df_source_t *tags;
+    int32_t               n_tags;
+    const char          **err;
+    /* 중첩 placed feature 이름 캐시 (random_selector 등이 같은 트리를
+     * 여러 feature 에서 참조) */
+    struct {
+        const char *name;
+        hc_pfeat_t *pf;
+    } cache[FC_CACHE];
+    int32_t n_cache;
+} fc_t;
 
 static const hc_json_t *find_source(const hc_df_source_t *tab, int32_t n,
                                     const char *name, int32_t len) {
@@ -47,13 +70,13 @@ static void tag_mark(uint64_t *bits, const char *name, int32_t len) {
     }
 }
 
-static int tag_expand(uint64_t *bits, const char *name, int32_t len,
-                      const hc_df_source_t *tags, int32_t n_tags, int depth,
-                      const char **err) {
+static int tag_expand(fc_t *fc, uint64_t *bits, const char *name, int32_t len,
+                      int depth) {
     if (depth > 8)
         FAIL("block tag recursion too deep");
     if (len > 0 && name[0] == '#') {
-        const hc_json_t *tag = find_source(tags, n_tags, name + 1, len - 1);
+        const hc_json_t *tag =
+            find_source(fc->tags, fc->n_tags, name + 1, len - 1);
         if (!tag)
             FAIL("referenced block tag not loaded");
         const hc_json_t *values = hc_json_get(tag, "values");
@@ -62,7 +85,7 @@ static int tag_expand(uint64_t *bits, const char *name, int32_t len,
         for (const hc_json_t *v = values->child; v; v = v->next) {
             if (v->kind != HC_JSON_STR)
                 FAIL("tag value not string");
-            if (tag_expand(bits, v->s, v->slen, tags, n_tags, depth + 1, err))
+            if (tag_expand(fc, bits, v->s, v->slen, depth + 1))
                 return -1;
         }
         return 0;
@@ -71,62 +94,78 @@ static int tag_expand(uint64_t *bits, const char *name, int32_t len,
     return 0;
 }
 
-/* "minecraft:x" 접두 정규화: 순수 이름이면 그대로 비교에 쓰도록 (레퍼런스
- * 테이블 이름엔 이미 "minecraft:" 가 붙어 있다) */
 static const hc_json_t *find_named(const hc_df_source_t *tab, int32_t n,
                                    const hc_json_t *sref) {
     return find_source(tab, n, sref->s, sref->slen);
 }
 
-/* --- 블록스테이트 {"Name":..,"Properties":{..}} → 내부 id --- */
+/* --- 블록스테이트 {"Name":..,"Properties":{..}} → 내부 id ---
+ * 캐노니컬 직렬화 = 프로퍼티 키 알파벳 오름차순 (골든 팔레트/26.2
+ * BlockState#toString 과 동일). 반환 -1 = 미등재, -2 = 형식 오류. */
 
-static int32_t compile_blockstate(const hc_json_t *state, const char **err) {
+static int32_t compile_blockstate(fc_t *fc, const hc_json_t *state) {
     const hc_json_t *name = hc_json_get(state, "Name");
     if (!name || name->kind != HC_JSON_STR) {
-        *err = "blockstate Name missing";
+        *fc->err = "blockstate Name missing";
         return -2;
     }
-    char buf[128];
+    char buf[192];
     if (name->slen >= (int32_t)sizeof buf) {
-        *err = "blockstate name too long";
+        *fc->err = "blockstate name too long";
         return -2;
     }
     memcpy(buf, name->s, (size_t)name->slen);
     int32_t len = name->slen;
     const hc_json_t *props = hc_json_get(state, "Properties");
     if (props) {
-        if (props->kind != HC_JSON_OBJ || props->count != 1) {
-            /* ore/spring 타겟은 최대 1 프로퍼티 (redstone lit) — 복수
-             * 프로퍼티 직렬화 순서는 상태 정의 순이라 별도 확인 필요 */
-            *err = "multi-property blockstate unsupported";
+        if (props->kind != HC_JSON_OBJ || props->count < 1 ||
+            props->count > 8) {
+            *fc->err = "blockstate properties malformed";
             return -2;
         }
-        const hc_json_t *p = props->child;
-        if (p->kind != HC_JSON_STR) {
-            *err = "blockstate property not string";
-            return -2;
+        const hc_json_t *sorted[8];
+        int32_t          np = 0;
+        for (const hc_json_t *p = props->child; p; p = p->next) {
+            if (p->kind != HC_JSON_STR) {
+                *fc->err = "blockstate property not string";
+                return -2;
+            }
+            int32_t at = np++;
+            while (at > 0) {
+                const hc_json_t *q = sorted[at - 1];
+                int32_t          m = q->klen < p->klen ? q->klen : p->klen;
+                int              c = memcmp(q->key, p->key, (size_t)m);
+                if (c < 0 || (c == 0 && q->klen <= p->klen))
+                    break;
+                sorted[at] = sorted[at - 1];
+                at--;
+            }
+            sorted[at] = p;
         }
-        if (len + p->klen + p->slen + 3 >= (int32_t)sizeof buf) {
-            *err = "blockstate canonical form too long";
-            return -2;
+        for (int32_t i = 0; i < np; i++) {
+            const hc_json_t *p = sorted[i];
+            if (len + p->klen + p->slen + 3 >= (int32_t)sizeof buf) {
+                *fc->err = "blockstate canonical form too long";
+                return -2;
+            }
+            buf[len++] = i == 0 ? '[' : ',';
+            memcpy(buf + len, p->key, (size_t)p->klen);
+            len += p->klen;
+            buf[len++] = '=';
+            memcpy(buf + len, p->s, (size_t)p->slen);
+            len += p->slen;
         }
-        buf[len++] = '[';
-        memcpy(buf + len, p->key, (size_t)p->klen);
-        len += p->klen;
-        buf[len++] = '=';
-        memcpy(buf + len, p->s, (size_t)p->slen);
-        len += p->slen;
         buf[len++] = ']';
     }
     int32_t id = hc_block_by_name(buf, len);
     if (id < 0)
-        *err = "blockstate not in hc_blocks table";
-    return id; /* -1 = 미등재 */
+        *fc->err = "blockstate not in hc_blocks table";
+    return id;
 }
 
 /* --- VerticalAnchor / providers --- */
 
-static int anchor_resolve(const hc_json_t *a, int32_t *out, const char **err) {
+static int anchor_resolve(fc_t *fc, const hc_json_t *a, int32_t *out) {
     /* 오버월드 고정: minGenY -64, genDepth 384 (task9a A2 §3.3) */
     const hc_json_t *v;
     if ((v = hc_json_get(a, "absolute")) && v->kind == HC_JSON_NUM) {
@@ -144,7 +183,11 @@ static int anchor_resolve(const hc_json_t *a, int32_t *out, const char **err) {
     FAIL("unknown vertical anchor");
 }
 
-static int iprov_compile(const hc_json_t *j, hc_iprov_t *p, const char **err) {
+static int iprov_compile(fc_t *fc, const hc_json_t *j, hc_iprov_t *p,
+                         int depth) {
+    memset(p, 0, sizeof *p);
+    if (depth > FC_MAX_DEPTH)
+        FAIL("int provider recursion too deep");
     if (j->kind == HC_JSON_NUM) {
         p->kind = HC_IP_CONST;
         p->a = (int32_t)j->num;
@@ -169,12 +212,53 @@ static int iprov_compile(const hc_json_t *j, hc_iprov_t *p, const char **err) {
         p->b = (int32_t)hi->num;
         return 0;
     }
-    /* clamped_normal 등 — 샘플 도달 시 즉사 (9b) */
-    p->kind = HC_IP_UNSUPPORTED_9B;
+    if (t && hc_json_streq(t, "minecraft:trapezoid")) {
+        const hc_json_t *lo = hc_json_get(j, "min");
+        const hc_json_t *hi = hc_json_get(j, "max");
+        const hc_json_t *pl = hc_json_get(j, "plateau");
+        if (!lo || !hi || lo->kind != HC_JSON_NUM || hi->kind != HC_JSON_NUM)
+            FAIL("trapezoid int provider bounds missing");
+        p->kind = HC_IP_TRAPEZOID;
+        p->a = (int32_t)lo->num;
+        p->b = (int32_t)hi->num;
+        p->c = pl && pl->kind == HC_JSON_NUM ? (int32_t)pl->num : 0;
+        return 0;
+    }
+    if (t && hc_json_streq(t, "minecraft:weighted_list")) {
+        const hc_json_t *dist = hc_json_get(j, "distribution");
+        if (!dist || dist->kind != HC_JSON_ARR || dist->count < 1)
+            FAIL("weighted_list distribution missing");
+        p->kind = HC_IP_WEIGHTED_LIST;
+        p->n_entries = dist->count;
+        p->entries = hc_arena_alloc(
+            fc->arena, sizeof(hc_iprov_entry_t) * (size_t)dist->count,
+            _Alignof(hc_iprov_entry_t));
+        if (!p->entries)
+            FAIL("arena exhausted (weighted_list)");
+        int32_t i = 0, total = 0;
+        for (const hc_json_t *e = dist->child; e; e = e->next, i++) {
+            const hc_json_t *w = hc_json_get(e, "weight");
+            const hc_json_t *d = hc_json_get(e, "data");
+            if (!w || w->kind != HC_JSON_NUM || !d)
+                FAIL("weighted_list entry malformed");
+            p->entries[i].weight = (int32_t)w->num;
+            if (p->entries[i].weight < 0)
+                FAIL("weighted_list negative weight");
+            total += p->entries[i].weight;
+            if (iprov_compile(fc, d, &p->entries[i].prov, depth + 1))
+                return -1;
+        }
+        p->total_weight = total;
+        if (total <= 0)
+            FAIL("weighted_list zero total weight");
+        return 0;
+    }
+    /* clamped_normal 등 — 샘플 도달 시 즉사 */
+    p->kind = HC_IP_UNSUPPORTED;
     return 0;
 }
 
-static int hprov_compile(const hc_json_t *j, hc_hprov_t *p, const char **err) {
+static int hprov_compile(fc_t *fc, const hc_json_t *j, hc_hprov_t *p) {
     const hc_json_t *t = hc_json_get(j, "type");
     if (!t || t->kind != HC_JSON_STR)
         FAIL("height provider without type");
@@ -182,7 +266,7 @@ static int hprov_compile(const hc_json_t *j, hc_hprov_t *p, const char **err) {
     const hc_json_t *hi = hc_json_get(j, "max_inclusive");
     if (!lo || !hi)
         FAIL("height provider bounds missing");
-    if (anchor_resolve(lo, &p->min_y, err) || anchor_resolve(hi, &p->max_y, err))
+    if (anchor_resolve(fc, lo, &p->min_y) || anchor_resolve(fc, hi, &p->max_y))
         return -1;
     p->plateau = 0;
     p->inner = 0;
@@ -211,12 +295,86 @@ static int hprov_compile(const hc_json_t *j, hc_hprov_t *p, const char **err) {
     FAIL("unsupported height provider type");
 }
 
+/* --- BlockState provider --- */
+
+static int sprov_compile(fc_t *fc, const hc_json_t *j, hc_sprov_t *p,
+                         int depth) {
+    memset(p, 0, sizeof *p);
+    if (depth > FC_MAX_DEPTH)
+        FAIL("state provider recursion too deep");
+    const hc_json_t *t = hc_json_get(j, "type");
+    if (!t || t->kind != HC_JSON_STR)
+        FAIL("state provider without type");
+    if (hc_json_streq(t, "minecraft:simple_state_provider")) {
+        const hc_json_t *s = hc_json_get(j, "state");
+        if (!s)
+            FAIL("simple_state_provider without state");
+        int32_t id = compile_blockstate(fc, s);
+        if (id < 0)
+            return -1;
+        p->kind = HC_SP_SIMPLE;
+        p->state = (uint16_t)id;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:weighted_state_provider")) {
+        const hc_json_t *entries = hc_json_get(j, "entries");
+        if (!entries || entries->kind != HC_JSON_ARR || entries->count < 1)
+            FAIL("weighted_state_provider entries missing");
+        p->kind = HC_SP_WEIGHTED;
+        p->n_entries = entries->count;
+        p->entries = hc_arena_alloc(
+            fc->arena, sizeof p->entries[0] * (size_t)entries->count,
+            _Alignof(int32_t));
+        if (!p->entries)
+            FAIL("arena exhausted (weighted states)");
+        int32_t i = 0, total = 0;
+        for (const hc_json_t *e = entries->child; e; e = e->next, i++) {
+            const hc_json_t *w = hc_json_get(e, "weight");
+            const hc_json_t *d = hc_json_get(e, "data");
+            if (!w || w->kind != HC_JSON_NUM || !d)
+                FAIL("weighted_state_provider entry malformed");
+            int32_t id = compile_blockstate(fc, d);
+            if (id < 0)
+                return -1;
+            p->entries[i].weight = (int32_t)w->num;
+            p->entries[i].state = (uint16_t)id;
+            if (p->entries[i].weight < 0)
+                FAIL("weighted state negative weight");
+            total += p->entries[i].weight;
+        }
+        p->total_weight = total;
+        if (total <= 0)
+            FAIL("weighted state zero total weight");
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:randomized_int_state_provider")) {
+        const hc_json_t *prop = hc_json_get(j, "property");
+        const hc_json_t *src = hc_json_get(j, "source");
+        const hc_json_t *vals = hc_json_get(j, "values");
+        if (!prop || prop->kind != HC_JSON_STR || !src || !vals)
+            FAIL("randomized_int_state_provider malformed");
+        if (!hc_json_streq(prop, "age"))
+            FAIL("randomized_int property != age (unmapped)");
+        p->kind = HC_SP_RANDOMIZED_INT;
+        p->prop_age = 1;
+        p->source = hc_arena_alloc(fc->arena, sizeof(hc_sprov_t),
+                                   _Alignof(hc_sprov_t));
+        if (!p->source)
+            FAIL("arena exhausted (randomized_int)");
+        if (sprov_compile(fc, src, p->source, depth + 1))
+            return -1;
+        return iprov_compile(fc, vals, &p->values, depth + 1);
+    }
+    FAIL("unsupported state provider type");
+}
+
 /* --- 블록 술어 --- */
 
-static int bpred_compile(const hc_json_t *j, hc_bpred_t *p, hc_arena_t *arena,
-                         const hc_df_source_t *tags, int32_t n_tags,
-                         const char **err) {
+static int bpred_compile(fc_t *fc, const hc_json_t *j, hc_bpred_t *p,
+                         int depth) {
     memset(p, 0, sizeof *p);
+    if (depth > FC_MAX_DEPTH)
+        FAIL("block predicate recursion too deep");
     const hc_json_t *t = hc_json_get(j, "type");
     if (!t || t->kind != HC_JSON_STR)
         FAIL("block predicate without type");
@@ -230,7 +388,6 @@ static int bpred_compile(const hc_json_t *j, hc_bpred_t *p, hc_arena_t *arena,
     }
     if (hc_json_streq(t, "minecraft:matching_fluids")) {
         const hc_json_t *fl = hc_json_get(j, "fluids");
-        /* 우리 데이터: ["minecraft:water"] 또는 "minecraft:water" 하나 */
         const hc_json_t *one = fl && fl->kind == HC_JSON_ARR ? fl->child : fl;
         if (!one || one->kind != HC_JSON_STR ||
             !hc_json_streq(one, "minecraft:water") ||
@@ -249,8 +406,7 @@ static int bpred_compile(const hc_json_t *j, hc_bpred_t *p, hc_arena_t *arena,
         ref[0] = '#';
         memcpy(ref + 1, tag->s, (size_t)tag->slen);
         p->kind = HC_BP_MATCHING_BLOCK_TAG;
-        return tag_expand(p->tag_mask, ref, tag->slen + 1, tags, n_tags, 0,
-                          err);
+        return tag_expand(fc, p->tag_mask, ref, tag->slen + 1, 0);
     }
     if (hc_json_streq(t, "minecraft:not")) {
         const hc_json_t *inner = hc_json_get(j, "predicate");
@@ -258,26 +414,28 @@ static int bpred_compile(const hc_json_t *j, hc_bpred_t *p, hc_arena_t *arena,
             FAIL("not-predicate without predicate");
         p->kind = HC_BP_NOT;
         p->n_children = 1;
-        p->children = hc_arena_alloc(arena, sizeof(hc_bpred_t),
+        p->children = hc_arena_alloc(fc->arena, sizeof(hc_bpred_t),
                                      _Alignof(hc_bpred_t));
         if (!p->children)
             FAIL("arena exhausted (predicate)");
-        return bpred_compile(inner, &p->children[0], arena, tags, n_tags, err);
+        return bpred_compile(fc, inner, &p->children[0], depth + 1);
     }
-    if (hc_json_streq(t, "minecraft:all_of")) {
+    if (hc_json_streq(t, "minecraft:all_of") ||
+        hc_json_streq(t, "minecraft:any_of")) {
         const hc_json_t *list = hc_json_get(j, "predicates");
         if (!list || list->kind != HC_JSON_ARR || list->count < 1)
-            FAIL("all_of without predicates");
-        p->kind = HC_BP_ALL_OF;
+            FAIL("all_of/any_of without predicates");
+        p->kind = hc_json_streq(t, "minecraft:all_of") ? HC_BP_ALL_OF
+                                                       : HC_BP_ANY_OF;
         p->n_children = list->count;
-        p->children = hc_arena_alloc(
-            arena, sizeof(hc_bpred_t) * (size_t)list->count,
-            _Alignof(hc_bpred_t));
+        p->children =
+            hc_arena_alloc(fc->arena, sizeof(hc_bpred_t) * (size_t)list->count,
+                           _Alignof(hc_bpred_t));
         if (!p->children)
             FAIL("arena exhausted (predicates)");
         int32_t i = 0;
         for (const hc_json_t *c = list->child; c; c = c->next, i++)
-            if (bpred_compile(c, &p->children[i], arena, tags, n_tags, err))
+            if (bpred_compile(fc, c, &p->children[i], depth + 1))
                 return -1;
         return 0;
     }
@@ -307,30 +465,67 @@ static int bpred_compile(const hc_json_t *j, hc_bpred_t *p, hc_arena_t *arena,
         p->kind = HC_BP_SOLID;
         return 0;
     }
+    if (hc_json_streq(t, "minecraft:would_survive")) {
+        const hc_json_t *s = hc_json_get(j, "state");
+        const hc_json_t *name = s ? hc_json_get(s, "Name") : NULL;
+        if (!name || name->kind != HC_JSON_STR)
+            FAIL("would_survive state malformed");
+        char *copy = hc_arena_alloc(fc->arena, (size_t)name->slen + 1, 1);
+        if (!copy)
+            FAIL("arena exhausted (would_survive)");
+        memcpy(copy, name->s, (size_t)name->slen);
+        copy[name->slen] = '\0';
+        p->kind = HC_BP_WOULD_SURVIVE;
+        p->ws_name = copy;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:has_sturdy_face")) {
+        const hc_json_t *dir = hc_json_get(j, "direction");
+        if (!dir || dir->kind != HC_JSON_STR)
+            FAIL("has_sturdy_face without direction");
+        static const char *DIRS[6] = {"down", "up",   "north",
+                                      "south", "west", "east"};
+        p->kind = HC_BP_HAS_STURDY_FACE;
+        p->dir = -1;
+        for (int i = 0; i < 6; i++)
+            if (hc_json_streq(dir, DIRS[i]))
+                p->dir = (int8_t)i;
+        if (p->dir < 0)
+            FAIL("has_sturdy_face bad direction");
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:true")) {
+        p->kind = HC_BP_TRUE;
+        return 0;
+    }
     FAIL("unsupported block predicate type");
 }
 
 /* --- placement modifier --- */
 
-static int hm_type_parse(const hc_json_t *v, uint8_t *out, const char **err) {
+static int hm_type_parse(fc_t *fc, const hc_json_t *v, uint8_t *out) {
     if (!v || v->kind != HC_JSON_STR)
         FAIL("heightmap type missing");
-    if (hc_json_streq(v, "OCEAN_FLOOR_WG")) {
-        *out = HC_HM_OCEAN_FLOOR_WG;
-        return 0;
-    }
-    if (hc_json_streq(v, "WORLD_SURFACE_WG")) {
-        *out = HC_HM_WORLD_SURFACE_WG;
-        return 0;
-    }
-    /* FINAL 맵 (live) 은 step 9 유지관리와 함께 9b — 실행 도달 시 즉사 */
-    *out = HC_HM_LIVE_9B;
-    return 0;
+    static const struct {
+        const char *name;
+        uint8_t     type;
+    } MAP[] = {
+        {"OCEAN_FLOOR_WG", HC_HM_OCEAN_FLOOR_WG},
+        {"WORLD_SURFACE_WG", HC_HM_WORLD_SURFACE_WG},
+        {"OCEAN_FLOOR", HC_HM_OCEAN_FLOOR},
+        {"WORLD_SURFACE", HC_HM_WORLD_SURFACE},
+        {"MOTION_BLOCKING", HC_HM_MOTION_BLOCKING},
+        {"MOTION_BLOCKING_NO_LEAVES", HC_HM_MOTION_BLOCKING_NO_LEAVES},
+    };
+    for (size_t i = 0; i < sizeof MAP / sizeof MAP[0]; i++)
+        if (hc_json_streq(v, MAP[i].name)) {
+            *out = MAP[i].type;
+            return 0;
+        }
+    FAIL("unknown heightmap type");
 }
 
-static int pmod_compile(const hc_json_t *j, hc_pmod_t *m, hc_arena_t *arena,
-                        const hc_df_source_t *tags, int32_t n_tags,
-                        const char **err) {
+static int pmod_compile(fc_t *fc, const hc_json_t *j, hc_pmod_t *m) {
     memset(m, 0, sizeof *m);
     const hc_json_t *t = hc_json_get(j, "type");
     if (!t || t->kind != HC_JSON_STR)
@@ -348,7 +543,7 @@ static int pmod_compile(const hc_json_t *j, hc_pmod_t *m, hc_arena_t *arena,
         if (!c)
             FAIL("count without count");
         m->kind = HC_PM_COUNT;
-        return iprov_compile(c, &m->count, err);
+        return iprov_compile(fc, c, &m->count, 0);
     }
     if (hc_json_streq(t, "minecraft:in_square")) {
         m->kind = HC_PM_IN_SQUARE;
@@ -359,11 +554,11 @@ static int pmod_compile(const hc_json_t *j, hc_pmod_t *m, hc_arena_t *arena,
         if (!h)
             FAIL("height_range without height");
         m->kind = HC_PM_HEIGHT_RANGE;
-        return hprov_compile(h, &m->height, err);
+        return hprov_compile(fc, h, &m->height);
     }
     if (hc_json_streq(t, "minecraft:heightmap")) {
         m->kind = HC_PM_HEIGHTMAP;
-        return hm_type_parse(hc_json_get(j, "heightmap"), &m->hm_type, err);
+        return hm_type_parse(fc, hc_json_get(j, "heightmap"), &m->hm_type);
     }
     if (hc_json_streq(t, "minecraft:environment_scan")) {
         const hc_json_t *dir = hc_json_get(j, "direction_of_search");
@@ -378,21 +573,21 @@ static int pmod_compile(const hc_json_t *j, hc_pmod_t *m, hc_arena_t *arena,
         m->max_steps = (int32_t)steps->num;
         if (allowed) {
             m->has_allowed = 1;
-            if (bpred_compile(allowed, &m->allowed, arena, tags, n_tags, err))
+            if (bpred_compile(fc, allowed, &m->allowed, 0))
                 return -1;
         }
-        return bpred_compile(target, &m->pred, arena, tags, n_tags, err);
+        return bpred_compile(fc, target, &m->pred, 0);
     }
     if (hc_json_streq(t, "minecraft:surface_relative_threshold_filter")) {
         m->kind = HC_PM_SURF_REL_THRESHOLD;
-        if (hm_type_parse(hc_json_get(j, "heightmap"), &m->hm_type, err))
+        if (hm_type_parse(fc, hc_json_get(j, "heightmap"), &m->hm_type))
             return -1;
         const hc_json_t *lo = hc_json_get(j, "min_inclusive");
         const hc_json_t *hi = hc_json_get(j, "max_inclusive");
-        m->min_incl = lo && lo->kind == HC_JSON_NUM ? (int32_t)lo->num
-                                                    : INT32_MIN;
-        m->max_incl = hi && hi->kind == HC_JSON_NUM ? (int32_t)hi->num
-                                                    : INT32_MAX;
+        m->min_incl =
+            lo && lo->kind == HC_JSON_NUM ? (int32_t)lo->num : INT32_MIN;
+        m->max_incl =
+            hi && hi->kind == HC_JSON_NUM ? (int32_t)hi->num : INT32_MAX;
         return 0;
     }
     if (hc_json_streq(t, "minecraft:block_predicate_filter")) {
@@ -400,7 +595,7 @@ static int pmod_compile(const hc_json_t *j, hc_pmod_t *m, hc_arena_t *arena,
         if (!pred)
             FAIL("block_predicate_filter without predicate");
         m->kind = HC_PM_BLOCK_PRED;
-        return bpred_compile(pred, &m->pred, arena, tags, n_tags, err);
+        return bpred_compile(fc, pred, &m->pred, 0);
     }
     if (hc_json_streq(t, "minecraft:biome")) {
         m->kind = HC_PM_BIOME;
@@ -412,18 +607,152 @@ static int pmod_compile(const hc_json_t *j, hc_pmod_t *m, hc_arena_t *arena,
         if (!xz || !ys)
             FAIL("random_offset spreads missing");
         m->kind = HC_PM_RANDOM_OFFSET;
-        if (iprov_compile(xz, &m->count, err))
+        if (iprov_compile(fc, xz, &m->count, 0))
             return -1;
-        return iprov_compile(ys, &m->y_spread, err);
+        return iprov_compile(fc, ys, &m->y_spread, 0);
     }
-    FAIL("unsupported placement modifier type (9b?)");
+    if (hc_json_streq(t, "minecraft:surface_water_depth_filter")) {
+        const hc_json_t *d = hc_json_get(j, "max_water_depth");
+        if (!d || d->kind != HC_JSON_NUM)
+            FAIL("surface_water_depth_filter without max_water_depth");
+        m->kind = HC_PM_SURFACE_WATER_DEPTH;
+        m->max_incl = (int32_t)d->num;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:noise_threshold_count")) {
+        const hc_json_t *nl = hc_json_get(j, "noise_level");
+        const hc_json_t *below = hc_json_get(j, "below_noise");
+        const hc_json_t *above = hc_json_get(j, "above_noise");
+        if (!nl || nl->kind != HC_JSON_NUM || !below ||
+            below->kind != HC_JSON_NUM || !above ||
+            above->kind != HC_JSON_NUM)
+            FAIL("noise_threshold_count malformed");
+        m->kind = HC_PM_NOISE_THRESHOLD_COUNT;
+        m->noise_level = nl->num;
+        m->below_noise = (int32_t)below->num;
+        m->above_noise = (int32_t)above->num;
+        return 0;
+    }
+    FAIL("unsupported placement modifier type");
+}
+
+/* --- placed feature (파이프라인 + 본문), 중첩/인라인 지원 --- */
+
+static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
+                      int depth);
+
+static int compile_pipeline(fc_t *fc, const hc_json_t *placement,
+                            hc_pfeat_t *pf) {
+    if (!placement || placement->kind != HC_JSON_ARR)
+        FAIL("placed feature without placement list");
+    pf->n_mods = placement->count;
+    pf->mods = NULL;
+    if (pf->n_mods > 0) {
+        pf->mods =
+            hc_arena_alloc(fc->arena, sizeof(hc_pmod_t) * (size_t)pf->n_mods,
+                           _Alignof(hc_pmod_t));
+        if (!pf->mods)
+            FAIL("arena exhausted (mods)");
+    }
+    int32_t mi = 0;
+    for (const hc_json_t *mj = placement->child; mj; mj = mj->next, mi++) {
+        if (pmod_compile(fc, mj, &pf->mods[mi]) != 0) {
+            /* 미지원 modifier → 실행-시 즉사 마커 (파일 머리의 정책) */
+            const char *why = *fc->err;
+            memset(&pf->mods[mi], 0, sizeof pf->mods[mi]);
+            pf->mods[mi].kind = HC_PM_DIE;
+            pf->mods[mi].die_what = why;
+            *fc->err = NULL;
+        }
+    }
+    return 0;
+}
+
+/* ref: "minecraft:이름" 문자열 (placed 테이블 참조) 또는
+ * {"feature": <cf-ref|inline>, "placement": [...]} 인라인 오브젝트 */
+static hc_pfeat_t *compile_placed_ref(fc_t *fc, const hc_json_t *ref,
+                                      int depth);
+
+static int compile_placed_into(fc_t *fc, const hc_json_t *pj, hc_pfeat_t *pf,
+                               int depth) {
+    if (depth > FC_MAX_DEPTH)
+        FAIL("placed feature nesting too deep");
+    if (compile_pipeline(fc, hc_json_get(pj, "placement"), pf))
+        return -1;
+    const hc_json_t *fref = hc_json_get(pj, "feature");
+    if (!fref)
+        FAIL("placed feature without feature");
+    const hc_json_t *cj = fref;
+    if (fref->kind == HC_JSON_STR) {
+        cj = find_named(fc->configured, fc->n_configured, fref);
+        if (!cj)
+            FAIL("configured feature JSON not loaded");
+    }
+    if (cf_compile(fc, cj, pf, depth) != 0) {
+        /* 지원 밖 본문 변형 (예: deep_dark 의 sculk_vein multiface) —
+         * 합집합 밖 feature 만 실제로 남는다; 도달하면 placed=-1 이
+         * 트레이스 게이트에서 diff 로 드러난다 (파일 머리 정책). */
+        pf->cf_kind = HC_CF_UNIMPLEMENTED;
+        pf->unimpl_why = *fc->err;
+        *fc->err = NULL;
+    }
+    return 0;
+}
+
+static hc_pfeat_t *compile_placed_ref(fc_t *fc, const hc_json_t *ref,
+                                      int depth) {
+    if (depth > FC_MAX_DEPTH) {
+        *fc->err = "placed ref nesting too deep";
+        return NULL;
+    }
+    const hc_json_t *pj = ref;
+    const char      *name = NULL;
+    if (ref->kind == HC_JSON_STR) {
+        for (int32_t i = 0; i < fc->n_cache; i++)
+            if ((int32_t)strlen(fc->cache[i].name) == ref->slen &&
+                memcmp(fc->cache[i].name, ref->s, (size_t)ref->slen) == 0)
+                return fc->cache[i].pf;
+        pj = find_named(fc->placed, fc->n_placed, ref);
+        if (!pj) {
+            *fc->err = "nested placed feature JSON not loaded";
+            return NULL;
+        }
+        char *copy = hc_arena_alloc(fc->arena, (size_t)ref->slen + 1, 1);
+        if (!copy) {
+            *fc->err = "arena exhausted (nested name)";
+            return NULL;
+        }
+        memcpy(copy, ref->s, (size_t)ref->slen);
+        copy[ref->slen] = '\0';
+        name = copy;
+    }
+    hc_pfeat_t *pf =
+        hc_arena_alloc(fc->arena, sizeof(hc_pfeat_t), _Alignof(hc_pfeat_t));
+    if (!pf) {
+        *fc->err = "arena exhausted (nested placed)";
+        return NULL;
+    }
+    memset(pf, 0, sizeof *pf);
+    pf->name = name;
+    if (name) {
+        /* 자기참조 사이클 방지를 위해 컴파일 전에 캐시에 넣는다 */
+        if (fc->n_cache >= FC_CACHE) {
+            *fc->err = "nested placed cache full";
+            return NULL;
+        }
+        fc->cache[fc->n_cache].name = name;
+        fc->cache[fc->n_cache].pf = pf;
+        fc->n_cache++;
+    }
+    if (compile_placed_into(fc, pj, pf, depth + 1))
+        return NULL;
+    return pf;
 }
 
 /* --- configured feature 본문 --- */
 
-static int cf_compile(const hc_json_t *cf, hc_pfeat_t *pf,
-                      const hc_df_source_t *tags, int32_t n_tags,
-                      const char **err) {
+static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
+                      int depth) {
     const hc_json_t *t = hc_json_get(cf, "type");
     const hc_json_t *cfg = hc_json_get(cf, "config");
     if (!t || t->kind != HC_JSON_STR || !cfg)
@@ -433,7 +762,8 @@ static int cf_compile(const hc_json_t *cf, hc_pfeat_t *pf,
         hc_ore_cfg_t *o = &pf->cf.ore;
         memset(o, 0, sizeof *o);
         const hc_json_t *size = hc_json_get(cfg, "size");
-        const hc_json_t *disc = hc_json_get(cfg, "discard_chance_on_air_exposure");
+        const hc_json_t *disc =
+            hc_json_get(cfg, "discard_chance_on_air_exposure");
         const hc_json_t *targets = hc_json_get(cfg, "targets");
         if (!size || size->kind != HC_JSON_NUM || !disc ||
             disc->kind != HC_JSON_NUM || !targets ||
@@ -462,14 +792,11 @@ static int cf_compile(const hc_json_t *cf, hc_pfeat_t *pf,
                 FAIL("tag name too long");
             ref[0] = '#';
             memcpy(ref + 1, tag->s, (size_t)tag->slen);
-            if (tag_expand(o->targets[i].rule_mask, ref, tag->slen + 1, tags,
-                           n_tags, 0, err))
+            if (tag_expand(fc, o->targets[i].rule_mask, ref, tag->slen + 1, 0))
                 return -1;
-            int32_t id = compile_blockstate(state, err);
-            if (id == -2)
-                return -1;
+            int32_t id = compile_blockstate(fc, state);
             if (id < 0)
-                FAIL("ore target state not in hc_blocks table");
+                return -1;
             o->targets[i].state = (uint16_t)id;
         }
         o->n_targets = i;
@@ -500,16 +827,14 @@ static int cf_compile(const hc_json_t *cf, hc_pfeat_t *pf,
         const hc_json_t *valid = hc_json_get(cfg, "valid_blocks");
         if (!valid)
             FAIL("spring valid_blocks missing");
-        /* HolderSet: 태그 문자열 하나 또는 블록 리스트 */
         if (valid->kind == HC_JSON_STR)
-            return tag_expand(s->valid_mask, valid->s, valid->slen, tags,
-                              n_tags, 0, err);
+            return tag_expand(fc, s->valid_mask, valid->s, valid->slen, 0);
         if (valid->kind != HC_JSON_ARR)
             FAIL("spring valid_blocks malformed");
         for (const hc_json_t *v = valid->child; v; v = v->next) {
             if (v->kind != HC_JSON_STR)
                 FAIL("spring valid_blocks entry not string");
-            if (tag_expand(s->valid_mask, v->s, v->slen, tags, n_tags, 0, err))
+            if (tag_expand(fc, s->valid_mask, v->s, v->slen, 0))
                 return -1;
         }
         return 0;
@@ -532,6 +857,240 @@ static int cf_compile(const hc_json_t *cf, hc_pfeat_t *pf,
         pf->cf_kind = HC_CF_MONSTER_ROOM;
         return 0;
     }
+    if (hc_json_streq(t, "minecraft:random_selector")) {
+        pf->cf_kind = HC_CF_RANDOM_SELECTOR;
+        hc_rsel_cfg_t *r = hc_arena_alloc(fc->arena, sizeof *r,
+                                          _Alignof(hc_rsel_cfg_t));
+        if (!r)
+            FAIL("arena exhausted (random_selector)");
+        memset(r, 0, sizeof *r);
+        pf->cf.rsel = r;
+        const hc_json_t *feats = hc_json_get(cfg, "features");
+        const hc_json_t *dflt = hc_json_get(cfg, "default");
+        if (!feats || feats->kind != HC_JSON_ARR || !dflt)
+            FAIL("random_selector config malformed");
+        r->n_entries = feats->count;
+        if (r->n_entries > 0) {
+            r->entries = hc_arena_alloc(
+                fc->arena, sizeof r->entries[0] * (size_t)r->n_entries,
+                _Alignof(hc_pfeat_t *));
+            if (!r->entries)
+                FAIL("arena exhausted (selector entries)");
+        }
+        int32_t i = 0;
+        for (const hc_json_t *e = feats->child; e; e = e->next, i++) {
+            const hc_json_t *ch = hc_json_get(e, "chance");
+            const hc_json_t *fr = hc_json_get(e, "feature");
+            if (!ch || ch->kind != HC_JSON_NUM || !fr)
+                FAIL("random_selector entry malformed");
+            r->entries[i].chance = (float)ch->num;
+            r->entries[i].pf = compile_placed_ref(fc, fr, depth + 1);
+            if (!r->entries[i].pf)
+                return -1;
+        }
+        r->dflt = compile_placed_ref(fc, dflt, depth + 1);
+        return r->dflt ? 0 : -1;
+    }
+    if (hc_json_streq(t, "minecraft:random_boolean_selector")) {
+        pf->cf_kind = HC_CF_RANDOM_BOOLEAN;
+        hc_rbool_cfg_t *r = hc_arena_alloc(fc->arena, sizeof *r,
+                                           _Alignof(hc_rbool_cfg_t));
+        if (!r)
+            FAIL("arena exhausted (random_boolean)");
+        pf->cf.rbool = r;
+        const hc_json_t *ft = hc_json_get(cfg, "feature_true");
+        const hc_json_t *ff = hc_json_get(cfg, "feature_false");
+        if (!ft || !ff)
+            FAIL("random_boolean_selector config malformed");
+        r->on_true = compile_placed_ref(fc, ft, depth + 1);
+        r->on_false = compile_placed_ref(fc, ff, depth + 1);
+        return (r->on_true && r->on_false) ? 0 : -1;
+    }
+    if (hc_json_streq(t, "minecraft:simple_random_selector")) {
+        pf->cf_kind = HC_CF_SIMPLE_RANDOM_SELECTOR;
+        hc_srsel_cfg_t *r = hc_arena_alloc(fc->arena, sizeof *r,
+                                           _Alignof(hc_srsel_cfg_t));
+        if (!r)
+            FAIL("arena exhausted (simple_random_selector)");
+        pf->cf.srsel = r;
+        const hc_json_t *feats = hc_json_get(cfg, "features");
+        if (!feats || feats->kind != HC_JSON_ARR || feats->count < 1)
+            FAIL("simple_random_selector features missing");
+        r->n = feats->count;
+        r->feats = hc_arena_alloc(fc->arena,
+                                  sizeof(hc_pfeat_t *) * (size_t)r->n,
+                                  _Alignof(hc_pfeat_t *));
+        if (!r->feats)
+            FAIL("arena exhausted (srsel feats)");
+        int32_t i = 0;
+        for (const hc_json_t *e = feats->child; e; e = e->next, i++) {
+            r->feats[i] = compile_placed_ref(fc, e, depth + 1);
+            if (!r->feats[i])
+                return -1;
+        }
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:vegetation_patch") ||
+        hc_json_streq(t, "minecraft:waterlogged_vegetation_patch")) {
+        pf->cf_kind = HC_CF_VEGETATION_PATCH;
+        hc_vpatch_cfg_t *v = hc_arena_alloc(fc->arena, sizeof *v,
+                                            _Alignof(hc_vpatch_cfg_t));
+        if (!v)
+            FAIL("arena exhausted (vegetation_patch)");
+        memset(v, 0, sizeof *v);
+        pf->cf.vpatch = v;
+        v->waterlogged =
+            (uint8_t)hc_json_streq(t, "minecraft:waterlogged_vegetation_patch");
+        const hc_json_t *surface = hc_json_get(cfg, "surface");
+        const hc_json_t *depth_j = hc_json_get(cfg, "depth");
+        const hc_json_t *ebc = hc_json_get(cfg, "extra_bottom_block_chance");
+        const hc_json_t *eec = hc_json_get(cfg, "extra_edge_column_chance");
+        const hc_json_t *vc = hc_json_get(cfg, "vegetation_chance");
+        const hc_json_t *vr = hc_json_get(cfg, "vertical_range");
+        const hc_json_t *xz = hc_json_get(cfg, "xz_radius");
+        const hc_json_t *repl = hc_json_get(cfg, "replaceable");
+        const hc_json_t *gs = hc_json_get(cfg, "ground_state");
+        const hc_json_t *vf = hc_json_get(cfg, "vegetation_feature");
+        if (!surface || surface->kind != HC_JSON_STR || !depth_j || !ebc ||
+            !eec || !vc || !vr || vr->kind != HC_JSON_NUM || !xz || !repl ||
+            repl->kind != HC_JSON_STR || !gs || !vf)
+            FAIL("vegetation_patch config malformed");
+        v->surface_ceiling = (uint8_t)hc_json_streq(surface, "ceiling");
+        if (!v->surface_ceiling && !hc_json_streq(surface, "floor"))
+            FAIL("vegetation_patch bad surface");
+        v->extra_bottom_chance = (float)ebc->num;
+        v->extra_edge_chance = (float)eec->num;
+        v->veg_chance = (float)vc->num;
+        v->vertical_range = (int32_t)vr->num;
+        if (iprov_compile(fc, depth_j, &v->depth, 0) ||
+            iprov_compile(fc, xz, &v->xz_radius, 0) ||
+            tag_expand(fc, v->replaceable, repl->s, repl->slen, 0) ||
+            sprov_compile(fc, gs, &v->ground, 0))
+            return -1;
+        v->vegetation = compile_placed_ref(fc, vf, depth + 1);
+        return v->vegetation ? 0 : -1;
+    }
+    if (hc_json_streq(t, "minecraft:block_column")) {
+        pf->cf_kind = HC_CF_BLOCK_COLUMN;
+        hc_bcol_cfg_t *b = hc_arena_alloc(fc->arena, sizeof *b,
+                                          _Alignof(hc_bcol_cfg_t));
+        if (!b)
+            FAIL("arena exhausted (block_column)");
+        memset(b, 0, sizeof *b);
+        pf->cf.bcol = b;
+        const hc_json_t *dir = hc_json_get(cfg, "direction");
+        const hc_json_t *layers = hc_json_get(cfg, "layers");
+        const hc_json_t *pt = hc_json_get(cfg, "prioritize_tip");
+        const hc_json_t *ap = hc_json_get(cfg, "allowed_placement");
+        if (!dir || dir->kind != HC_JSON_STR || !layers ||
+            layers->kind != HC_JSON_ARR || layers->count < 1 || !pt ||
+            pt->kind != HC_JSON_BOOL || !ap)
+            FAIL("block_column config malformed");
+        if (hc_json_streq(dir, "up"))
+            b->dir_dy = 1;
+        else if (hc_json_streq(dir, "down"))
+            b->dir_dy = -1;
+        else
+            FAIL("block_column bad direction");
+        b->prioritize_tip = (uint8_t)pt->boolean;
+        b->n_layers = layers->count;
+        b->layers = hc_arena_alloc(
+            fc->arena, sizeof b->layers[0] * (size_t)b->n_layers,
+            _Alignof(hc_iprov_t));
+        if (!b->layers)
+            FAIL("arena exhausted (column layers)");
+        int32_t i = 0;
+        for (const hc_json_t *l = layers->child; l; l = l->next, i++) {
+            const hc_json_t *h = hc_json_get(l, "height");
+            const hc_json_t *pr = hc_json_get(l, "provider");
+            if (!h || !pr)
+                FAIL("block_column layer malformed");
+            if (iprov_compile(fc, h, &b->layers[i].height, 0) ||
+                sprov_compile(fc, pr, &b->layers[i].prov, 0))
+                return -1;
+        }
+        return bpred_compile(fc, ap, &b->allowed, 0);
+    }
+    if (hc_json_streq(t, "minecraft:multiface_growth")) {
+        pf->cf_kind = HC_CF_MULTIFACE_GROWTH;
+        hc_mface_cfg_t *m = hc_arena_alloc(fc->arena, sizeof *m,
+                                           _Alignof(hc_mface_cfg_t));
+        if (!m)
+            FAIL("arena exhausted (multiface_growth)");
+        memset(m, 0, sizeof *m);
+        pf->cf.mface = m;
+        const hc_json_t *block = hc_json_get(cfg, "block");
+        if (!block || block->kind != HC_JSON_STR ||
+            !hc_json_streq(block, "minecraft:glow_lichen"))
+            FAIL("multiface_growth: only glow_lichen supported");
+        const hc_json_t *sr = hc_json_get(cfg, "search_range");
+        const hc_json_t *fl = hc_json_get(cfg, "can_place_on_floor");
+        const hc_json_t *ce = hc_json_get(cfg, "can_place_on_ceiling");
+        const hc_json_t *wa = hc_json_get(cfg, "can_place_on_wall");
+        const hc_json_t *cs = hc_json_get(cfg, "chance_of_spreading");
+        const hc_json_t *on = hc_json_get(cfg, "can_be_placed_on");
+        /* codec 기본 (26.2 MultifaceGrowthConfiguration): search_range 10,
+         * floor/ceiling/wall false, chance_of_spreading 0.5f — R3 확정 */
+        m->search_range =
+            sr && sr->kind == HC_JSON_NUM ? (int32_t)sr->num : 10;
+        m->can_place_on_floor =
+            fl ? (uint8_t)(fl->kind == HC_JSON_BOOL && fl->boolean) : 0;
+        m->can_place_on_ceiling =
+            ce ? (uint8_t)(ce->kind == HC_JSON_BOOL && ce->boolean) : 0;
+        m->can_place_on_wall =
+            wa ? (uint8_t)(wa->kind == HC_JSON_BOOL && wa->boolean) : 0;
+        m->chance_of_spreading =
+            cs && cs->kind == HC_JSON_NUM ? (float)cs->num : 0.5f;
+        if (!on)
+            FAIL("multiface_growth can_be_placed_on missing");
+        if (on->kind == HC_JSON_STR)
+            return tag_expand(fc, m->can_place_on, on->s, on->slen, 0);
+        if (on->kind != HC_JSON_ARR)
+            FAIL("multiface_growth can_be_placed_on malformed");
+        for (const hc_json_t *v = on->child; v; v = v->next) {
+            if (v->kind != HC_JSON_STR)
+                FAIL("can_be_placed_on entry not string");
+            if (tag_expand(fc, m->can_place_on, v->s, v->slen, 0))
+                return -1;
+        }
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:simple_block")) {
+        pf->cf_kind = HC_CF_SIMPLE_BLOCK;
+        hc_sblock_cfg_t *s = hc_arena_alloc(fc->arena, sizeof *s,
+                                            _Alignof(hc_sblock_cfg_t));
+        if (!s)
+            FAIL("arena exhausted (simple_block)");
+        memset(s, 0, sizeof *s);
+        pf->cf.sblock = s;
+        const hc_json_t *tp = hc_json_get(cfg, "to_place");
+        if (!tp)
+            FAIL("simple_block to_place missing");
+        return sprov_compile(fc, tp, &s->to_place, 0);
+    }
+    if (hc_json_streq(t, "minecraft:vines")) {
+        pf->cf_kind = HC_CF_VINES;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:bamboo")) {
+        pf->cf_kind = HC_CF_BAMBOO;
+        hc_bamboo_cfg_t *b = hc_arena_alloc(fc->arena, sizeof *b,
+                                            _Alignof(hc_bamboo_cfg_t));
+        if (!b)
+            FAIL("arena exhausted (bamboo)");
+        pf->cf.bamboo = b;
+        const hc_json_t *pr = hc_json_get(cfg, "probability");
+        if (!pr || pr->kind != HC_JSON_NUM)
+            FAIL("bamboo probability missing");
+        b->probability = (float)pr->num;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:freeze_top_layer")) {
+        pf->cf_kind = HC_CF_FREEZE_TOP_LAYER;
+        return 0;
+    }
+    /* tree / fallen_tree — R2 recon 랜딩 후 features_tree.c 와 함께.
+     * 그 외 (root_system, 그리드-외 exotics) — 본문 도달 시 placed=-1. */
     pf->cf_kind = HC_CF_UNIMPLEMENTED;
     return 0;
 }
@@ -569,6 +1128,43 @@ int hc_feat_reg_init(hc_feat_reg_t *reg, hc_arena_t *arena,
                      hc_biome_reg_t *biomes, int32_t walk_max_step,
                      const char **err) {
     memset(reg, 0, sizeof *reg);
+
+    fc_t fc_storage;
+    fc_t *fc = &fc_storage;
+    memset(fc, 0, sizeof *fc);
+    fc->arena = arena;
+    fc->placed = placed;
+    fc->n_placed = n_placed;
+    fc->configured = configured;
+    fc->n_configured = n_configured;
+    fc->tags = tags;
+    fc->n_tags = n_tags;
+    fc->err = err;
+
+    /* 0. 본문 canSurvive 태그 마스크 (R1 §4/§5, R4 §1.3/§3.1) */
+    static const struct {
+        const char *tag;
+        size_t      off;
+    } RT_TAGS[] = {
+        {"#minecraft:supports_vegetation",
+         offsetof(hc_feat_reg_t, tag_supports_vegetation)},
+        {"#minecraft:supports_bamboo",
+         offsetof(hc_feat_reg_t, tag_supports_bamboo)},
+        {"#minecraft:beneath_bamboo_podzol_replaceable",
+         offsetof(hc_feat_reg_t, tag_podzol_replaceable)},
+        {"#minecraft:supports_azalea",
+         offsetof(hc_feat_reg_t, tag_supports_azalea)},
+        {"#minecraft:supports_small_dripleaf",
+         offsetof(hc_feat_reg_t, tag_supports_small_dripleaf)},
+        {"#minecraft:supports_big_dripleaf",
+         offsetof(hc_feat_reg_t, tag_supports_big_dripleaf)},
+        {"#minecraft:supports_cocoa",
+         offsetof(hc_feat_reg_t, tag_supports_cocoa)},
+    };
+    for (size_t i = 0; i < sizeof RT_TAGS / sizeof RT_TAGS[0]; i++)
+        if (tag_expand(fc, (uint64_t *)((char *)reg + RT_TAGS[i].off),
+                       RT_TAGS[i].tag, (int32_t)strlen(RT_TAGS[i].tag), 0))
+            return -1;
 
     /* 1. order 테이블 → step 별 이름 배열 */
     const char *p = order_txt;
@@ -634,35 +1230,21 @@ int hc_feat_reg_init(hc_feat_reg_t *reg, hc_arena_t *arena,
     for (int32_t s = 0; s <= walk_max_step && s < HC_FEAT_STEPS; s++) {
         for (int32_t i = 0; i < reg->counts[s]; i++) {
             hc_pfeat_t *pf = &reg->steps[s][i];
-            const hc_json_t *pj =
-                find_source(placed, n_placed, pf->name,
-                            (int32_t)strlen(pf->name));
+            const hc_json_t *pj = find_source(placed, n_placed, pf->name,
+                                              (int32_t)strlen(pf->name));
             if (!pj)
                 FAIL("placed feature JSON not loaded");
-            const hc_json_t *placement = hc_json_get(pj, "placement");
-            if (!placement || placement->kind != HC_JSON_ARR)
-                FAIL("placed feature without placement list");
-            pf->n_mods = placement->count;
-            if (pf->n_mods > 0) {
-                pf->mods = hc_arena_alloc(
-                    arena, sizeof(hc_pmod_t) * (size_t)pf->n_mods,
-                    _Alignof(hc_pmod_t));
-                if (!pf->mods)
-                    FAIL("arena exhausted (mods)");
-            }
-            int32_t mi = 0;
-            for (const hc_json_t *mj = placement->child; mj;
-                 mj = mj->next, mi++)
-                if (pmod_compile(mj, &pf->mods[mi], arena, tags, n_tags, err))
-                    return -1;
-            const hc_json_t *fref = hc_json_get(pj, "feature");
-            if (!fref || fref->kind != HC_JSON_STR)
-                FAIL("inline configured feature unsupported at step<=8");
-            const hc_json_t *cj = find_named(configured, n_configured, fref);
-            if (!cj)
-                FAIL("configured feature JSON not loaded");
-            if (cf_compile(cj, pf, tags, n_tags, err))
+            const char *keep = pf->name;
+            if (compile_placed_into(fc, pj, pf, 0) != 0) {
+                if (*err) {
+                    static char where[192];
+                    snprintf(where, sizeof where, "%s (feature %s)",
+                             *err, keep);
+                    *err = where;
+                }
                 return -1;
+            }
+            pf->name = keep;
         }
     }
 
@@ -677,7 +1259,6 @@ int hc_feat_reg_init(hc_feat_reg_t *reg, hc_arena_t *arena,
         if (reg->words[s] == 0)
             reg->words[s] = 1;
     }
-    /* 먼저 전 바이옴 인턴 → n_biomes 확정 */
     for (const hc_json_t *b = biome_features->child; b; b = b->next)
         if (hc_biome_intern(biomes, b->key, b->klen) < 0)
             FAIL("biome registry full");

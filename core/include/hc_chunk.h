@@ -22,11 +22,26 @@
 
 /* SoA: 블록당 객체를 만들지 않는다. 팔레트 인덱스 평면 배열만 둔다.
  * ADR-003 D3 — 자바는 청크당 ~40,808 객체를 만든다. 여기서는 0 이다. */
+/* FINAL 하이트맵 4종 인덱스 (features 스테이지가 유지관리 — ChunkStatus
+ * FINAL_HEIGHTMAPS, task9pre A4 §4.1). 값은 WG 맵과 같은 규약: 최고
+ * 블로킹 y + 1 (getFirstAvailable), 빈 컬럼 = HC_MIN_Y. */
+enum {
+    HC_HMF_OCEAN_FLOOR = 0,
+    HC_HMF_WORLD_SURFACE = 1,
+    HC_HMF_MOTION_BLOCKING = 2,
+    HC_HMF_MOTION_BLOCKING_NO_LEAVES = 3,
+    HC_HMF_COUNT = 4,
+};
+
 typedef struct {
     int32_t   cx, cz;
     uint16_t *states;                     /* HC_BLOCKS 개 팔레트 인덱스 */
     int32_t   heightmap_ws[256];          /* WORLD_SURFACE(_WG), 컬럼당 1 */
     int32_t   heightmap_ocean_floor[256]; /* OCEAN_FLOOR(_WG) */
+    /* FINAL 맵 — 지연 프라임 (heightmaps.get(type)==null 대응은 비트).
+     * features 밖 스테이지는 건드리지 않는다. */
+    int32_t   heightmap_final[HC_HMF_COUNT][256];
+    uint8_t   hm_final_primed; /* 타입별 비트 (1<<HC_HMF_*) */
     /* 쿼트 바이옴 id (내부 인턴 id — 스테이지/테스트가 채운다. 바이옴
      * '생성'(multi-noise sampler)은 후속 태스크: 지금은 03_biomes golden
      * 로더가 유일한 공급자다). zero-fill == id 0. */

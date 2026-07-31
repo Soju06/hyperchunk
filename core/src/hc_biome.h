@@ -85,4 +85,9 @@ int hc_biome_should_melt_iceberg(const hc_biome_reg_t *r, int32_t id,
                                  int32_t x, int32_t y, int32_t z,
                                  int32_t sea_level);
 
+/* Biome.BIOME_INFO_NOISE.getValue(x, z, false) — noise_threshold_count
+ * 배치 modifier 가 읽는 클래스-정적 PerlinSimplexNoise (시드 2345,
+ * 옥타브 {0}; biome_temp.c 의 g_info_noise 재사용) */
+double hc_biome_info_noise(double x, double z);
+
 #endif /* HC_BIOME_H */

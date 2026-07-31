@@ -43,6 +43,80 @@ uint16_t hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
     return c->states[hc_idx(x & 15, y, z & 15)];
 }
 
+static void die(const char *what, const char *detail) {
+    fprintf(stderr, "hc_features FATAL: %s%s%s\n", what, detail ? ": " : "",
+            detail ? detail : "");
+    abort();
+}
+
+/* --- FINAL 하이트맵 4종 (task9pre A4 §4, 26.2 Heightmap 재구성) ---
+ *
+ * isOpaque 술어 (Heightmap$Types):
+ *   OCEAN_FLOOR(+_WG)          blocksMotion
+ *   WORLD_SURFACE(+_WG)        !isAir
+ *   MOTION_BLOCKING            blocksMotion || fluid 비어있지 않음
+ *   MOTION_BLOCKING_NO_LEAVES  위 && !LeavesBlock
+ * update() 는 증분이지만 결과는 항상 최종 블록의 순수함수 (A4 §4.2) —
+ * 프라임(재계산)과 등가. 값 = 최고 통과 y + 1, 빈 컬럼 = HC_MIN_Y. */
+
+static int hm_opaque(int type, uint16_t id) {
+    switch (type) {
+    case HC_HMF_OCEAN_FLOOR:
+        return hc_block_blocks_motion(id);
+    case HC_HMF_WORLD_SURFACE:
+        return !hc_block_is_air(id);
+    case HC_HMF_MOTION_BLOCKING:
+        return hc_block_blocks_motion(id) || hc_block_fluid_nonempty(id);
+    case HC_HMF_MOTION_BLOCKING_NO_LEAVES:
+        return (hc_block_blocks_motion(id) || hc_block_fluid_nonempty(id)) &&
+               !hc_block_is_leaves(id);
+    }
+    die("unknown final heightmap type", NULL);
+    return 0;
+}
+
+static void hm_prime_one(hc_chunk_t *c, int type) {
+    for (int lz = 0; lz < 16; lz++)
+        for (int lx = 0; lx < 16; lx++) {
+            size_t  col = hc_col_idx(lx, lz);
+            int32_t v = HC_MIN_Y;
+            for (int32_t y = HC_MAX_Y; y >= HC_MIN_Y; y--) {
+                uint16_t s = c->states[hc_idx(lx, y, lz)];
+                if (s != HC_B_AIR && hm_opaque(type, s)) {
+                    v = y + 1;
+                    break;
+                }
+            }
+            c->heightmap_final[type][col] = v;
+        }
+    c->hm_final_primed |= (uint8_t)(1u << type);
+}
+
+void hc_feat_prime_final_maps(hc_chunk_t *c) {
+    for (int t = 0; t < HC_HMF_COUNT; t++)
+        hm_prime_one(c, t);
+}
+
+/* Heightmap.update(x,y,z,state) — 26.2 바이트코드 (A4 §4.2) */
+static void hm_update(hc_chunk_t *c, int type, int lx, int32_t y, int lz,
+                      uint16_t state) {
+    size_t  col = hc_col_idx(lx, lz);
+    int32_t first = c->heightmap_final[type][col];
+    if (y <= first - 2)
+        return;
+    if (hm_opaque(type, state)) {
+        if (y >= first)
+            c->heightmap_final[type][col] = y + 1;
+    } else if (first - 1 == y) {
+        for (int32_t yy = y - 1; yy >= HC_MIN_Y; yy--)
+            if (hm_opaque(type, c->states[hc_idx(lx, yy, lz)])) {
+                c->heightmap_final[type][col] = yy + 1;
+                return;
+            }
+        c->heightmap_final[type][col] = HC_MIN_Y;
+    }
+}
+
 int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
                       uint16_t id) {
     /* ensureCanWrite: 쓰기 창 = center ±1 (soft-fail, task9pre A4 §3.1);
@@ -55,22 +129,36 @@ int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
     if (y < HC_MIN_Y || y > HC_MAX_Y)
         return 0;
     hc_chunk_t *c = hc_feat_region_chunk(rg, cx, cz);
-    c->states[hc_idx(x & 15, y, z & 15)] = id;
-    /* FINAL 하이트맵 4종 갱신은 9b (step 9 부터 읽음) — *_WG 는 frozen */
+    int lx = x & 15, lz = z & 15;
+    c->states[hc_idx(lx, y, lz)] = id;
+    /* ProtoChunk.setBlockState: 섹션 쓰기 뒤 없는 FINAL 맵 지연 프라임 +
+     * 4종 전부 증분 update (*_WG 는 frozen — heightmapsAfter(CARVERS)) */
+    for (int t = 0; t < HC_HMF_COUNT; t++)
+        if (!(c->hm_final_primed & (1u << t)))
+            hm_prime_one(c, t);
+    for (int t = 0; t < HC_HMF_COUNT; t++)
+        hm_update(c, t, lx, y, lz, id);
     return 1;
 }
 
-int32_t hc_feat_height_wg(const hc_feat_region_t *rg, int hm_type, int32_t x,
-                          int32_t z) {
-    if (hm_type == HC_HM_LIVE_9B) {
-        fprintf(stderr, "hc_features FATAL: live FINAL heightmap read "
-                        "reached — unimplemented until 9b\n");
-        abort();
-    }
+int32_t hc_feat_height(hc_feat_region_t *rg, int hm_type, int32_t x,
+                       int32_t z) {
     hc_chunk_t *c = hc_feat_region_chunk(rg, floor_div16(x), floor_div16(z));
     size_t col = hc_col_idx(x & 15, z & 15);
-    return hm_type == HC_HM_OCEAN_FLOOR_WG ? c->heightmap_ocean_floor[col]
-                                           : c->heightmap_ws[col];
+    switch (hm_type) {
+    case HC_HM_OCEAN_FLOOR_WG:
+        return c->heightmap_ocean_floor[col];
+    case HC_HM_WORLD_SURFACE_WG:
+        return c->heightmap_ws[col];
+    default: {
+        /* ChunkAccess.getHeight: 없는 단일 타입 지연 프라임 후 반환 */
+        int t = hm_type - HC_HM_OCEAN_FLOOR;
+        assert(t >= 0 && t < HC_HMF_COUNT);
+        if (!(c->hm_final_primed & (1u << t)))
+            hm_prime_one(c, t);
+        return c->heightmap_final[t][col];
+    }
+    }
 }
 
 /* --- 실행 환경 --- */
@@ -80,25 +168,43 @@ typedef struct {
     hc_wgr_t               *rng;
     const hc_feat_reg_t    *reg;
     const hc_biome_view_t  *view;
+    const hc_biome_reg_t   *biomes; /* freeze_top_layer 온도 게이트 */
+    int32_t                 sea_level;
     const hc_pfeat_t       *pf;
     int32_t                 step, index;
     const hc_feat_trace_t  *trace;
     int32_t                 npos;
     int32_t                 placed_any; /* 0/1 */
     int32_t                 unknown;    /* 미구현 본문 도달 */
+    int32_t                 nested;     /* PlacedFeature.place 경로 (biome 금지) */
 } feat_env_t;
 
-static void die(const char *what, const char *detail) {
-    fprintf(stderr, "hc_features FATAL: %s%s%s\n", what, detail ? ": " : "",
-            detail ? detail : "");
-    abort();
-}
+/* 중첩 placed feature 실행 (PlacedFeature.place — topFeature 비어 있음).
+ * 트레이스 p-라인은 최상위 전용 (FORMAT.md) — 중첩은 기록하지 않는다.
+ * 반환 = placedAny. */
+static int run_nested_pf(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
+                         int32_t y, int32_t z);
 
 /* --- 블록 술어 (드로우 0) --- */
 
 static int mask_test(const uint64_t *mask, uint16_t id) {
     return (mask[id >> 6] >> (id & 63)) & 1u;
 }
+
+/* isFaceSturdy(pos, dir) — SupportType.FULL: getBlockSupportShape 의 그
+ * 면이 완전. LeavesBlock 은 support shape 을 EMPTY 로 오버라이드해서
+ * 절대 sturdy 가 아니다 (R1 §2.5 VERIFIED); 팔레트의 나머지는 완전
+ * 큐브(support=collision=occlusion 전부 full)거나 식물류(전부 비-full).
+ * CENTER/RIGID 도 완전 큐브에서 전부 true — 한 판정으로 축약. */
+static int face_sturdy(feat_env_t *e, int32_t x, int32_t y, int32_t z,
+                       int dir) {
+    (void)dir;
+    return hc_block_is_full_cube(hc_feat_get_block(e->rg, x, y, z));
+}
+
+/* would_survive: state.canSurvive(level, pos) — 블록별 디스패치 (R2) */
+static int would_survive(feat_env_t *e, const char *name, int32_t x,
+                         int32_t y, int32_t z);
 
 static int bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x, int32_t y,
                       int32_t z) {
@@ -107,8 +213,8 @@ static int bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x, int32_t y,
     z += p->off[2];
     switch (p->kind) {
     case HC_BP_MATCHING_FLUIDS_WATER:
-        /* 소스 물 블록만 — flowing/waterlogged 는 테이블에 없다 (A2 §2.8) */
-        return hc_feat_get_block(e->rg, x, y, z) == HC_B_WATER;
+        /* FluidState.is(water): 소스 물 + waterlogged=true (A2 §2.8) */
+        return hc_block_fluid_is_water(hc_feat_get_block(e->rg, x, y, z));
     case HC_BP_MATCHING_BLOCK_TAG:
         return mask_test(p->tag_mask, hc_feat_get_block(e->rg, x, y, z));
     case HC_BP_NOT:
@@ -118,10 +224,21 @@ static int bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x, int32_t y,
             if (!bpred_eval(e, &p->children[i], x, y, z))
                 return 0;
         return 1;
+    case HC_BP_ANY_OF:
+        for (int32_t i = 0; i < p->n_children; i++)
+            if (bpred_eval(e, &p->children[i], x, y, z))
+                return 1;
+        return 0;
     case HC_BP_INSIDE_WORLD_BOUNDS:
         return y >= HC_MIN_Y && y <= HC_MAX_Y;
     case HC_BP_SOLID:
         return hc_block_is_solid(hc_feat_get_block(e->rg, x, y, z));
+    case HC_BP_WOULD_SURVIVE:
+        return would_survive(e, p->ws_name, x, y, z);
+    case HC_BP_HAS_STURDY_FACE:
+        return face_sturdy(e, x, y, z, p->dir);
+    case HC_BP_TRUE:
+        return 1;
     }
     die("unknown block predicate kind", NULL);
     return 0;
@@ -130,11 +247,75 @@ static int bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x, int32_t y,
 /* --- providers --- */
 
 static int32_t iprov_sample(hc_wgr_t *r, const hc_iprov_t *p) {
-    if (p->kind == HC_IP_CONST)
+    switch (p->kind) {
+    case HC_IP_CONST:
         return p->a;
-    if (p->kind == HC_IP_UNSUPPORTED_9B)
-        die("unsupported int provider sampled (clamped_normal — 9b)", NULL);
-    return hc_mth_random_between_inclusive(r, p->a, p->b);
+    case HC_IP_UNIFORM:
+        return hc_mth_random_between_inclusive(r, p->a, p->b);
+    case HC_IP_TRAPEZOID: {
+        /* TrapezoidInt.sample (R4 §6.2) — 대칭 빠른 경로가 Height 판과
+         * 다르다: min==−max && plateau==0 이면 a−b (드로우 2, 값이 일반
+         * 경로와 다름 — 문자 그대로 이식). */
+        if (p->c == 0 && p->b == -p->a)
+            return hc_wgr_next_int(r, p->b + 1) - hc_wgr_next_int(r, p->b + 1);
+        int32_t range = p->b - p->a;
+        if (p->c == range)
+            return hc_mth_random_between_inclusive(r, p->a, p->b);
+        int32_t half = (range - p->c) / 2;
+        int32_t upper = range - half;
+        return p->a + hc_mth_random_between_inclusive(r, 0, upper) +
+               hc_mth_random_between_inclusive(r, 0, half);
+    }
+    case HC_IP_WEIGHTED_LIST: {
+        /* WeightedList.getRandom: nextInt(total) 1 드로우 후 순회 (R4) */
+        int32_t roll = hc_wgr_next_int(r, p->total_weight);
+        for (int32_t i = 0; i < p->n_entries; i++) {
+            roll -= p->entries[i].weight;
+            if (roll < 0)
+                return iprov_sample(r, &p->entries[i].prov);
+        }
+        die("weighted_list roll out of range", NULL);
+        return 0;
+    }
+    }
+    die("unsupported int provider sampled (clamped_normal?)", NULL);
+    return 0;
+}
+
+/* --- BlockState provider 샘플 (R3: source 먼저, values 나중) --- */
+
+__attribute__((unused)) /* 9b 본문 채우면서 사용 — 스텁 단계 한정 */
+static uint16_t sprov_sample(hc_wgr_t *r, const hc_sprov_t *p) {
+    switch (p->kind) {
+    case HC_SP_SIMPLE:
+        return p->state;
+    case HC_SP_WEIGHTED: {
+        int32_t roll = hc_wgr_next_int(r, p->total_weight);
+        for (int32_t i = 0; i < p->n_entries; i++) {
+            roll -= p->entries[i].weight;
+            if (roll < 0)
+                return p->entries[i].state;
+        }
+        die("weighted state roll out of range", NULL);
+        return 0;
+    }
+    case HC_SP_RANDOMIZED_INT: {
+        uint16_t base = sprov_sample(r, p->source);
+        int32_t  v = iprov_sample(r, &p->values);
+        /* property=age 적용 — cave_vines 패밀리만 매핑 (컴파일이 보장) */
+        if (base >= HC_B_CAVE_VINES_BASE &&
+            base < HC_B_CAVE_VINES_BASE + 52) {
+            int32_t berries = (base - HC_B_CAVE_VINES_BASE) / 26;
+            if (v < 0 || v > 25)
+                die("randomized_int age out of range", NULL);
+            return (uint16_t)(HC_B_CAVE_VINES_BASE + berries * 26 + v);
+        }
+        die("randomized_int on unmapped block family", NULL);
+        return 0;
+    }
+    }
+    die("unknown state provider kind", NULL);
+    return 0;
 }
 
 static int32_t hprov_sample(hc_wgr_t *r, const hc_hprov_t *p) {
@@ -339,7 +520,7 @@ static int ore_place(feat_env_t *e, const hc_ore_cfg_t *cfg, int32_t ox,
     int32_t height = 2 * (2 + i8);
     for (int32_t x = min_x; x <= min_x + width; x++)
         for (int32_t z = min_z; z <= min_z + width; z++)
-            if (min_y <= hc_feat_height_wg(e->rg, HC_HM_OCEAN_FLOOR_WG, x, z))
+            if (min_y <= hc_feat_height(e->rg, HC_HM_OCEAN_FLOOR_WG, x, z))
                 return ore_do_place(e, cfg, x1, x2, z1, z2, y1, y2, min_x,
                                     min_y, min_z, width, height);
     return 0;
@@ -467,7 +648,48 @@ static int umagma_place(feat_env_t *e, const hc_umagma_cfg_t *cfg, int32_t ox,
     return placed > 0;
 }
 
+/* --- selector 본문 (task9b R2/R3) --- */
+
+static int rsel_place(feat_env_t *e, const hc_rsel_cfg_t *c, int32_t x,
+                      int32_t y, int32_t z) {
+    /* RandomSelectorFeature: 엔트리 순서로 nextFloat < chance, 첫 히트가
+     * 배치를 독점; 전부 빗나가면 default (R2) */
+    for (int32_t i = 0; i < c->n_entries; i++)
+        if (hc_wgr_next_float(e->rng) < c->entries[i].chance)
+            return run_nested_pf(e, c->entries[i].pf, x, y, z);
+    return run_nested_pf(e, c->dflt, x, y, z);
+}
+
+static int rbool_place(feat_env_t *e, const hc_rbool_cfg_t *c, int32_t x,
+                       int32_t y, int32_t z) {
+    /* RandomBooleanSelectorFeature: nextBoolean = next(1) != 0 (R3) */
+    int flag = hc_wgr_next(e->rng, 1) != 0;
+    return run_nested_pf(e, flag ? c->on_true : c->on_false, x, y, z);
+}
+
+static int srsel_place(feat_env_t *e, const hc_srsel_cfg_t *c, int32_t x,
+                       int32_t y, int32_t z) {
+    /* SimpleRandomSelectorFeature: nextInt(n) 픽 (R3) */
+    int32_t i = hc_wgr_next_int(e->rng, c->n);
+    return run_nested_pf(e, c->feats[i], x, y, z);
+}
+
 /* --- 본문 디스패치: 1/0 = 확정, -1 = 미구현 --- */
+
+static int tree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
+static int ftree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
+static int vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t x,
+                        int32_t y, int32_t z);
+static int bcol_place(feat_env_t *e, const hc_bcol_cfg_t *c, int32_t x,
+                      int32_t y, int32_t z);
+static int mface_place(feat_env_t *e, const hc_mface_cfg_t *c, int32_t x,
+                       int32_t y, int32_t z);
+static int sblock_place(feat_env_t *e, const hc_sblock_cfg_t *c, int32_t x,
+                        int32_t y, int32_t z);
+static int vines_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
+static int bamboo_place(feat_env_t *e, const hc_bamboo_cfg_t *c, int32_t x,
+                        int32_t y, int32_t z);
+static int freeze_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
 
 static int32_t cf_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
     switch (e->pf->cf_kind) {
@@ -479,10 +701,297 @@ static int32_t cf_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
         return monster_room_place(e, x, y, z);
     case HC_CF_UNDERWATER_MAGMA:
         return umagma_place(e, &e->pf->cf.umagma, x, y, z);
+    case HC_CF_RANDOM_SELECTOR:
+        return rsel_place(e, e->pf->cf.rsel, x, y, z);
+    case HC_CF_RANDOM_BOOLEAN:
+        return rbool_place(e, e->pf->cf.rbool, x, y, z);
+    case HC_CF_SIMPLE_RANDOM_SELECTOR:
+        return srsel_place(e, e->pf->cf.srsel, x, y, z);
+    case HC_CF_TREE:
+        return tree_place(e, x, y, z);
+    case HC_CF_FALLEN_TREE:
+        return ftree_place(e, x, y, z);
+    case HC_CF_VEGETATION_PATCH:
+        return vpatch_place(e, e->pf->cf.vpatch, x, y, z);
+    case HC_CF_BLOCK_COLUMN:
+        return bcol_place(e, e->pf->cf.bcol, x, y, z);
+    case HC_CF_MULTIFACE_GROWTH:
+        return mface_place(e, e->pf->cf.mface, x, y, z);
+    case HC_CF_SIMPLE_BLOCK:
+        return sblock_place(e, e->pf->cf.sblock, x, y, z);
+    case HC_CF_VINES:
+        return vines_place(e, x, y, z);
+    case HC_CF_BAMBOO:
+        return bamboo_place(e, e->pf->cf.bamboo, x, y, z);
+    case HC_CF_FREEZE_TOP_LAYER:
+        return freeze_place(e, x, y, z);
     default:
         e->unknown = 1;
         return -1;
     }
+}
+
+/* --- 지지면/생존 판정 (R1 §2.5/§5, R4 §1.3) --- */
+
+/* getBlockSupportShape 면 완전 판정 — 완전 큐브만 (잎 제외, R1 §2.5).
+ * isFaceSturdy(FULL/CENTER/RIGID), canSupportCenter 가 전부 여기로
+ * 축약된다. */
+static int support_face_full(uint16_t id) {
+    return hc_block_is_full_cube(id);
+}
+
+/* VineBlock.isAcceptableNeighbour = MultifaceBlock.canAttachTo:
+ * isFaceFull(support) || isFaceFull(COLLISION) — 잎은 support 가 EMPTY
+ * 지만 collision 이 완전 큐브라 부착 가능 (R1 §3 표 + R4 §2). */
+static int can_attach_to(uint16_t id) {
+    return hc_block_is_full_cube(id) || hc_block_is_leaves(id);
+}
+
+/* state.canSurvive(level, pos) — 블록별 디스패치 (R1 §5).
+ * 나머지 패밀리는 recon 랜딩과 함께 (도달 시 즉사). */
+static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
+                             int32_t z) {
+    if (s == HC_B_SHORT_GRASS || s == HC_B_FERN || s == HC_B_POPPY ||
+        s == HC_B_DANDELION || s == HC_B_TALL_GRASS_LOWER)
+        return mask_test(e->reg->tag_supports_vegetation,
+                         hc_feat_get_block(e->rg, x, y - 1, z));
+    if (s == HC_B_AZALEA || s == HC_B_FLOWERING_AZALEA)
+        return mask_test(e->reg->tag_supports_azalea,
+                         hc_feat_get_block(e->rg, x, y - 1, z));
+    if (s == HC_B_MOSS_CARPET) /* CarpetBlock: 아래가 비-공기 */
+        return !hc_block_is_air(hc_feat_get_block(e->rg, x, y - 1, z));
+    if (s == HC_B_SPORE_BLOSSOM) {
+        /* canSupportCenter(above, DOWN) && !isWaterAt(pos);
+         * #unstable_bottom_center(울타리 문) 은 팔레트에 없다 */
+        return support_face_full(hc_feat_get_block(e->rg, x, y + 1, z)) &&
+               !hc_block_fluid_is_water(hc_feat_get_block(e->rg, x, y, z));
+    }
+    if (s >= HC_B_SMALL_DRIPLEAF_BASE &&
+        s < HC_B_SMALL_DRIPLEAF_BASE + 16) {
+        /* SmallDripleafBlock LOWER: 아래 ∈ {clay, moss_block} ||
+         * (위가 소스 물 && 아래 ∈ #supports_vegetation) — R1 §5.
+         * (UPPER 하프는 feature 배치 경로에서 안 온다) */
+        uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+        if (mask_test(e->reg->tag_supports_small_dripleaf, below))
+            return 1;
+        return hc_block_fluid_is_water(
+                   hc_feat_get_block(e->rg, x, y + 1, z)) &&
+               mask_test(e->reg->tag_supports_vegetation, below);
+    }
+    die("canSurvive unmapped block state", hc_block_name(s));
+    return 0;
+}
+
+static int would_survive(feat_env_t *e, const char *name, int32_t x,
+                         int32_t y, int32_t z) {
+    (void)e;
+    (void)x;
+    (void)y;
+    (void)z;
+    die("would_survive dispatch not yet implemented (R2)", name);
+    return 0;
+}
+
+static int tree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
+    (void)e;
+    (void)x;
+    (void)y;
+    (void)z;
+    die("tree body not yet implemented (R2)", e->pf->name);
+    return 0;
+}
+static int ftree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
+    (void)x;
+    (void)y;
+    (void)z;
+    die("fallen_tree body not yet implemented (R2)", e->pf->name);
+    return 0;
+}
+static int vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t x,
+                        int32_t y, int32_t z) {
+    (void)c;
+    (void)x;
+    (void)y;
+    (void)z;
+    die("vegetation_patch body not yet implemented (R3)", e->pf->name);
+    return 0;
+}
+static int bcol_place(feat_env_t *e, const hc_bcol_cfg_t *c, int32_t x,
+                      int32_t y, int32_t z) {
+    (void)c;
+    (void)x;
+    (void)y;
+    (void)z;
+    die("block_column body not yet implemented (R3)", e->pf->name);
+    return 0;
+}
+static int mface_place(feat_env_t *e, const hc_mface_cfg_t *c, int32_t x,
+                       int32_t y, int32_t z) {
+    (void)c;
+    (void)x;
+    (void)y;
+    (void)z;
+    die("multiface_growth body not yet implemented (R3)", e->pf->name);
+    return 0;
+}
+/* --- SimpleBlockFeature (R4 §1) --- */
+
+/* DoublePlantBlock 패밀리 (R1 §3 표): tall_grass, small_dripleaf.
+ * placeAt 은 하프별로 copyWaterloggedFrom (wl 프로퍼티가 있으면 그
+ * 위치의 물 여부로 세팅 — small_dripleaf 만 해당). */
+static int double_plant_halves(feat_env_t *e, uint16_t s, int32_t x,
+                               int32_t y, int32_t z, uint16_t *lower,
+                               uint16_t *upper) {
+    if (s == HC_B_TALL_GRASS_LOWER || s == HC_B_TALL_GRASS_UPPER) {
+        *lower = HC_B_TALL_GRASS_LOWER;
+        *upper = HC_B_TALL_GRASS_UPPER;
+        return 1;
+    }
+    if (s >= HC_B_SMALL_DRIPLEAF_BASE &&
+        s < HC_B_SMALL_DRIPLEAF_BASE + 16) {
+        int32_t facing = (s - HC_B_SMALL_DRIPLEAF_BASE) / 4;
+        int wl_lo =
+            hc_block_fluid_is_water(hc_feat_get_block(e->rg, x, y, z));
+        int wl_hi =
+            hc_block_fluid_is_water(hc_feat_get_block(e->rg, x, y + 1, z));
+        *lower =
+            (uint16_t)(HC_B_SMALL_DRIPLEAF_BASE + facing * 4 + 0 * 2 + wl_lo);
+        *upper =
+            (uint16_t)(HC_B_SMALL_DRIPLEAF_BASE + facing * 4 + 1 * 2 + wl_hi);
+        return 1;
+    }
+    return 0;
+}
+
+static int sblock_place(feat_env_t *e, const hc_sblock_cfg_t *c, int32_t x,
+                        int32_t y, int32_t z) {
+    /* 프로바이더 드로우가 canSurvive 보다 먼저 — 거부 위치도 드로우를
+     * 태운다 (R4 §1) */
+    uint16_t state = sprov_sample(e->rng, &c->to_place);
+    if (!can_survive_state(e, state, x, y, z))
+        return 0;
+    uint16_t lower, upper;
+    if (double_plant_halves(e, state, x, y, z, &lower, &upper)) {
+        if (!hc_block_is_air(hc_feat_get_block(e->rg, x, y + 1, z)))
+            return 0;
+        /* DoublePlantBlock.placeAt — lower 먼저, flag 2 (R4 §1.4) */
+        hc_feat_set_block(e->rg, x, y, z, lower);
+        hc_feat_set_block(e->rg, x, y + 1, z, upper);
+        return 1;
+    }
+    hc_feat_set_block(e->rg, x, y, z, state);
+    /* schedule_tick: 우리 config 셋엔 없음 (기본 false) — 블록 바이트
+     * 재생에 비활성 */
+    return 1;
+}
+
+/* --- VinesFeature (R4 §2) — 드로우 0 --- */
+
+static int vines_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
+    if (!hc_block_is_air(hc_feat_get_block(e->rg, x, y, z)))
+        return 0;
+    /* Direction.values() 에서 DOWN 제외: UP, NORTH, SOUTH, WEST, EAST.
+     * 첫 부착 가능 면이 승리. vine 팔레트 오프셋: E,N,S,U,W. */
+    static const struct {
+        int8_t dx, dy, dz;
+        uint8_t face_off; /* HC_B_VINE_BASE + off */
+    } D[5] = {
+        {0, 1, 0, 3},  /* UP */
+        {0, 0, -1, 1}, /* NORTH */
+        {0, 0, 1, 2},  /* SOUTH */
+        {-1, 0, 0, 4}, /* WEST */
+        {1, 0, 0, 0},  /* EAST */
+    };
+    for (int i = 0; i < 5; i++) {
+        uint16_t nb =
+            hc_feat_get_block(e->rg, x + D[i].dx, y + D[i].dy, z + D[i].dz);
+        if (can_attach_to(nb)) {
+            hc_feat_set_block(e->rg, x, y, z,
+                              (uint16_t)(HC_B_VINE_BASE + D[i].face_off));
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* --- BambooFeature (R4 §3) --- */
+
+static int bamboo_place(feat_env_t *e, const hc_bamboo_cfg_t *c, int32_t x,
+                        int32_t y, int32_t z) {
+    /* 정적 상태: TRUNK[age=1,none,0] FINAL_LARGE[age=1,large,1]
+     * TOP_LARGE[age=1,large,0] TOP_SMALL[age=1,small,0] */
+    const uint16_t TRUNK = HC_B_BAMBOO_BASE + 1 * 6 + 0 * 2 + 0;
+    const uint16_t FINAL_LARGE = HC_B_BAMBOO_BASE + 1 * 6 + 2 * 2 + 1;
+    const uint16_t TOP_LARGE = HC_B_BAMBOO_BASE + 1 * 6 + 2 * 2 + 0;
+    const uint16_t TOP_SMALL = HC_B_BAMBOO_BASE + 1 * 6 + 1 * 2 + 0;
+    int placed = 0;
+    if (hc_block_is_air(hc_feat_get_block(e->rg, x, y, z))) {
+        if (mask_test(e->reg->tag_supports_bamboo,
+                      hc_feat_get_block(e->rg, x, y - 1, z))) {
+            int32_t height = hc_wgr_next_int(e->rng, 12) + 5; /* DRAW 1 */
+            if (hc_wgr_next_float(e->rng) < c->probability) { /* DRAW 2 항상 */
+                int32_t rad = hc_wgr_next_int(e->rng, 4) + 1; /* DRAW 3 조건 */
+                for (int32_t px = x - rad; px <= x + rad; px++)
+                    for (int32_t pz = z - rad; pz <= z + rad; pz++) {
+                        int32_t dx = px - x, dz = pz - z;
+                        if (dx * dx + dz * dz <= rad * rad) {
+                            int32_t sy = hc_feat_height(
+                                             e->rg, HC_HM_WORLD_SURFACE, px,
+                                             pz) -
+                                         1;
+                            if (sy >= HC_MIN_Y && sy <= HC_MAX_Y &&
+                                mask_test(e->reg->tag_podzol_replaceable,
+                                          hc_feat_get_block(e->rg, px, sy,
+                                                            pz)))
+                                hc_feat_set_block(e->rg, px, sy, pz,
+                                                  HC_B_PODZOL);
+                        }
+                    }
+            }
+            int32_t cy = y;
+            for (int32_t i = 0;
+                 i < height && hc_block_is_air(hc_feat_get_block(e->rg, x, cy,
+                                                                 z));
+                 i++) {
+                hc_feat_set_block(e->rg, x, cy, z, TRUNK);
+                cy++;
+            }
+            if (cy - y >= 3) {
+                /* 팁 3연타 — FINAL_LARGE 는 루프가 멈춘 위치를 무조건
+                 * 덮어쓴다 (R4 §3 3항) */
+                hc_feat_set_block(e->rg, x, cy, z, FINAL_LARGE);
+                hc_feat_set_block(e->rg, x, cy - 1, z, TOP_LARGE);
+                hc_feat_set_block(e->rg, x, cy - 2, z, TOP_SMALL);
+            }
+        }
+        placed++; /* canSurvive 실패/팁 생략과 무관 (R4 §3 4항 quirk) */
+    }
+    return placed > 0;
+}
+
+/* --- SnowAndFreezeFeature (R4 §8 / A5) — 드로우 0 --- */
+
+static int freeze_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
+    (void)y;
+    for (int32_t dx = 0; dx < 16; dx++) {
+        for (int32_t dz = 0; dz < 16; dz++) {
+            int32_t wx = x + dx, wz = z + dz;
+            int32_t hy = hc_feat_height(e->rg, HC_HM_MOTION_BLOCKING, wx, wz);
+            uint16_t b = hc_biome_view_get(e->view, wx, hy, wz);
+            /* shouldFreeze(below)/shouldSnow(top) 는 둘 다 온도 게이트가
+             * 첫 단락 (warmEnoughToRain ≥ 0.15f) — 이 그리드의 4개 바이옴
+             * (0.5..0.95) 은 전부 warm 이라 무조건 통과 실패 (A5 수치
+             * 증명). 찬 컬럼이 나타나면 얼음/눈 경로 미구현 — 즉사. */
+            if (hc_biome_cold_enough_to_snow(e->biomes, b, wx, hy - 1, wz,
+                                             e->sea_level) ||
+                hc_biome_cold_enough_to_snow(e->biomes, b, wx, hy, wz,
+                                             e->sea_level))
+                die("freeze_top_layer cold column — ice/snow path "
+                    "unimplemented",
+                    NULL);
+        }
+    }
+    return 1; /* place() 는 무조건 true (R4 §8) */
 }
 
 /* --- 파이프라인 (A2 §1.2 루프 중첩) --- */
@@ -530,7 +1039,7 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
         run_mods(e, mi + 1, x, hprov_sample(e->rng, &m->height), z);
         return;
     case HC_PM_HEIGHTMAP: {
-        int32_t ny = hc_feat_height_wg(e->rg, m->hm_type, x, z);
+        int32_t ny = hc_feat_height(e->rg, m->hm_type, x, z);
         if (ny > HC_MIN_Y)
             run_mods(e, mi + 1, x, ny, z);
         return;
@@ -557,7 +1066,7 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
         return;
     }
     case HC_PM_SURF_REL_THRESHOLD: {
-        int64_t h = hc_feat_height_wg(e->rg, m->hm_type, x, z);
+        int64_t h = hc_feat_height(e->rg, m->hm_type, x, z);
         if (h + (int64_t)m->min_incl <= (int64_t)y &&
             (int64_t)y <= h + (int64_t)m->max_incl)
             run_mods(e, mi + 1, x, y, z);
@@ -578,6 +1087,10 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
     case HC_PM_BIOME: {
         /* 최종 수정 위치의 3-D 바이옴 (fiddled zoom, 저장 쿼트) — 멤버십은
          * 이 feature 의 (step,index) 슬롯 (A2 §4; 슬롯은 전역 유일) */
+        if (e->nested)
+            die("biome modifier inside nested placed feature "
+                "(vanilla IllegalStateException path)",
+                e->pf->name);
         uint16_t b = hc_biome_view_get(e->view, x, y, z);
         assert(b < (uint16_t)e->reg->n_biomes);
         const uint64_t *row =
@@ -586,13 +1099,48 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
             run_mods(e, mi + 1, x, y, z);
         return;
     }
+    case HC_PM_SURFACE_WATER_DEPTH: {
+        /* SurfaceWaterDepthFilter: OCEAN_FLOOR/WORLD_SURFACE (LIVE) —
+         * 통과 iff WS − OF <= max_water_depth (A2 §0.2 검증) */
+        int32_t of = hc_feat_height(e->rg, HC_HM_OCEAN_FLOOR, x, z);
+        int32_t ws = hc_feat_height(e->rg, HC_HM_WORLD_SURFACE, x, z);
+        if (ws - of <= m->max_incl)
+            run_mods(e, mi + 1, x, y, z);
+        return;
+    }
+    case HC_PM_NOISE_THRESHOLD_COUNT: {
+        /* Biome.BIOME_INFO_NOISE.getValue(x/200, z/200, false) < level ?
+         * below : above — 드로우 0; NaN/동치 → above (A2 검증 dcmpg) */
+        double  n = hc_biome_info_noise((double)x / 200.0, (double)z / 200.0);
+        int32_t cnt = n < m->noise_level ? m->below_noise : m->above_noise;
+        for (int32_t i = 0; i < cnt; i++)
+            run_mods(e, mi + 1, x, y, z);
+        return;
+    }
+    case HC_PM_DIE:
+        die("unsupported placement modifier executed", m->die_what);
+        return;
     }
     die("unknown placement modifier kind", NULL);
+}
+
+static int run_nested_pf(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
+                         int32_t y, int32_t z) {
+    feat_env_t ne = *e;
+    ne.pf = pf;
+    ne.npos = 0;
+    ne.placed_any = 0;
+    ne.nested = 1;
+    ne.trace = NULL; /* p-라인은 최상위 전용 (FORMAT.md depth-exclusion) */
+    run_mods(&ne, 0, x, y, z);
+    e->unknown |= ne.unknown;
+    return ne.placed_any;
 }
 
 /* features_compile.c / gen_features_stage.c 가 쓰는 내부 진입점 */
 void hc_feat_run_placed(hc_feat_region_t *rg, hc_wgr_t *rng,
                         const hc_feat_reg_t *reg, const hc_biome_view_t *view,
+                        const hc_biome_reg_t *biomes, int32_t sea_level,
                         const hc_pfeat_t *pf, int32_t step, int32_t index,
                         int32_t origin_x, int32_t origin_y, int32_t origin_z,
                         const hc_feat_trace_t *trace) {
@@ -601,6 +1149,8 @@ void hc_feat_run_placed(hc_feat_region_t *rg, hc_wgr_t *rng,
     e.rng = rng;
     e.reg = reg;
     e.view = view;
+    e.biomes = biomes;
+    e.sea_level = sea_level;
     e.pf = pf;
     e.step = step;
     e.index = index;
@@ -608,6 +1158,7 @@ void hc_feat_run_placed(hc_feat_region_t *rg, hc_wgr_t *rng,
     e.npos = 0;
     e.placed_any = 0;
     e.unknown = 0;
+    e.nested = 0;
     run_mods(&e, 0, origin_x, origin_y, origin_z);
     if (trace && trace->on_feature) {
         int32_t placed = e.placed_any ? 1 : (e.unknown ? -1 : 0);

@@ -208,3 +208,8 @@ int hc_biome_should_melt_iceberg(const hc_biome_reg_t *r, int32_t id,
                                  int32_t sea_level) {
     return hc_biome_temperature(r, id, x, y, z, sea_level) > 0.1f;
 }
+
+double hc_biome_info_noise(double x, double z) {
+    ensure_noises();
+    return psn_value(&g_info_noise, x, z);
+}

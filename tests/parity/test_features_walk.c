@@ -1,22 +1,23 @@
-/* 07_features 스테이지 워크 패리티 (Plan Task 9a 게이트).
+/* 07_features 스테이지 워크 패리티 (Task 9 게이트 — ADR-007 D2 Tier 2).
  *
- * 게이트 3단 (태스크 브리프):
+ * 게이트 3단:
  *  (a) 데코 시드: 두 번들 order.manifest 의 전 라인 (81+81) 에 대해
  *      hc_features_decoration_seed 재계산 == 기록 hex.
- *  (b) 트레이스: PRIMARY 번들 순서로 그리드 9청크를 재생하며 step<=8 의
+ *  (b) 트레이스: PRIMARY 번들 순서로 그리드 9청크를 재생하며 step<=10 의
  *      p/f 이벤트 시퀀스가 golden/features-trace 의 바닐라 트레이스와
- *      정확히 일치 (positions + npos + placed).
- *  (c) 블록: 재생 결과(각 청크는 자기 데코 완료 시점 스냅샷)를 golden 07
- *      과 비교. step 9/10 (초목, 9b) 이 덮어쓴 위치만 잔차로 허용:
- *      g7 이 테이블 밖 블록(9b 팔레트)이거나 {clay, water, dirt} 인
- *      불일치는 카테고리별 카운트, 그 외 불일치는 실패. PRIMARY 와 ALT
- *      번들 모두 재생·비교한다 (서로 다른 두 순서 — ADR-007 D3 의
- *      Tier-2 증거를 ore/blob 패밀리에 대해 선취).
+ *      정확히 일치 (positions + npos + placed; placed-bit drift 0).
+ *  (c) 블록+하이트맵: 재생 결과(각 청크는 자기 데코 완료 시점 스냅샷)를
+ *      golden 07_features.{blocks,heightmaps} 와 셀 단위 0-diff 비교
+ *      (블록 36,864셀 + 하이트맵 6종×256컬럼, 팔레트 전 항목 해석 필수).
+ *      PRIMARY 와 ALT 번들 모두 재생·비교한다 — 서로 다른 두 기록 순서를
+ *      같은 코드로 재생해 둘 다 일치하면 ADR-007 D3 의 Tier-2 증거다.
+ *
+ * 개발 모드: HC_WALK_MAX_STEP=<n> (n<10) 이면 step n 까지만 걷고 게이트
+ * (c) 는 9a 방식 잔차 분류로 완화된다 (본문 이등분용 — CI 는 항상 10).
  *
  * 월드 구성: 그리드 9청크는 '우리' 04→(골든 03 바이옴)→05→06 체인
  * (test_carvers_stage.c 와 동일), 링 16청크는 golden/features-trace 의
- * 06_carvers/03_biomes 덤프 로드 (Tier-1 스테이지라 순서 무관·검증됨).
- * 하이트맵 게이트는 9b (FINAL 맵 유지관리와 함께). */
+ * 06_carvers/03_biomes 덤프 로드 (Tier-1 스테이지라 순서 무관·검증됨). */
 
 #undef NDEBUG
 
@@ -356,6 +357,55 @@ static void load_blocks_dump(const char *path, uint16_t *out,
         die("block dump incomplete", path);
 }
 
+/* 07_features.heightmaps.txt → 6종 전부 (게이트 (c) 비교용).
+ * 덤프 순서와 무관하게 이름으로 슬롯을 찾는다. */
+enum { HM6 = 6 };
+static const char *const HM_NAMES[HM6] = {
+    "WORLD_SURFACE_WG", "WORLD_SURFACE",   "OCEAN_FLOOR_WG",
+    "OCEAN_FLOOR",      "MOTION_BLOCKING", "MOTION_BLOCKING_NO_LEAVES",
+};
+
+static void load_heightmaps6(const char *path, int32_t out[HM6][256]) {
+    size_t len = 0;
+    char  *buf = read_file(path, &len);
+    char  *p = buf;
+    int32_t *cur = NULL;
+    int      row = 0, filled = 0;
+    while (*p) {
+        char *nl = strchr(p, '\n');
+        if (!nl)
+            break;
+        *nl = '\0';
+        if (p[0] == '#') {
+        } else if (strncmp(p, "heightmap ", 10) == 0) {
+            cur = NULL;
+            for (int i = 0; i < HM6; i++)
+                if (strcmp(p + 10, HM_NAMES[i]) == 0)
+                    cur = out[i];
+            if (!cur)
+                die("unknown heightmap type in 07 dump", p + 10);
+            row = 0;
+        } else if (cur) {
+            const char *q = p;
+            for (int x = 0; x < 16; x++) {
+                char *end;
+                long  v = strtol(q, &end, 10);
+                if (end == q)
+                    die("bad heightmap row", path);
+                cur[hc_col_idx(x, row)] = (int32_t)v;
+                q = end;
+            }
+            if (++row == 16) {
+                cur = NULL;
+                filled++;
+            }
+        }
+        p = nl + 1;
+    }
+    if (filled != HM6)
+        die("07 heightmaps dump incomplete", path);
+}
+
 /* 06_carvers.heightmaps.txt → WG 맵 2종 */
 static void load_heightmaps_dump(const char *path, hc_chunk_t *c) {
     size_t len = 0;
@@ -687,7 +737,14 @@ int main(int argc, char **argv) {
 
     load_quart_grid(surface_golden);
 
-    /* features 레지스트리 (walk step<=8) — 바이옴 인턴 포함 */
+    /* features 레지스트리 — 바이옴 인턴 포함. 개발 편의: 워크 상한을
+     * HC_WALK_MAX_STEP 환경변수로 낮출 수 있다 (기본 = 전체 10). */
+    int32_t walk_max_step = 10;
+    {
+        const char *ws = getenv("HC_WALK_MAX_STEP");
+        if (ws && *ws)
+            walk_max_step = (int32_t)strtol(ws, NULL, 10);
+    }
     snprintf(sub, sizeof sub, "%s/features_order-26.2.txt", ref_dir);
     char *order_txt = read_file(sub, NULL);
     snprintf(sub, sizeof sub, "%s/biome_features-26.2.json", ref_dir);
@@ -698,7 +755,7 @@ int main(int argc, char **argv) {
     if (!freg ||
         hc_feat_reg_init(freg, &g_arena, order_txt, biome_features, g_placed,
                          g_n_placed, g_configured, g_n_configured, g_tags,
-                         g_n_tags, &g_reg, 8, &ferr) != 0)
+                         g_n_tags, &g_reg, walk_max_step, &ferr) != 0)
         die(ferr ? ferr : "feature registry init failed", NULL);
     if (freg->counts[6] != 34 || freg->counts[8] != 3)
         die("feature order table sanity failed", NULL);
@@ -797,13 +854,18 @@ int main(int argc, char **argv) {
         const char            *bdir = bundle == 0 ? stages_dir : alt_dir;
         const manifest_line_t *man = bundle == 0 ? man_pri : man_alt;
 
-        /* 06 상태로 리셋 */
-        for (int i = 0; i < WORLD_CHUNKS; i++)
+        /* 06 상태로 리셋 (FINAL 하이트맵/프라임 비트 포함) */
+        for (int i = 0; i < WORLD_CHUNKS; i++) {
             memcpy(w.chunks[i].states, w.pristine[i],
                    sizeof(uint16_t) * (size_t)HC_BLOCKS);
+            memset(w.chunks[i].heightmap_final, 0,
+                   sizeof w.chunks[i].heightmap_final);
+            w.chunks[i].hm_final_primed = 0;
+        }
 
         /* seq 0..8 = 그리드 9청크 (양 번들 공통 — NOTES.md) */
         static uint16_t snap[9][HC_BLOCKS];
+        static int32_t  snap_hm[9][HM6][256];
         int32_t         snap_cx[9], snap_cz[9];
         for (int32_t s = 0; s < 9; s++) {
             int32_t cx = man[s].cx, cz = man[s].cz;
@@ -819,7 +881,8 @@ int main(int argc, char **argv) {
             tb.buf[0] = '\0';
             hc_feat_trace_t sink = {sink_pos, sink_feature, &tb};
 
-            hc_gen_features_chunk(&rg, cx, cz, seed, freg, &view, &g_reg, 8,
+            hc_gen_features_chunk(&rg, cx, cz, seed, freg, &view, &g_reg,
+                                  (int32_t)sea->num, walk_max_step,
                                   bundle == 0 ? &sink : NULL);
             tb.buf[tb.len] = '\0';
 
@@ -834,29 +897,45 @@ int main(int argc, char **argv) {
                 char tpath[1024];
                 snprintf(tpath, sizeof tpath, "%s/traces/c.%d.%d.trace.txt",
                          trace_dir, cx, cz);
-                filter_golden_trace(tpath, 8, man[s].seed_hex, &gt);
+                filter_golden_trace(tpath, walk_max_step, man[s].seed_hex, &gt);
                 gt.buf[gt.len] = '\0';
                 char what[64];
                 snprintf(what, sizeof what, "c.%d.%d", cx, cz);
                 g_fails += diff_traces(what, tb.buf, gt.buf);
             }
 
-            /* 자기 데코 완료 시점 스냅샷 (07 덤프 시맨틱) */
-            memcpy(snap[s], w.chunks[widx(cx, cz)].states,
-                   sizeof(uint16_t) * (size_t)HC_BLOCKS);
+            /* 자기 데코 완료 시점 스냅샷 (07 덤프 시맨틱) — 블록 +
+             * 하이트맵 6종 */
+            hc_chunk_t *cc = &w.chunks[widx(cx, cz)];
+            memcpy(snap[s], cc->states, sizeof(uint16_t) * (size_t)HC_BLOCKS);
+            memcpy(snap_hm[s][0], cc->heightmap_ws, sizeof snap_hm[s][0]);
+            memcpy(snap_hm[s][1], cc->heightmap_final[HC_HMF_WORLD_SURFACE],
+                   sizeof snap_hm[s][1]);
+            memcpy(snap_hm[s][2], cc->heightmap_ocean_floor,
+                   sizeof snap_hm[s][2]);
+            memcpy(snap_hm[s][3], cc->heightmap_final[HC_HMF_OCEAN_FLOOR],
+                   sizeof snap_hm[s][3]);
+            memcpy(snap_hm[s][4], cc->heightmap_final[HC_HMF_MOTION_BLOCKING],
+                   sizeof snap_hm[s][4]);
+            memcpy(snap_hm[s][5],
+                   cc->heightmap_final[HC_HMF_MOTION_BLOCKING_NO_LEAVES],
+                   sizeof snap_hm[s][5]);
             snap_cx[s] = cx;
             snap_cz[s] = cz;
         }
 
-        /* 게이트 (c): 스냅샷 vs golden 07 — 9b 잔차 카테고리만 허용 */
+        /* 게이트 (c): 스냅샷 vs golden 07.
+         * 전체 워크(step 10): 블록 + 하이트맵 6종 0-diff.
+         * 개발 모드(step < 10): 9a 방식 잔차 분류 (본문 이등분용). */
+        int strict = walk_max_step >= 10;
         int64_t hard = 0, res_unknown = 0, res_clay = 0, res_water = 0,
-                res_dirt = 0, changed = 0;
+                res_dirt = 0, changed = 0, hm_bad = 0;
         for (int32_t s = 0; s < 9; s++) {
             static uint16_t g7[HC_BLOCKS];
             char            gpath[1024];
             snprintf(gpath, sizeof gpath, "%s/c.%d.%d/07_features.blocks.txt",
                      bdir, snap_cx[s], snap_cz[s]);
-            load_blocks_dump(gpath, g7, /*allow_unknown=*/1);
+            load_blocks_dump(gpath, g7, /*allow_unknown=*/!strict);
             const uint16_t *g6 =
                 w.pristine[widx(snap_cx[s], snap_cz[s])];
             for (size_t i = 0; i < (size_t)HC_BLOCKS; i++) {
@@ -864,14 +943,14 @@ int main(int argc, char **argv) {
                     changed++;
                 if (snap[s][i] == g7[i])
                     continue;
-                /* step 9/10 (초목, 9b) 의 덮어쓰기만 허용 */
-                if (g7[i] == B_UNKNOWN) {
-                    res_unknown++;
-                } else if (g7[i] == HC_B_CLAY) {
+                if (!strict &&
+                    (g7[i] == B_UNKNOWN || g7[i] >= HC_B_SHORT_GRASS)) {
+                    res_unknown++; /* step-9 팔레트 블록 (9a 잔차 시맨틱) */
+                } else if (!strict && g7[i] == HC_B_CLAY) {
                     res_clay++;
-                } else if (g7[i] == HC_B_WATER) {
+                } else if (!strict && g7[i] == HC_B_WATER) {
                     res_water++;
-                } else if (g7[i] == HC_B_DIRT) {
+                } else if (!strict && g7[i] == HC_B_DIRT) {
                     res_dirt++;
                 } else {
                     if (hard < 8) {
@@ -889,30 +968,62 @@ int main(int argc, char **argv) {
                     hard++;
                 }
             }
+            if (strict) {
+                static int32_t g7hm[HM6][256];
+                snprintf(gpath, sizeof gpath,
+                         "%s/c.%d.%d/07_features.heightmaps.txt", bdir,
+                         snap_cx[s], snap_cz[s]);
+                load_heightmaps6(gpath, g7hm);
+                for (int t = 0; t < HM6; t++)
+                    for (int col = 0; col < 256; col++)
+                        if (snap_hm[s][t][col] != g7hm[t][col]) {
+                            if (hm_bad < 8)
+                                fprintf(stderr,
+                                        "GATE(c) HM FAIL %s c.%d.%d %s "
+                                        "(%d,%d): ours=%d golden=%d\n",
+                                        bname, snap_cx[s], snap_cz[s],
+                                        HM_NAMES[t], col & 15, col >> 4,
+                                        snap_hm[s][t][col], g7hm[t][col]);
+                            hm_bad++;
+                        }
+            }
         }
         if (hard) {
-            fprintf(stderr, "GATE(c) %s: %" PRId64 " hard mismatches\n",
+            fprintf(stderr, "GATE(c) %s: %" PRId64 " block mismatches\n",
                     bname, hard);
             g_fails += (int)(hard > 1000 ? 1000 : hard);
+        }
+        if (hm_bad) {
+            fprintf(stderr, "GATE(c) %s: %" PRId64 " heightmap mismatches\n",
+                    bname, hm_bad);
+            g_fails += (int)(hm_bad > 1000 ? 1000 : hm_bad);
         }
         if (changed < 5000)
             die("suspiciously few placed blocks — gate vacuous?", bname);
         total_placed_blocks += changed;
-        printf("gate(c) %s: %" PRId64 " blocks placed by walk; residuals "
-               "(9b overwrites): %" PRId64 " new-block, %" PRId64
-               " clay, %" PRId64 " water, %" PRId64 " dirt; hard fails %"
-               PRId64 "\n",
-               bname, changed, res_unknown, res_clay, res_water, res_dirt,
-               hard);
+        if (strict)
+            printf("gate(c) %s: %" PRId64 " blocks placed by walk; block "
+                   "mismatches %" PRId64 ", heightmap mismatches %" PRId64
+                   "\n",
+                   bname, changed, hard, hm_bad);
+        else
+            printf("gate(c) %s [dev step<=%d]: %" PRId64 " blocks placed; "
+                   "residuals: %" PRId64 " new-block, %" PRId64 " clay, %"
+                   PRId64 " water, %" PRId64 " dirt; hard fails %" PRId64
+                   "\n",
+                   bname, walk_max_step, changed, res_unknown, res_clay,
+                   res_water, res_dirt, hard);
     }
 
-    /* placed-bit drift 상한: 이 그리드의 실측 잔차는 1 (c.1.1 ore_iron_small
-     * — 이웃 step-9 moss 스필). 늘어나면 회귀다. */
-    if (g_placed_bit_drifts > 2) {
+    /* placed-bit drift: step 9 를 걷는 순간부터 이웃 스필이 실재해서
+     * 상한은 0 이다. step<=8 개발 모드에선 9a 실측 잔차 1 (c.1.1
+     * ore_iron_small — 이웃 step-9 moss 스필) 을 허용. */
+    int drift_cap = walk_max_step >= 9 ? 0 : 2;
+    if (g_placed_bit_drifts > drift_cap) {
         fprintf(stderr,
-                "GATE(b) FAIL: %d placed-bit drifts (> 2) — new state "
-                "divergence beyond the known step-9 spill class\n",
-                g_placed_bit_drifts);
+                "GATE(b) FAIL: %d placed-bit drifts (> %d) — state "
+                "divergence\n",
+                g_placed_bit_drifts, drift_cap);
         g_fails += g_placed_bit_drifts;
     }
     printf("test_features_walk: %" PRId64 " blocks placed across bundles, "
