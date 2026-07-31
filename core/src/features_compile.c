@@ -387,12 +387,24 @@ static int bpred_compile(fc_t *fc, const hc_json_t *j, hc_bpred_t *p,
             p->off[i] = (int8_t)v->num;
     }
     if (hc_json_streq(t, "minecraft:matching_fluids")) {
+        /* [water] 또는 [water, flowing_water] (firefly_bush) 만. 팔레트에
+         * flowing 상태가 없어서 (월드젠은 level=0 소스만 쓴다) 두 목록의
+         * FluidState.is() 결과가 전 상태에서 일치 — 같은 술어로 축약. */
         const hc_json_t *fl = hc_json_get(j, "fluids");
-        const hc_json_t *one = fl && fl->kind == HC_JSON_ARR ? fl->child : fl;
-        if (!one || one->kind != HC_JSON_STR ||
-            !hc_json_streq(one, "minecraft:water") ||
-            (fl->kind == HC_JSON_ARR && fl->count != 1))
-            FAIL("matching_fluids: only [minecraft:water] supported");
+        if (!fl)
+            FAIL("matching_fluids without fluids");
+        int saw_water = 0;
+        const hc_json_t *one = fl->kind == HC_JSON_ARR ? fl->child : fl;
+        for (; one; one = fl->kind == HC_JSON_ARR ? one->next : NULL) {
+            if (one->kind != HC_JSON_STR)
+                FAIL("matching_fluids entry not string");
+            if (hc_json_streq(one, "minecraft:water"))
+                saw_water = 1;
+            else if (!hc_json_streq(one, "minecraft:flowing_water"))
+                FAIL("matching_fluids: unsupported fluid");
+        }
+        if (!saw_water)
+            FAIL("matching_fluids: water missing");
         p->kind = HC_BP_MATCHING_FLUIDS_WATER;
         return 0;
     }
@@ -1403,6 +1415,8 @@ int hc_feat_reg_init(hc_feat_reg_t *reg, hc_arena_t *arena,
          offsetof(hc_feat_reg_t, tag_supports_big_dripleaf)},
         {"#minecraft:supports_cocoa",
          offsetof(hc_feat_reg_t, tag_supports_cocoa)},
+        {"#minecraft:supports_sugar_cane",
+         offsetof(hc_feat_reg_t, tag_supports_sugar_cane)},
         {"#minecraft:replaceable_by_trees",
          offsetof(hc_feat_reg_t, tag_replaceable_by_trees)},
         {"#minecraft:logs", offsetof(hc_feat_reg_t, tag_logs)},

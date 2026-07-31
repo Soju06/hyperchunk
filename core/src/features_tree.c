@@ -4,6 +4,8 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* TreeFeature + trunk/foliage placer + decorator + FallenTreeFeature —
@@ -15,184 +17,18 @@
 #define iprov_sample hc_featx_iprov_sample
 #define sprov_sample hc_featx_sprov_sample
 
-/* ================= Java HashSet<BlockPos> 순회 에뮬레이션 =================
- *
- * 왜: TreeDecorator$Context 는 HashSet 을 ObjectArrayList 로 복사한 뒤
- * getY 안정 정렬한다 — 같은 y 끼리는 HashSet 순회 순서가 남고, 데코레이터
- * 드로우가 그 순서를 따른다. updateLeaves 의 레벨 셋 poll 도 HashSet
- * 순서다. (R2 §12)
- *
- * JDK HashMap 시맨틱: cap 16 시작(0.75), index = (cap-1) & (h ^ h>>>16),
- * 체인 꼬리 삽입, 삽입 후 size > threshold 면 리사이즈(버킷을 lo/hi 로
- * 상대순서 보존 분할), 한 버킷이 8개가 되면 cap<64 → 리사이즈 / cap>=64 →
- * treeify(미이식 — 즉사). 순회 = 버킷 오름차순, 체인 head→tail.
- * BlockPos.hashCode = (y + z*31)*31 + x (Vec3i). */
-
-enum { JSET_MAX_ENTRIES = 8192, JSET_MAX_CAP = 16384 };
-
-typedef struct {
-    int32_t x, y, z;
-    int32_t next; /* 체인 다음 엔트리 인덱스, -1 끝 */
-    uint32_t hash; /* spread 전 원시 hashCode */
-    uint8_t  dead; /* remove 후 1 (엔트리 배열은 재사용 안 함) */
-} jent_t;
-
-typedef struct {
-    jent_t  ent[JSET_MAX_ENTRIES];
-    int32_t n_ent;
-    int32_t bucket[JSET_MAX_CAP]; /* head 엔트리 인덱스, -1 빔 */
-    int32_t cap;                  /* 2^k */
-    int32_t size, threshold;
-} jset_t;
-
-static void jset_init(jset_t *s) {
-    s->n_ent = 0;
-    s->cap = 16;
-    s->size = 0;
-    s->threshold = 12;
-    for (int32_t i = 0; i < s->cap; i++)
-        s->bucket[i] = -1;
-}
-
-static uint32_t jpos_hash(int32_t x, int32_t y, int32_t z) {
-    return (uint32_t)((y + z * 31) * 31 + x);
-}
-
-static int32_t jset_index(const jset_t *s, uint32_t h) {
-    uint32_t spread = h ^ (h >> 16);
-    return (int32_t)((uint32_t)(s->cap - 1) & spread);
-}
-
-static void jset_resize(jset_t *s) {
-    int32_t old_cap = s->cap;
-    if (old_cap * 2 > JSET_MAX_CAP)
-        die("jset resize overflow", NULL);
-    s->cap = old_cap * 2;
-    s->threshold = (int32_t)((double)s->cap * 0.75);
-    /* JDK 8 split: 각 구버킷 체인을 (hash & oldCap) 비트로 lo/hi 분할,
-     * 상대순서 보존; lo → j, hi → j+oldCap */
-    for (int32_t j = 0; j < old_cap; j++) {
-        int32_t head = s->bucket[j];
-        int32_t lo_head = -1, lo_tail = -1, hi_head = -1, hi_tail = -1;
-        int32_t e = head;
-        while (e >= 0) {
-            int32_t nxt = s->ent[e].next;
-            uint32_t spread = s->ent[e].hash ^ (s->ent[e].hash >> 16);
-            s->ent[e].next = -1;
-            if ((spread & (uint32_t)old_cap) == 0) {
-                if (lo_tail < 0)
-                    lo_head = e;
-                else
-                    s->ent[lo_tail].next = e;
-                lo_tail = e;
-            } else {
-                if (hi_tail < 0)
-                    hi_head = e;
-                else
-                    s->ent[hi_tail].next = e;
-                hi_tail = e;
-            }
-            e = nxt;
-        }
-        s->bucket[j] = lo_head;
-        s->bucket[j + old_cap] = hi_head;
-    }
-}
-
-/* HashSet.add — 이미 있으면 false (순서 불변) */
-static int jset_add(jset_t *s, int32_t x, int32_t y, int32_t z) {
-    uint32_t h = jpos_hash(x, y, z);
-    int32_t  idx = jset_index(s, h);
-    int32_t  e = s->bucket[idx];
-    int32_t  tail = -1, bin = 0;
-    while (e >= 0) {
-        if (s->ent[e].x == x && s->ent[e].y == y && s->ent[e].z == z)
-            return 0;
-        tail = e;
-        bin++;
-        e = s->ent[e].next;
-    }
-    if (s->n_ent >= JSET_MAX_ENTRIES)
-        die("jset entries overflow", NULL);
-    int32_t ne = s->n_ent++;
-    s->ent[ne].x = x;
-    s->ent[ne].y = y;
-    s->ent[ne].z = z;
-    s->ent[ne].hash = h;
-    s->ent[ne].next = -1;
-    s->ent[ne].dead = 0;
-    if (tail < 0)
-        s->bucket[idx] = ne;
-    else
-        s->ent[tail].next = ne;
-    /* treeifyBin 경로: 삽입 후 체인 8개 도달 (binCount>=7 로 진입) */
-    if (bin + 1 >= 8) {
-        if (s->cap < 64)
-            jset_resize(s);
-        else
-            die("jset treeify reached — not ported (R2 §12)", NULL);
-    }
-    if (++s->size > s->threshold)
-        jset_resize(s);
-    return 1;
-}
-
-/* 순회: 버킷 오름차순 → 체인 순. it = {bucket, entry} */
-typedef struct {
-    const jset_t *s;
-    int32_t       b, e;
-} jit_t;
-
-static void jit_begin(jit_t *it, const jset_t *s) {
-    it->s = s;
-    it->b = -1;
-    it->e = -1;
-    /* 첫 원소로 전진 */
-    for (int32_t b = 0; b < s->cap; b++)
-        if (s->bucket[b] >= 0) {
-            it->b = b;
-            it->e = s->bucket[b];
-            return;
-        }
-    it->b = s->cap;
-}
-
-static int jit_valid(const jit_t *it) {
-    return it->b < it->s->cap && it->e >= 0;
-}
-
-static void jit_next(jit_t *it) {
-    const jset_t *s = it->s;
-    if (s->ent[it->e].next >= 0) {
-        it->e = s->ent[it->e].next;
-        return;
-    }
-    for (int32_t b = it->b + 1; b < s->cap; b++)
-        if (s->bucket[b] >= 0) {
-            it->b = b;
-            it->e = s->bucket[b];
-            return;
-        }
-    it->b = s->cap;
-    it->e = -1;
-}
-
-/* 첫 원소 꺼내 제거 (updateLeaves 의 it.next()+it.remove()) */
-static int jset_poll_first(jset_t *s, int32_t *x, int32_t *y, int32_t *z) {
-    for (int32_t b = 0; b < s->cap; b++) {
-        int32_t e = s->bucket[b];
-        if (e >= 0) {
-            *x = s->ent[e].x;
-            *y = s->ent[e].y;
-            *z = s->ent[e].z;
-            s->bucket[b] = s->ent[e].next;
-            s->ent[e].dead = 1;
-            s->size--;
-            return 1;
-        }
-    }
-    return 0;
-}
+/* Java HashSet<BlockPos> 에뮬레이션은 features_internal.h 로 이동
+ * (R3 vegetation_patch 도 같은 순회 순서를 소비한다). 로컬 별칭만 유지. */
+#define jset_t hc_jset_t
+#define jent_t hc_jent_t
+#define jit_t hc_jit_t
+#define jset_init hc_jset_init
+#define jset_add hc_jset_add
+#define jset_poll_first hc_jset_poll_first
+#define jit_begin hc_jit_begin
+#define jit_valid hc_jit_valid
+#define jit_next hc_jit_next
+#define JSET_MAX_ENTRIES HC_JSET_MAX_ENTRIES
 
 /* ================= 공용 헬퍼 (R2) ================= */
 
@@ -600,6 +436,14 @@ static int ctx_is_air(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
 /* Context.placeVine — deco 셋 + flag 19. face_off: E=0,N=1,S=2,U=3,W=4 */
 static void ctx_place_vine(tree_ctx_t *t, jset_t *deco, int32_t x, int32_t y,
                            int32_t z, int face_off) {
+    const char *dbg = getenv("HC_TREE_DEBUG_CELL");
+    if (dbg) {
+        int32_t dx, dy, dz;
+        if (sscanf(dbg, "%d,%d,%d", &dx, &dy, &dz) == 3 && x == dx &&
+            y == dy && z == dz)
+            fprintf(stderr, "placeVine HIT (%d,%d,%d) face %d\n", x, y, z,
+                    face_off);
+    }
     jset_add(deco, x, y, z);
     hc_feat_set_block(t->e->rg, x, y, z,
                       (uint16_t)(HC_B_VINE_BASE + face_off));
@@ -676,16 +520,26 @@ static void dec_hanging_vine(tree_ctx_t *t, jset_t *deco, int32_t x, int32_t y,
 static void dec_leave_vine(tree_ctx_t *t, jset_t *deco, const cpos_t *leaves,
                            int32_t n_leaves, float prob) {
     feat_env_t *e = t->e;
+    const char *dbg = getenv("HC_TREE_DEBUG");
     for (int32_t i = 0; i < n_leaves; i++) {
         int32_t x = leaves[i].x, y = leaves[i].y, z = leaves[i].z;
-        if (hc_wgr_next_float(e->rng) < prob && ctx_is_air(e, x - 1, y, z))
+        float f1 = hc_wgr_next_float(e->rng);
+        if (f1 < prob && ctx_is_air(e, x - 1, y, z))
             dec_hanging_vine(t, deco, x - 1, y, z, 0); /* west, EAST face */
-        if (hc_wgr_next_float(e->rng) < prob && ctx_is_air(e, x + 1, y, z))
+        float f2 = hc_wgr_next_float(e->rng);
+        if (f2 < prob && ctx_is_air(e, x + 1, y, z))
             dec_hanging_vine(t, deco, x + 1, y, z, 4);
-        if (hc_wgr_next_float(e->rng) < prob && ctx_is_air(e, x, y, z - 1))
+        float f3 = hc_wgr_next_float(e->rng);
+        if (f3 < prob && ctx_is_air(e, x, y, z - 1))
             dec_hanging_vine(t, deco, x, y, z - 1, 2);
-        if (hc_wgr_next_float(e->rng) < prob && ctx_is_air(e, x, y, z + 1))
+        float f4 = hc_wgr_next_float(e->rng);
+        if (f4 < prob && ctx_is_air(e, x, y, z + 1))
             dec_hanging_vine(t, deco, x, y, z + 1, 1);
+        if (dbg)
+            fprintf(stderr,
+                    "leave_vine leaf %d (%d,%d,%d) f %.4f %.4f %.4f %.4f\n",
+                    i, x, y, z, (double)f1, (double)f2, (double)f3,
+                    (double)f4);
     }
 }
 

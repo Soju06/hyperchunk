@@ -394,6 +394,7 @@ typedef struct {
     uint64_t tag_supports_small_dripleaf[(HC_B_COUNT + 63) / 64];
     uint64_t tag_supports_big_dripleaf[(HC_B_COUNT + 63) / 64];
     uint64_t tag_supports_cocoa[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_supports_sugar_cane[(HC_B_COUNT + 63) / 64];
     /* tree 본문 (R2): validTreePos/isFree/getOptionalDistanceAt */
     uint64_t tag_replaceable_by_trees[(HC_B_COUNT + 63) / 64];
     uint64_t tag_logs[(HC_B_COUNT + 63) / 64];

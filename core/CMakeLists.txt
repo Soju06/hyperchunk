@@ -29,6 +29,8 @@ add_library(hyperchunk STATIC
   src/features.c
   src/gen_features_stage.c
   src/features_tree.c
+  src/features_lush.c
+  src/jset.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc

@@ -922,6 +922,25 @@ int main(int argc, char **argv) {
                    sizeof snap_hm[s][5]);
             snap_cx[s] = cx;
             snap_cz[s] = cz;
+            /* 디버그: HC_WALK_DUMP_DIR 에 우리 07 스냅샷 저장 (분석용) */
+            const char *dd = getenv("HC_WALK_DUMP_DIR");
+            if (dd) {
+                char dpath[1024];
+                snprintf(dpath, sizeof dpath, "%s/%s.c.%d.%d.txt", dd, bname,
+                         cx, cz);
+                FILE *df = fopen(dpath, "w");
+                if (df) {
+                    for (size_t i = 0; i < (size_t)HC_BLOCKS; i++)
+                        if (snap[s][i] != HC_B_AIR) {
+                            int32_t y = (int32_t)(i / 256) + HC_MIN_Y;
+                            int32_t z = (int32_t)((i / 16) % 16);
+                            int32_t x = (int32_t)(i % 16);
+                            fprintf(df, "%d %d %d %s\n", x, y, z,
+                                    hc_block_name(snap[s][i]));
+                        }
+                    fclose(df);
+                }
+            }
         }
 
         /* 게이트 (c): 스냅샷 vs golden 07.
@@ -953,7 +972,7 @@ int main(int argc, char **argv) {
                 } else if (!strict && g7[i] == HC_B_DIRT) {
                     res_dirt++;
                 } else {
-                    if (hard < 8) {
+                    if (hard < 200) {
                         int32_t y = (int32_t)(i / 256) + HC_MIN_Y;
                         int32_t z = (int32_t)((i / 16) % 16);
                         int32_t x = (int32_t)(i % 16);

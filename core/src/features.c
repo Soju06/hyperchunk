@@ -49,7 +49,7 @@ uint16_t hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
     return c->states[hc_idx(x & 15, y, z & 15)];
 }
 
-void hc_featx_die(const char *what, const char *detail) {
+_Noreturn void hc_featx_die(const char *what, const char *detail) {
     fprintf(stderr, "hc_features FATAL: %s%s%s\n", what, detail ? ": " : "",
             detail ? detail : "");
     abort();
@@ -190,8 +190,10 @@ static int face_sturdy(feat_env_t *e, int32_t x, int32_t y, int32_t z,
 static int would_survive(feat_env_t *e, const char *name, int32_t x,
                          int32_t y, int32_t z);
 
-static int bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x, int32_t y,
-                      int32_t z) {
+#define bpred_eval hc_featx_bpred_eval
+
+int hc_featx_bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x,
+                        int32_t y, int32_t z) {
     x += p->off[0];
     y += p->off[1];
     z += p->off[2];
@@ -767,12 +769,30 @@ static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
 
 static int would_survive(feat_env_t *e, const char *name, int32_t x,
                          int32_t y, int32_t z) {
-    /* SaplingBlock 은 VegetationBlock canSurvive 를 오버라이드하지 않는다
-     * (R2 §2): below.is(#supports_vegetation) */
+    /* SaplingBlock/FireflyBushBlock 은 VegetationBlock canSurvive 를
+     * 오버라이드하지 않는다 (R2 §2 / 본 세션 javap):
+     * below.is(#supports_vegetation) */
     if (strcmp(name, "minecraft:oak_sapling") == 0 ||
-        strcmp(name, "minecraft:jungle_sapling") == 0)
+        strcmp(name, "minecraft:jungle_sapling") == 0 ||
+        strcmp(name, "minecraft:firefly_bush") == 0)
         return mask_test(e->reg->tag_supports_vegetation,
                          hc_feat_get_block(e->rg, x, y - 1, z));
+    if (strcmp(name, "minecraft:sugar_cane") == 0) {
+        /* SugarCaneBlock.canSurvive (본 세션 javap): below.is(자기 블록) —
+         * 팔레트에 sugar_cane 없음 → 항상 거짓; below.is(#supports_sugar_
+         * cane) 이면 below 의 수평 4방 (HORIZONTAL: N,E,S,W) 중 유체가
+         * #fluid:supports_sugar_cane_adjacently(=#water) 이거나 블록이
+         * frosted_ice(팔레트 밖) 인 이웃이 있어야 참. */
+        uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+        if (!mask_test(e->reg->tag_supports_sugar_cane, below))
+            return 0;
+        static const int8_t H4[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+        for (int i = 0; i < 4; i++)
+            if (hc_block_fluid_is_water(hc_feat_get_block(
+                    e->rg, x + H4[i][0], y - 1, z + H4[i][1])))
+                return 1;
+        return 0;
+    }
     die("would_survive dispatch unmapped", name);
     return 0;
 }
@@ -785,30 +805,15 @@ static int ftree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
 }
 static int vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t x,
                         int32_t y, int32_t z) {
-    (void)c;
-    (void)x;
-    (void)y;
-    (void)z;
-    die("vegetation_patch body not yet implemented (R3)", e->pf->name);
-    return 0;
+    return hc_featx_vpatch_place(e, c, x, y, z);
 }
 static int bcol_place(feat_env_t *e, const hc_bcol_cfg_t *c, int32_t x,
                       int32_t y, int32_t z) {
-    (void)c;
-    (void)x;
-    (void)y;
-    (void)z;
-    die("block_column body not yet implemented (R3)", e->pf->name);
-    return 0;
+    return hc_featx_bcol_place(e, c, x, y, z);
 }
 static int mface_place(feat_env_t *e, const hc_mface_cfg_t *c, int32_t x,
                        int32_t y, int32_t z) {
-    (void)c;
-    (void)x;
-    (void)y;
-    (void)z;
-    die("multiface_growth body not yet implemented (R3)", e->pf->name);
-    return 0;
+    return hc_featx_mface_place(e, c, x, y, z);
 }
 /* --- SimpleBlockFeature (R4 §1) --- */
 
@@ -976,7 +981,16 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
                      int32_t z);
 
 static void leaf(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
-    int32_t placed = cf_place(e, x, y, z);
+    /* Feature.place 진입부의 ensureCanWrite(pos) — 창 밖이면 본문 미실행,
+     * 드로우 0, false (R3 §3.1; XZ ±1 청크만 검사). 그리드 config 의
+     * 파이프라인 위치는 전부 창 안이지만 바닐라 게이트를 그대로 둔다. */
+    int32_t placed;
+    int32_t pcx = floor_div16(x), pcz = floor_div16(z);
+    if (pcx < e->rg->center_cx - 1 || pcx > e->rg->center_cx + 1 ||
+        pcz < e->rg->center_cz - 1 || pcz > e->rg->center_cz + 1)
+        placed = 0;
+    else
+        placed = cf_place(e, x, y, z);
     e->npos++;
     if (placed == 1)
         e->placed_any = 1;
