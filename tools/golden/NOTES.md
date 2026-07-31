@@ -182,6 +182,36 @@ snapshot in A7 of the notes dir).
 4. Do this for BOTH bundles; matching both distinct orders bit-exactly is
    the Tier-2 evidence (ADR-007 D3).
 
+## Recording-lifecycle artifacts in the bundles (Task 10, 2026-07-31)
+
+The recorded server SAVED/UNLOADED/RELOADED chunks mid-recording, and this
+is observable in the dumps (full evidence:
+`.hermes/notes/task10-light/IMPL-notes.md`):
+
+1. A save/unload wave lands right before manifest seq 9 (after the 9 grid
+   feature stages, before any ring decoration) in BOTH bundles. `*_WG`
+   heightmaps are not NBT-serialized, so every chunk decorated at seq>=9
+   loses them; each map then lazily re-primes from CURRENT blocks at its
+   first `getHeight` read (per type!) and freezes again
+   (`heightmapsAfter(persisted>=CARVERS)` = FINAL set only). Measured:
+   grid 07 `_WG` == 06 `_WG` 9/9 (frozen); ring2 re-primed 16/16, with
+   per-type timing split (OF_WG at step-6 ore pre-check, WS_WG at step-9
+   grass read). The C replay models this (`hc_feat_region_t.wg_dropped`).
+2. Grid chunks reload again inside their 08->09 window (WS_WG absent at
+   09, OF_WG re-primed ~= live OCEAN_FLOOR — see §5 of the R6 note).
+3. UNREPLAYABLE artifact: reloaded ring chunks' restored FINAL heightmaps
+   carry a mid-carve baseline at scattered carver-affected columns
+   (worked example: c.-2.-2 (-18,-31) reads OCEAN_FLOOR 69 where pure
+   post-carve blocks give 68 = the instant between carving y=69 and
+   y=68). Only consistent mechanism: the async save raced the carvers
+   task and primed FINAL maps into the NBT copy mid-carve — wall-clock
+   timing, NOT reconstructible from the dumps. This flips single
+   tree/bush placements in ring jungle chunks and cascades into the
+   09 residual caps (test_light_stages RESID table). A future golden
+   re-recording should disable autosave (or barrier saves at stage
+   boundaries) so the full 09 0-diff gate can be re-enabled
+   (HC_LIGHT_STRICT=1).
+
 ## Environment
 
 - MC 26.2 (`TARGET_VERSION`), server sha1 823e2250d24b3ddac457a60c92a6a941943fcd6a
