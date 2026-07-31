@@ -62,11 +62,23 @@ public final class OrderManifest {
         }
         PENDING.remove();
         long nanos = System.nanoTime();
-        String thread = Thread.currentThread().getName();
+        // single column in a space-separated format ("Server thread" etc.)
+        String thread = Thread.currentThread().getName().replaceAll("\\s", "_");
         synchronized (LOCK) {
             write(p, String.format(Locale.ROOT, "%d %d %d %016x %s %d",
                     seq, p.chunkX(), p.chunkZ(), decorationSeed, thread, nanos));
             seq++;
+        }
+    }
+
+    /**
+     * Number of features applications recorded so far. Sampled by
+     * {@link StageDumper} around each stage dump so every snapshot records
+     * which prefix of the features order it could observe (order.snapshots).
+     */
+    public static long currentSeq() {
+        synchronized (LOCK) {
+            return seq;
         }
     }
 

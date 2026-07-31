@@ -16,10 +16,12 @@ golden/stages/**
 !golden/stages/FORMAT.md
 !golden/stages/*/
 !golden/stages/*/order.manifest
+!golden/stages/*/order.snapshots
 golden/stages-alt/**
 !golden/stages-alt/SHA256SUMS
 !golden/stages-alt/*/
 !golden/stages-alt/*/order.manifest
+!golden/stages-alt/*/order.snapshots
 tools/golden/libs/
 tools/golden/*.class
 tools/golden/work/

@@ -23,10 +23,15 @@
 # (dumps + order.manifest) pair.
 #
 # Env overrides:
-#   HYPERCHUNK_RUN_DIR   scratch dir (default tools/golden/work/stagedump-run)
-#   HYPERCHUNK_SEED      level seed (default 1234567890)
-#   HYPERCHUNK_PORT      server port (default 25600)
-#   HYPERCHUNK_RADIUS    chunk radius around (0,0) (default 1 => 3x3)
+#   HYPERCHUNK_RUN_DIR     scratch dir (default tools/golden/work/stagedump-run)
+#   HYPERCHUNK_SEED        level seed (default 1234567890)
+#   HYPERCHUNK_PORT        server port (default 25600)
+#   HYPERCHUNK_RADIUS      chunk radius around (0,0) (default 1 => 3x3)
+#   HYPERCHUNK_BG_THREADS  -Dmax.bg.threads value (default 1). >1 gives the
+#                          scheduler more freedom => more order variation for
+#                          alt bundles (ADR-007 D3 wants distinct orders); the
+#                          manifest stays a total order either way because 26.2
+#                          serializes step bodies per dimension (recon A5)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +41,7 @@ SEED="${HYPERCHUNK_SEED:-1234567890}"
 PORT="${HYPERCHUNK_PORT:-25600}"
 RADIUS="${HYPERCHUNK_RADIUS:-1}"
 RUN_DIR="${HYPERCHUNK_RUN_DIR:-$HERE/work/stagedump-run}"
+BG_THREADS="${HYPERCHUNK_BG_THREADS:-1}"
 DUMP_DIR="${HYPERCHUNK_DUMP_DIR:-$ROOT/golden/stages/seed$SEED}"
 GOLDEN_DIR="$ROOT/golden"
 LOG="$RUN_DIR/server.log"
@@ -88,10 +94,10 @@ rm -rf "$DUMP_DIR"
 mkdir -p "$DUMP_DIR"
 
 mkfifo console.in
-# -Dmax.bg.threads=1: single-threaded generation pins the neighbor-features
-# execution order; without it, post-features stage snapshots (and the world
-# content itself) are scheduler-dependent. See make_golden.sh + NOTES.md.
-java -Xms2G -Xmx4G -Dmax.bg.threads=1 \
+# max.bg.threads=1 (default) reduces (but does not eliminate — NOTES.md)
+# run-to-run order variance; the order.manifest records whatever order this
+# run actually used, so higher values are equally valid golden inputs.
+java -Xms2G -Xmx4G -Dmax.bg.threads="$BG_THREADS" \
     -Dhyperchunk.dump.dir="$DUMP_DIR" \
     -Dhyperchunk.dump.centerX=0 \
     -Dhyperchunk.dump.centerZ=0 \
@@ -221,6 +227,22 @@ fi
 MANIFEST_LINES=$(grep -vc '^#' "$MANIFEST")
 echo "   order.manifest OK: $MANIFEST_LINES features applications, grid covered, seq dense, (0,0) seed check passed"
 
+echo "== verifying order.snapshots"
+SNAPSHOTS="$DUMP_DIR/order.snapshots"
+[ -f "$SNAPSHOTS" ] || { echo "FATAL: no order.snapshots produced" >&2; exit 1; }
+SNAP_LINES=$(grep -vc '^#' "$SNAPSHOTS")
+WANT_SNAPS=$((EXPECTED_CHUNKS * 11)) # 11 generation-pyramid stages per dumped chunk
+[ "$SNAP_LINES" -eq "$WANT_SNAPS" ] || { echo "FATAL: $SNAP_LINES snapshot lines, want $WANT_SNAPS" >&2; exit 1; }
+# 07 dumps run synchronously inside the serialized features body: they must
+# be clean (seqBegin == seqEnd) and sit right after their own manifest event
+awk 'NR==FNR { if (!/^#/) m[$2","$3]=$1; next }
+     !/^#/ && $1 ~ /^07_/ {
+       if ($4 != $5) { print "FATAL: torn 07 snapshot: " $0; bad=1 }
+       if (m[$2","$3]+1 != $4) { print "FATAL: 07 snapshot not at own manifest event: " $0 " (manifest seq " m[$2","$3] ")"; bad=1 }
+     } END { exit bad }' "$MANIFEST" "$SNAPSHOTS" || exit 1
+TORN=$(awk '!/^#/ && $4 != $5' "$SNAPSHOTS" | wc -l)
+echo "   order.snapshots OK: $SNAP_LINES snapshots, 07 invariant holds, $TORN torn (async stages only)"
+
 SUMS=""
 if [ "$DUMP_DIR" = "$ROOT/golden/stages/seed$SEED" ]; then
     SUMS="$GOLDEN_DIR/SHA256SUMS"; SUMS_BASE="$GOLDEN_DIR"; SUMS_PREFIX="stages/seed$SEED"
@@ -231,7 +253,7 @@ if [ -n "$SUMS" ]; then
     echo "== updating $SUMS with dump + manifest hashes"
     touch "$SUMS"
     grep -v "^[0-9a-f]*  $SUMS_PREFIX/" "$SUMS" > "$SUMS.tmp" || true
-    (cd "$SUMS_BASE" && find "$SUMS_PREFIX" \( -name '*.txt' -o -name 'order.manifest' \) -not -name 'FORMAT*' | sort | xargs sha256sum) >> "$SUMS.tmp"
+    (cd "$SUMS_BASE" && find "$SUMS_PREFIX" \( -name '*.txt' -o -name 'order.manifest' -o -name 'order.snapshots' \) -not -name 'FORMAT*' | sort | xargs sha256sum) >> "$SUMS.tmp"
     sort -k2 "$SUMS.tmp" > "$SUMS"
     rm -f "$SUMS.tmp"
 else
@@ -245,3 +267,4 @@ echo "   chunks:   $(find "$DUMP_DIR" -maxdepth 1 -type d -name 'c.*' | wc -l)"
 echo "   stages:   $DUMPED_STAGES"
 echo "   files:    $(find "$DUMP_DIR" -name '*.txt' | wc -l) (hashes: ${SUMS:-not updated})"
 echo "   manifest: $MANIFEST_LINES applications, sha256 $(sha256sum "$MANIFEST" | cut -d' ' -f1)"
+echo "   snapshots: $SNAP_LINES dump events, $TORN torn"

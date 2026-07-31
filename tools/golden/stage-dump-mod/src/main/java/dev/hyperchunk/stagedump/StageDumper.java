@@ -142,6 +142,11 @@ public final class StageDumper {
         if (!WRITTEN.add(key)) {
             return;
         }
+        // Sampled around the file writes: a snapshot is a defined function of
+        // the features-order prefix only if no features application landed
+        // while it was being taken (seqBegin == seqEnd in order.snapshots).
+        // Async-completing stages (initialize_light/light/full) can tear.
+        long seqBegin = OrderManifest.currentSeq();
         try {
             Path chunkDir = DUMP_DIR.resolve("c." + pos.x() + "." + pos.z());
             Files.createDirectories(chunkDir);
@@ -164,6 +169,7 @@ public final class StageDumper {
                 dumpKind(key, () -> dumpLight(chunkDir.resolve(prefix + ".light_block.txt"), ctx, chunk, stage, LightLayer.BLOCK));
                 dumpKind(key, () -> dumpLight(chunkDir.resolve(prefix + ".light_sky.txt"), ctx, chunk, stage, LightLayer.SKY));
             }
+            SnapshotLog.record(prefix, pos, seqBegin, OrderManifest.currentSeq());
             log("dumped " + key);
         } catch (Throwable t) {
             // Never break vanilla generation; a missing dump is visible in the
