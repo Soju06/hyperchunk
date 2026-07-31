@@ -351,6 +351,94 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:small_dripleaf[facing=west,half=upper,waterlogged=true]",
     "minecraft:red_mushroom",
     "minecraft:brown_mushroom",
+    /* --- Task 10: 링 프리픽스 본문 블록 (hc_blocks.h BASE 공식과 1:1) --- */
+    "minecraft:rooted_dirt",
+    "minecraft:hanging_roots[waterlogged=false]",
+    "minecraft:hanging_roots[waterlogged=true]",
+    "minecraft:seagrass",
+    "minecraft:tall_seagrass[half=lower]",
+    "minecraft:tall_seagrass[half=upper]",
+    "minecraft:melon",
+    "minecraft:smooth_basalt",
+    "minecraft:amethyst_block",
+    "minecraft:budding_amethyst",
+    "minecraft:azalea_leaves[distance=1,persistent=false,waterlogged=false]",
+    "minecraft:azalea_leaves[distance=2,persistent=false,waterlogged=false]",
+    "minecraft:azalea_leaves[distance=3,persistent=false,waterlogged=false]",
+    "minecraft:azalea_leaves[distance=4,persistent=false,waterlogged=false]",
+    "minecraft:azalea_leaves[distance=5,persistent=false,waterlogged=false]",
+    "minecraft:azalea_leaves[distance=6,persistent=false,waterlogged=false]",
+    "minecraft:azalea_leaves[distance=7,persistent=false,waterlogged=false]",
+    "minecraft:azalea_leaves[distance=1,persistent=false,waterlogged=true]",
+    "minecraft:azalea_leaves[distance=2,persistent=false,waterlogged=true]",
+    "minecraft:azalea_leaves[distance=3,persistent=false,waterlogged=true]",
+    "minecraft:azalea_leaves[distance=4,persistent=false,waterlogged=true]",
+    "minecraft:azalea_leaves[distance=5,persistent=false,waterlogged=true]",
+    "minecraft:azalea_leaves[distance=6,persistent=false,waterlogged=true]",
+    "minecraft:azalea_leaves[distance=7,persistent=false,waterlogged=true]",
+    "minecraft:flowering_azalea_leaves[distance=1,persistent=false,waterlogged=false]",
+    "minecraft:flowering_azalea_leaves[distance=2,persistent=false,waterlogged=false]",
+    "minecraft:flowering_azalea_leaves[distance=3,persistent=false,waterlogged=false]",
+    "minecraft:flowering_azalea_leaves[distance=4,persistent=false,waterlogged=false]",
+    "minecraft:flowering_azalea_leaves[distance=5,persistent=false,waterlogged=false]",
+    "minecraft:flowering_azalea_leaves[distance=6,persistent=false,waterlogged=false]",
+    "minecraft:flowering_azalea_leaves[distance=7,persistent=false,waterlogged=false]",
+    "minecraft:flowering_azalea_leaves[distance=1,persistent=false,waterlogged=true]",
+    "minecraft:flowering_azalea_leaves[distance=2,persistent=false,waterlogged=true]",
+    "minecraft:flowering_azalea_leaves[distance=3,persistent=false,waterlogged=true]",
+    "minecraft:flowering_azalea_leaves[distance=4,persistent=false,waterlogged=true]",
+    "minecraft:flowering_azalea_leaves[distance=5,persistent=false,waterlogged=true]",
+    "minecraft:flowering_azalea_leaves[distance=6,persistent=false,waterlogged=true]",
+    "minecraft:flowering_azalea_leaves[distance=7,persistent=false,waterlogged=true]",
+    "minecraft:small_amethyst_bud[facing=down,waterlogged=false]",
+    "minecraft:small_amethyst_bud[facing=down,waterlogged=true]",
+    "minecraft:small_amethyst_bud[facing=up,waterlogged=false]",
+    "minecraft:small_amethyst_bud[facing=up,waterlogged=true]",
+    "minecraft:small_amethyst_bud[facing=north,waterlogged=false]",
+    "minecraft:small_amethyst_bud[facing=north,waterlogged=true]",
+    "minecraft:small_amethyst_bud[facing=south,waterlogged=false]",
+    "minecraft:small_amethyst_bud[facing=south,waterlogged=true]",
+    "minecraft:small_amethyst_bud[facing=west,waterlogged=false]",
+    "minecraft:small_amethyst_bud[facing=west,waterlogged=true]",
+    "minecraft:small_amethyst_bud[facing=east,waterlogged=false]",
+    "minecraft:small_amethyst_bud[facing=east,waterlogged=true]",
+    "minecraft:medium_amethyst_bud[facing=down,waterlogged=false]",
+    "minecraft:medium_amethyst_bud[facing=down,waterlogged=true]",
+    "minecraft:medium_amethyst_bud[facing=up,waterlogged=false]",
+    "minecraft:medium_amethyst_bud[facing=up,waterlogged=true]",
+    "minecraft:medium_amethyst_bud[facing=north,waterlogged=false]",
+    "minecraft:medium_amethyst_bud[facing=north,waterlogged=true]",
+    "minecraft:medium_amethyst_bud[facing=south,waterlogged=false]",
+    "minecraft:medium_amethyst_bud[facing=south,waterlogged=true]",
+    "minecraft:medium_amethyst_bud[facing=west,waterlogged=false]",
+    "minecraft:medium_amethyst_bud[facing=west,waterlogged=true]",
+    "minecraft:medium_amethyst_bud[facing=east,waterlogged=false]",
+    "minecraft:medium_amethyst_bud[facing=east,waterlogged=true]",
+    "minecraft:large_amethyst_bud[facing=down,waterlogged=false]",
+    "minecraft:large_amethyst_bud[facing=down,waterlogged=true]",
+    "minecraft:large_amethyst_bud[facing=up,waterlogged=false]",
+    "minecraft:large_amethyst_bud[facing=up,waterlogged=true]",
+    "minecraft:large_amethyst_bud[facing=north,waterlogged=false]",
+    "minecraft:large_amethyst_bud[facing=north,waterlogged=true]",
+    "minecraft:large_amethyst_bud[facing=south,waterlogged=false]",
+    "minecraft:large_amethyst_bud[facing=south,waterlogged=true]",
+    "minecraft:large_amethyst_bud[facing=west,waterlogged=false]",
+    "minecraft:large_amethyst_bud[facing=west,waterlogged=true]",
+    "minecraft:large_amethyst_bud[facing=east,waterlogged=false]",
+    "minecraft:large_amethyst_bud[facing=east,waterlogged=true]",
+    "minecraft:amethyst_cluster[facing=down,waterlogged=false]",
+    "minecraft:amethyst_cluster[facing=down,waterlogged=true]",
+    "minecraft:amethyst_cluster[facing=up,waterlogged=false]",
+    "minecraft:amethyst_cluster[facing=up,waterlogged=true]",
+    "minecraft:amethyst_cluster[facing=north,waterlogged=false]",
+    "minecraft:amethyst_cluster[facing=north,waterlogged=true]",
+    "minecraft:amethyst_cluster[facing=south,waterlogged=false]",
+    "minecraft:amethyst_cluster[facing=south,waterlogged=true]",
+    "minecraft:amethyst_cluster[facing=west,waterlogged=false]",
+    "minecraft:amethyst_cluster[facing=west,waterlogged=true]",
+    "minecraft:amethyst_cluster[facing=east,waterlogged=false]",
+    "minecraft:amethyst_cluster[facing=east,waterlogged=true]",
+    "minecraft:cave_air",
 };
 
 const char *hc_block_name(uint16_t id) {
@@ -463,10 +551,77 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, 
     F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG,
     0, 0, /* mushrooms */
+    /* --- Task 10 (26.2 Blocks.<clinit> 등록 체인에서 유도):
+     * rooted_dirt/melon/smooth_basalt/amethyst_block/budding_amethyst =
+     * 풀 불투명 큐브; hanging_roots/seagrass 계열 = replaceable 식물
+     * (seagrass 는 유체가 항상 물 — R4 §5); azalea 잎 = 기존 잎과 동일;
+     * amethyst 싹/클러스터 = 충돌 있음(blocksMotion/legacySolid), 부분
+     * 형상이라 F_FULL 없음. */
+    F_MOTION | F_SOLID | F_FULL,        /* rooted_dirt */
+    F_REPL,                             /* hanging_roots */
+    F_REPL | F_WLOG,                    /* hanging_roots[wl] */
+    F_REPL | F_WLOG,                    /* seagrass */
+    F_REPL | F_WLOG,                    /* tall_seagrass lower */
+    F_REPL | F_WLOG,                    /* tall_seagrass upper */
+    F_MOTION | F_SOLID | F_FULL,        /* melon */
+    F_MOTION | F_SOLID | F_FULL,        /* smooth_basalt */
+    F_MOTION | F_SOLID | F_FULL,        /* amethyst_block */
+    F_MOTION | F_SOLID | F_FULL,        /* budding_amethyst */
+    /* azalea_leaves 14 (wl 7+7) */
+    F_MOTION | F_SOLID | F_LEAVES, F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES, F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES, F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    /* flowering_azalea_leaves 14 */
+    F_MOTION | F_SOLID | F_LEAVES, F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES, F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES, F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    F_MOTION | F_SOLID | F_LEAVES | F_WLOG,
+    /* amethyst 싹/클러스터 48 (size 4 x facing 6 x wl 2) */
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_MOTION | F_SOLID, F_MOTION | F_SOLID | F_WLOG,
+    F_REPL, /* cave_air */
 };
 
 int hc_block_is_air(uint16_t id) {
-    return id == HC_B_AIR;
+    /* BlockState.isAir — air/cave_air (void_air 는 월드젠에 못 나온다) */
+    return id == HC_B_AIR || id == HC_B_CAVE_AIR;
 }
 
 int hc_block_is_fluid(uint16_t id) {

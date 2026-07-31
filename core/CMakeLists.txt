@@ -30,6 +30,7 @@ add_library(hyperchunk STATIC
   src/gen_features_stage.c
   src/features_tree.c
   src/features_lush.c
+  src/features_ring.c
   src/jset.c
   src/light_engine.c
   src/gen_light_stages.c

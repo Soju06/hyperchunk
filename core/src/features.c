@@ -200,6 +200,11 @@ int hc_featx_bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x,
     case HC_BP_MATCHING_FLUIDS_WATER:
         /* FluidState.is(water): 소스 물 + waterlogged=true (A2 §2.8) */
         return hc_block_fluid_is_water(hc_feat_get_block(e->rg, x, y, z));
+    case HC_BP_MATCHING_FLUIDS_EMPTY:
+        /* fluids=[empty]: FluidState.is(EMPTY) — 유체 없는 상태만 */
+        return !hc_block_fluid_nonempty(hc_feat_get_block(e->rg, x, y, z));
+    case HC_BP_REPLACEABLE:
+        return hc_block_is_replaceable(hc_feat_get_block(e->rg, x, y, z));
     case HC_BP_MATCHING_BLOCK_TAG:
         return mask_test(p->tag_mask, hc_feat_get_block(e->rg, x, y, z));
     case HC_BP_NOT:
@@ -709,6 +714,10 @@ static int32_t cf_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
         return bamboo_place(e, e->pf->cf.bamboo, x, y, z);
     case HC_CF_FREEZE_TOP_LAYER:
         return freeze_place(e, x, y, z);
+    case HC_CF_DISK:
+        return hc_featx_disk_place(e, e->pf->cf.disk, x, y, z);
+    case HC_CF_SEAGRASS:
+        return hc_featx_seagrass_place(e, &e->pf->cf.seagrass, x, y, z);
     default:
         e->unknown = 1;
         return -1;
@@ -1107,7 +1116,10 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
         return;
     }
     case HC_PM_DIE:
-        die("unsupported placement modifier executed", m->die_what);
+        fprintf(stderr, "hc_features: placed feature %s: %s\n",
+                e->pf->name ? e->pf->name : "<inline>",
+                m->die_what ? m->die_what : "?");
+        die("unsupported placement modifier executed", e->pf->name);
         return;
     }
     die("unknown placement modifier kind", NULL);
@@ -1128,7 +1140,8 @@ int hc_featx_run_nested(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
 
 /* features_compile.c / gen_features_stage.c 가 쓰는 내부 진입점 */
 void hc_feat_run_placed(hc_feat_region_t *rg, hc_wgr_t *rng,
-                        const hc_feat_reg_t *reg, const hc_biome_view_t *view,
+                        int64_t level_seed, const hc_feat_reg_t *reg,
+                        const hc_biome_view_t *view,
                         const hc_biome_reg_t *biomes, int32_t sea_level,
                         const hc_pfeat_t *pf, int32_t step, int32_t index,
                         int32_t origin_x, int32_t origin_y, int32_t origin_z,
@@ -1136,6 +1149,7 @@ void hc_feat_run_placed(hc_feat_region_t *rg, hc_wgr_t *rng,
     feat_env_t e;
     e.rg = rg;
     e.rng = rng;
+    e.level_seed = level_seed;
     e.reg = reg;
     e.view = view;
     e.biomes = biomes;

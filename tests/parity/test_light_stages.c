@@ -545,6 +545,35 @@ static int32_t load_snapshots(const char *path, snap_t *out, int32_t cap) {
     return n;
 }
 
+/* --- fail-loud 트레이스 싱크: 파이프라인이 위치를 냈는데 본문이
+ * UNIMPLEMENTED(placed=-1) 면 게이트가 조용히 오염되므로 즉사한다 --- */
+
+static void sink_pos_nop(void *ud, int32_t step, int32_t index, int32_t x,
+                         int32_t y, int32_t z, int32_t placed) {
+    (void)ud;
+    (void)step;
+    (void)index;
+    (void)x;
+    (void)y;
+    (void)z;
+    (void)placed;
+}
+
+static void sink_feature_guard(void *ud, int32_t step, int32_t index,
+                               const char *name, int32_t npos,
+                               int32_t placed) {
+    (void)ud;
+    if (npos > 0 && placed < 0) {
+        char buf[192];
+        snprintf(buf, sizeof buf, "%s (step %d index %d, npos %d)", name,
+                 step, index, npos);
+        die("UNIMPLEMENTED feature body fired in prefix replay", buf);
+    }
+}
+
+static const hc_feat_trace_t g_guard_sink = {sink_pos_nop,
+                                             sink_feature_guard, NULL};
+
 /* --- 월드 --- */
 
 enum { WR = 5, WN = 2 * WR + 1, WORLD_CHUNKS = WN * WN }; /* 청크 -5..5 */
@@ -1015,11 +1044,11 @@ int main(int argc, char **argv) {
                        hmbad, lb_bad, ls_bad, total ? "  <-- FAIL" : "");
             }
 
-            /* manifest 엔트리 pos 적용 */
+            /* manifest 엔트리 pos 적용 (UNIMPLEMENTED 본문 발화는 즉사) */
             if (pos < max_prefix)
                 hc_gen_features_chunk(&rg, man[pos].cx, man[pos].cz, seed,
                                       freg, &view, &g_reg, (int32_t)sea->num,
-                                      /*walk_max_step=*/10, NULL);
+                                      /*walk_max_step=*/10, &g_guard_sink);
         }
         if (skipped) {
             fprintf(stderr,

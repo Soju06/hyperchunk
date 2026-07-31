@@ -115,6 +115,28 @@ enum {
     /* fallen_tree attached_to_logs 데코레이터 (R2 §11/§13) */
     HC_B_RED_MUSHROOM = HC_B_SMALL_DRIPLEAF_BASE + 16,
     HC_B_BROWN_MUSHROOM,
+    /* --- Task 10: 링 프리픽스 본문 (disk/seagrass/lake/root_system/geode) --- */
+    HC_B_ROOTED_DIRT,
+    HC_B_HANGING_ROOTS,    /* waterlogged=false */
+    HC_B_HANGING_ROOTS_WL, /* waterlogged=true */
+    HC_B_SEAGRASS,
+    HC_B_TALL_SEAGRASS_LOWER,
+    HC_B_TALL_SEAGRASS_UPPER,
+    HC_B_MELON,
+    HC_B_SMOOTH_BASALT,
+    HC_B_AMETHYST_BLOCK,
+    HC_B_BUDDING_AMETHYST,
+    /* azalea 잎: BASE + flowering*14 + wl*7 + (distance-1) — 기존 잎 공식과
+     * 동일 (distance 1..7, persistent=false) */
+    HC_B_AZALEA_LEAVES_BASE,
+    HC_B_FLOWERING_AZALEA_LEAVES_BASE = HC_B_AZALEA_LEAVES_BASE + 14,
+    /* amethyst 싹/클러스터: BASE + size*12 + facing*2 + wl;
+     * size 0=small_bud,1=medium_bud,2=large_bud,3=cluster;
+     * facing 인덱스 = D,U,N,S,W,E (블록 내부 규약) */
+    HC_B_AMETHYST_BUD_BASE = HC_B_FLOWERING_AZALEA_LEAVES_BASE + 14,
+    /* lake 가 상반부에 cave_air 를 쓴다 (LakeFeature <clinit> — R5b).
+     * BlockState.isAir 참: hc_block_is_air 가 포함한다. */
+    HC_B_CAVE_AIR = HC_B_AMETHYST_BUD_BASE + 48,
     HC_B_COUNT
 };
 

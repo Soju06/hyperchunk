@@ -393,15 +393,25 @@ static int bpred_compile(fc_t *fc, const hc_json_t *j, hc_bpred_t *p,
         const hc_json_t *fl = hc_json_get(j, "fluids");
         if (!fl)
             FAIL("matching_fluids without fluids");
-        int saw_water = 0;
+        int saw_water = 0, saw_empty = 0, n_fl = 0;
         const hc_json_t *one = fl->kind == HC_JSON_ARR ? fl->child : fl;
         for (; one; one = fl->kind == HC_JSON_ARR ? one->next : NULL) {
             if (one->kind != HC_JSON_STR)
                 FAIL("matching_fluids entry not string");
+            n_fl++;
             if (hc_json_streq(one, "minecraft:water"))
                 saw_water = 1;
+            else if (hc_json_streq(one, "minecraft:empty"))
+                saw_empty = 1;
             else if (!hc_json_streq(one, "minecraft:flowing_water"))
                 FAIL("matching_fluids: unsupported fluid");
+        }
+        if (saw_empty) {
+            /* fluids=[empty] (patch_melon 등) — 단독일 때만 */
+            if (n_fl != 1)
+                FAIL("matching_fluids: empty mixed with fluids");
+            p->kind = HC_BP_MATCHING_FLUIDS_EMPTY;
+            return 0;
         }
         if (!saw_water)
             FAIL("matching_fluids: water missing");
@@ -508,6 +518,10 @@ static int bpred_compile(fc_t *fc, const hc_json_t *j, hc_bpred_t *p,
     }
     if (hc_json_streq(t, "minecraft:true")) {
         p->kind = HC_BP_TRUE;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:replaceable")) {
+        p->kind = HC_BP_REPLACEABLE;
         return 0;
     }
     FAIL("unsupported block predicate type");
@@ -1291,6 +1305,64 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
         }
         return 0;
     }
+    if (hc_json_streq(t, "minecraft:disk")) {
+        /* DiskFeature (Task 10 링 본문 — 본 세션 javap: place @54 radius
+         * 샘플 1 드로우, placeColumn 은 target/rule 이 전부 술어라 드로우 0.
+         * state_provider 는 RuleBasedStateProvider: rules 순서로 if_true
+         * (셀 위치 평가) 첫 히트의 then, 아니면 fallback). */
+        pf->cf_kind = HC_CF_DISK;
+        hc_disk_cfg_t *d =
+            hc_arena_alloc(fc->arena, sizeof *d, _Alignof(hc_disk_cfg_t));
+        if (!d)
+            FAIL("arena exhausted (disk)");
+        memset(d, 0, sizeof *d);
+        pf->cf.disk = d;
+        const hc_json_t *hh = hc_json_get(cfg, "half_height");
+        const hc_json_t *rad = hc_json_get(cfg, "radius");
+        const hc_json_t *tgt = hc_json_get(cfg, "target");
+        const hc_json_t *sp = hc_json_get(cfg, "state_provider");
+        if (!hh || hh->kind != HC_JSON_NUM || !rad || !tgt || !sp)
+            FAIL("disk config malformed");
+        d->half_height = (int32_t)hh->num;
+        if (iprov_compile(fc, rad, &d->radius, 0) ||
+            bpred_compile(fc, tgt, &d->target, 0))
+            return -1;
+        const hc_json_t *spt = hc_json_get(sp, "type");
+        if (!spt || !hc_json_streq(spt, "minecraft:rule_based_state_provider"))
+            FAIL("disk state_provider kind unsupported");
+        const hc_json_t *fb = hc_json_get(sp, "fallback");
+        const hc_json_t *rules = hc_json_get(sp, "rules");
+        if (!fb || !rules || rules->kind != HC_JSON_ARR)
+            FAIL("rule_based_state_provider malformed");
+        if (sprov_compile(fc, fb, &d->fallback, 0))
+            return -1;
+        d->n_rules = rules->count;
+        d->rules = hc_arena_alloc(fc->arena,
+                                  sizeof(hc_disk_rule_t) * (size_t)d->n_rules,
+                                  _Alignof(hc_disk_rule_t));
+        if (!d->rules)
+            FAIL("arena exhausted (disk rules)");
+        int32_t ri = 0;
+        for (const hc_json_t *r = rules->child; r; r = r->next, ri++) {
+            const hc_json_t *cond = hc_json_get(r, "if_true");
+            const hc_json_t *then = hc_json_get(r, "then");
+            if (!cond || !then)
+                FAIL("disk rule malformed");
+            if (bpred_compile(fc, cond, &d->rules[ri].if_true, 0) ||
+                sprov_compile(fc, then, &d->rules[ri].then, 0))
+                return -1;
+        }
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:seagrass")) {
+        /* SeagrassFeature (본 세션 javap — R-노트 인용은 features_ring.c) */
+        pf->cf_kind = HC_CF_SEAGRASS;
+        const hc_json_t *prob = hc_json_get(cfg, "probability");
+        if (!prob || prob->kind != HC_JSON_NUM)
+            FAIL("seagrass config malformed");
+        pf->cf.seagrass.probability = (float)prob->num;
+        return 0;
+    }
     if (hc_json_streq(t, "minecraft:fallen_tree")) {
         pf->cf_kind = HC_CF_FALLEN_TREE;
         hc_ftree_cfg_t *c = hc_arena_alloc(fc->arena, sizeof *c,
@@ -1422,6 +1494,8 @@ int hc_feat_reg_init(hc_feat_reg_t *reg, hc_arena_t *arena,
         {"#minecraft:logs", offsetof(hc_feat_reg_t, tag_logs)},
         {"#minecraft:prevents_nearby_leaf_decay",
          offsetof(hc_feat_reg_t, tag_prevents_leaf_decay)},
+        {"#minecraft:cannot_support_seagrass",
+         offsetof(hc_feat_reg_t, tag_cannot_support_seagrass)},
     };
     for (size_t i = 0; i < sizeof RT_TAGS / sizeof RT_TAGS[0]; i++)
         if (tag_expand(fc, (uint64_t *)((char *)reg + RT_TAGS[i].off),

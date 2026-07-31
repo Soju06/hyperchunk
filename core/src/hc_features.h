@@ -160,6 +160,9 @@ enum {
     HC_BP_WOULD_SURVIVE,   /* state.canSurvive — 블록별 디스패치 (R2) */
     HC_BP_HAS_STURDY_FACE, /* isFaceSturdy(pos, direction) */
     HC_BP_TRUE,
+    /* Task 10 링 파이프라인 (patch_melon 등) */
+    HC_BP_MATCHING_FLUIDS_EMPTY, /* FluidState.isEmpty */
+    HC_BP_REPLACEABLE,           /* state.canBeReplaced */
 };
 typedef struct hc_bpred hc_bpred_t;
 struct hc_bpred {
@@ -230,6 +233,12 @@ enum {
     HC_CF_VINES,
     HC_CF_BAMBOO,
     HC_CF_FREEZE_TOP_LAYER,
+    /* --- Task 10: 링 프리픽스 본문 --- */
+    HC_CF_DISK,        /* minecraft:disk (disk_sand/gravel/clay) */
+    HC_CF_SEAGRASS,    /* minecraft:seagrass (seagrass_river 등) */
+    HC_CF_LAKE,        /* minecraft:lake (lake_lava_underground) */
+    HC_CF_ROOT_SYSTEM, /* minecraft:root_system (rooted_azalea_tree) */
+    HC_CF_GEODE,       /* minecraft:geode (amethyst_geode) */
     HC_CF_UNIMPLEMENTED,     /* 파이프라인만 — 본문 도달 시 placed=-1 */
 };
 
@@ -317,8 +326,19 @@ typedef struct {
 
 /* --- tree / fallen_tree (task9b R2) --- */
 
-enum { HC_TRUNK_STRAIGHT = 0, HC_TRUNK_MEGA_JUNGLE, HC_TRUNK_FANCY };
-enum { HC_FOL_BLOB = 0, HC_FOL_BUSH, HC_FOL_MEGA_JUNGLE, HC_FOL_FANCY };
+enum {
+    HC_TRUNK_STRAIGHT = 0,
+    HC_TRUNK_MEGA_JUNGLE,
+    HC_TRUNK_FANCY,
+    HC_TRUNK_BENDING, /* azalea (Task 10 R5c §5) */
+};
+enum {
+    HC_FOL_BLOB = 0,
+    HC_FOL_BUSH,
+    HC_FOL_MEGA_JUNGLE,
+    HC_FOL_FANCY,
+    HC_FOL_RANDOM_SPREAD, /* azalea (Task 10 R5c §6) */
+};
 enum {
     HC_TDEC_COCOA = 0,
     HC_TDEC_TRUNK_VINE,
@@ -336,9 +356,12 @@ typedef struct hc_tree_cfg {
     uint8_t    trunk_kind, fol_kind;
     int32_t    base_height, rand_a, rand_b;
     hc_iprov_t fol_radius, fol_offset;
-    int32_t    fol_height;
-    uint16_t   trunk_state;   /* simple provider (jungle/oak log axis=y) */
-    uint16_t   foliage_state; /* leaves[d7,pf,wl=false] */
+    int32_t    fol_height;    /* random_spread 는 foliage_height */
+    int32_t    leaf_attempts; /* random_spread leaf_placement_attempts */
+    int32_t    min_height_for_leaves; /* bending (기본 1) */
+    hc_iprov_t bend_length;          /* bending */
+    uint16_t   trunk_state; /* simple provider (jungle/oak log axis=y) */
+    hc_sprov_t foliage; /* simple 또는 weighted; 전 상태 leaves[d7,wl=false] */
     /* below_trunk rule_based: if !mask(cannot_replace…) → below_state */
     uint64_t   below_not_mask[(HC_B_COUNT + 63) / 64];
     uint16_t   below_state;
@@ -354,6 +377,66 @@ typedef struct hc_ftree_cfg {
     int32_t    n_stump_dec, n_log_dec;
     hc_tdec_t *stump_dec, *log_dec;
 } hc_ftree_cfg_t;
+
+/* minecraft:disk (DiskFeature + RuleBasedStateProvider — Task 10) */
+typedef struct {
+    hc_bpred_t if_true; /* 셀 위치에서 평가 (오프셋 포함) */
+    hc_sprov_t then;
+} hc_disk_rule_t;
+typedef struct {
+    int32_t         half_height;
+    hc_iprov_t      radius;
+    hc_bpred_t      target;
+    hc_sprov_t      fallback;
+    int32_t         n_rules;
+    hc_disk_rule_t *rules;
+} hc_disk_cfg_t;
+
+/* minecraft:seagrass (SeagrassFeature — ProbabilityFeatureConfiguration) */
+typedef struct {
+    float probability;
+} hc_seagrass_cfg_t;
+
+/* minecraft:lake (LakeFeature — Task 10 R5b) */
+typedef struct {
+    uint16_t   fluid;   /* simple provider — lava[level=0] */
+    uint16_t   barrier; /* simple provider — stone */
+    hc_bpred_t can_place;            /* can_place_feature */
+    hc_bpred_t can_replace_airfluid; /* can_replace_with_air_or_fluid */
+    hc_bpred_t can_replace_barrier;  /* can_replace_with_barrier */
+} hc_lake_cfg_t;
+
+/* minecraft:root_system (RootSystemFeature — Task 10 R5c §7.1) */
+typedef struct {
+    hc_pfeat_t *tree; /* 인라인 placed ("feature", placement []) */
+    hc_bpred_t allowed_tree_position;
+    int32_t    required_vertical_space; /* 3 */
+    int32_t    allowed_vertical_water;  /* 2 */
+    int32_t    root_radius, root_attempts, root_column_max_height;
+    uint64_t   root_replaceable[(HC_B_COUNT + 63) / 64];
+    uint16_t   root_state;    /* simple rooted_dirt */
+    int32_t    hanging_radius, hanging_span, hanging_attempts;
+    uint16_t   hanging_state; /* simple hanging_roots[wl=false] */
+} hc_rootsys_cfg_t;
+
+/* minecraft:geode (GeodeFeature — Task 10 R5a) */
+typedef struct {
+    uint16_t   fill, inner, alt_inner, middle, outer; /* simple providers */
+    uint16_t   placements[8]; /* inner_placements (기본 상태) */
+    int32_t    n_placements;
+    uint64_t   cannot_replace[(HC_B_COUNT + 63) / 64];
+    uint64_t   invalid_blocks[(HC_B_COUNT + 63) / 64];
+    double     layer_fill, layer_inner, layer_middle, layer_outer;
+    double     crack_chance, crack_base;
+    int32_t    crack_offset;
+    double     use_potential, use_alt;
+    int32_t    require_alt;
+    hc_iprov_t outer_wall, dist_points, point_offset;
+    int32_t    outer_wall_max; /* outer_wall_distance.maxInclusive */
+    int32_t    min_gen, max_gen;
+    double     noise_mult;
+    int32_t    invalid_threshold;
+} hc_geode_cfg_t;
 
 struct hc_pfeat {
     const char *name; /* "minecraft:ore_dirt" (arena 사본; 인라인은 NULL) */
@@ -375,6 +458,11 @@ struct hc_pfeat {
         hc_bamboo_cfg_t *bamboo;
         hc_tree_cfg_t   *tree;
         hc_ftree_cfg_t  *ftree;
+        hc_disk_cfg_t   *disk;
+        hc_seagrass_cfg_t seagrass;
+        hc_lake_cfg_t    *lake;
+        hc_rootsys_cfg_t *rootsys;
+        hc_geode_cfg_t   *geode;
     } cf;
 };
 
@@ -399,6 +487,8 @@ typedef struct {
     uint64_t tag_replaceable_by_trees[(HC_B_COUNT + 63) / 64];
     uint64_t tag_logs[(HC_B_COUNT + 63) / 64];
     uint64_t tag_prevents_leaf_decay[(HC_B_COUNT + 63) / 64];
+    /* Task 10 링 본문 */
+    uint64_t tag_cannot_support_seagrass[(HC_B_COUNT + 63) / 64];
     /* 멤버십 비트셋: member[step][biome_id * words + w]. biome_id 는
      * hc_biome_reg_t 인턴 id — reg_init 이 biome_features 의 전 바이옴을
      * 인턴한다. */
@@ -439,7 +529,8 @@ int64_t hc_features_decoration_seed(int64_t level_seed, int32_t cx, int32_t cz);
 /* 한 placed feature 의 파이프라인+본문 실행 (features.c — walk 내부용).
  * biomes/sea_level 은 freeze_top_layer 온도 게이트가 읽는다. */
 void hc_feat_run_placed(hc_feat_region_t *rg, hc_wgr_t *rng,
-                        const hc_feat_reg_t *reg, const hc_biome_view_t *view,
+                        int64_t level_seed, const hc_feat_reg_t *reg,
+                        const hc_biome_view_t *view,
                         const hc_biome_reg_t *biomes, int32_t sea_level,
                         const hc_pfeat_t *pf, int32_t step, int32_t index,
                         int32_t origin_x, int32_t origin_y, int32_t origin_z,

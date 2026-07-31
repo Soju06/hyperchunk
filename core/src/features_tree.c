@@ -965,10 +965,22 @@ static uint16_t edge_update_state(feat_env_t *e, uint16_t s, int32_t x,
                               (s - HC_B_BIG_DRIPLEAF_BASE));
         return s;
     }
-    /* 소형 버섯: MushroomBlock canSurvive 가 light 를 읽는다 — 미모델 */
-    if (s == HC_B_RED_MUSHROOM || s == HC_B_BROWN_MUSHROOM)
-        die("edge update on small mushroom (light-dependent canSurvive)",
-            NULL);
+    /* 소형 버섯: MushroomBlock.canSurvive = below∈#mushroom_grow_block ||
+     * (getRawBrightness(pos,0) < 13 && below.isSolidRender) — 라이트를
+     * 라이브로 읽는다 (WorldGenRegion.getLightEngine @386 → ServerLevel).
+     * 월드젠 윈도우 분석 (Task 10 NOTES): 엣지 업데이트 시점에 버섯 청크
+     * 섹션은 그리드 08 인접-등록으로 존재(스카이 저장값 0)하고, 주변 링
+     * 청크의 09 는 아직 자격 미달 → rawBrightness = 0 < 13 → 생존.
+     * (버섯은 dampening/emission 0 이라 라이트 게이트에 비가시 — 잔차는
+     * 전이적 read 경유만 가능. 게이트가 이 근방을 지목하면 재검토.) */
+    if (s == HC_B_RED_MUSHROOM || s == HC_B_BROWN_MUSHROOM) {
+        uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+        fprintf(stderr,
+                "hc_features note: mushroom edge-update at (%d,%d,%d) "
+                "below=%s -> modeled as rawBrightness 0 (survives)\n",
+                x, y, z, hc_block_name(below));
+        return s;
+    }
     /* 그 외 (잎/통나무/물/돌/흙/이끼 등): tick 스케줄만 — 불변 */
     return s;
 }

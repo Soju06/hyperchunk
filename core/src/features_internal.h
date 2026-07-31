@@ -8,6 +8,7 @@
 typedef struct feat_env {
     hc_feat_region_t      *rg;
     hc_wgr_t              *rng;
+    int64_t                level_seed; /* geode 내부 노이즈 (R5a §4.2) */
     const hc_feat_reg_t   *reg;
     const hc_biome_view_t *view;
     const hc_biome_reg_t  *biomes; /* freeze_top_layer 온도 게이트 */
@@ -35,6 +36,12 @@ int hc_featx_run_nested(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
 /* features_tree.c — R2 본문 */
 int hc_featx_tree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
 int hc_featx_ftree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
+
+/* features_ring.c — Task 10 링 프리픽스 본문 */
+int hc_featx_disk_place(feat_env_t *e, const hc_disk_cfg_t *c, int32_t x,
+                        int32_t y, int32_t z);
+int hc_featx_seagrass_place(feat_env_t *e, const hc_seagrass_cfg_t *c,
+                            int32_t x, int32_t y, int32_t z);
 
 /* features_lush.c — R3 본문 */
 int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t x,

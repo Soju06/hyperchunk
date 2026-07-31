@@ -29,6 +29,9 @@ typedef struct {
  * 이 소비 순서가 어긋나면 이후 모든 노이즈가 어긋난다 (ADR-002 Pitfall 2). */
 void   hc_perlin_init(hc_perlin_t *p, int64_t seed);
 void   hc_perlin_init_from(hc_perlin_t *p, hc_xoro_t *r); /* 주어진 RNG 소비 */
+/* LegacyRandomSource(LCG) 플레이버 — geode 내부 노이즈 (Task 10 R5a §4.2):
+ * 소비 순서는 xoro 판과 동일 (xo,yo,zo 그리고 Fisher-Yates). */
+void   hc_perlin_init_from_lcg(hc_perlin_t *p, hc_lcg_t *r);
 /* ImprovedNoise.noise(x,y,z) == noise(x,y,z,0,0): yScale=0 경로 */
 double hc_perlin_sample(const hc_perlin_t *p, double x, double y, double z);
 /* noise(x,y,z,yScale,yMax): yScale != 0 이면 y 분수를 yScale 격자로 양자화

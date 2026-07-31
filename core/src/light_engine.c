@@ -67,6 +67,11 @@ static void build_tables(void) {
     for (int age = 0; age <= 25; age++) /* berries=true → 14 */
         g_emit[HC_B_CAVE_VINES_BASE + 26 + age] = 14;
     g_emit[HC_B_CAVE_VINES_PLANT_BASE + 1] = 14;
+    /* amethyst 싹/클러스터: size 순 1/2/4/5 (facing/waterlogged 무관) */
+    static const uint8_t AME_EM[4] = {1, 2, 4, 5};
+    for (int size = 0; size < 4; size++)
+        for (int i = 0; i < 12; i++)
+            g_emit[HC_B_AMETHYST_BUD_BASE + size * 12 + i] = AME_EM[size];
 
     g_tables_ready = 1;
 }
