@@ -142,3 +142,34 @@ add_test(NAME spawn_full COMMAND test_spawn_full
          ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_seed1234567890.txt
          1234567890)
 set_tests_properties(spawn_full PROPERTIES TIMEOUT 1200)
+
+# 리전 출력 패리티 (Task 12). primary 번들 풀 재생 → r.0.0 ∩ 그리드
+# 4청크 직렬화. (0,0) 은 golden canonical 페이로드와 무조건 바이트 일치
+# (참조는 tools/golden/extract_region_ref.py 산출물 — .mca 처럼 로컬
+# 전용, 해시는 golden/SHA256SUMS). 나머지 3청크는 stale-mca 잔차
+# (07-28 .mca vs 07-31 번들, test_region.c 헤더 주석) — roundtrip 이
+# 컨테이너 왕복을, residuals 가 문서화된 잔차 봉투를 강제한다.
+add_executable(test_region parity/test_region.c)
+target_link_libraries(test_region PRIVATE hyperchunk)
+add_test(NAME region_out COMMAND test_region
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/features-trace/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_seed1234567890.txt
+         1234567890
+         ${CMAKE_SOURCE_DIR}/golden/region-ref
+         ${CMAKE_BINARY_DIR}/region_out_r.0.0.mca)
+set_tests_properties(region_out PROPERTIES TIMEOUT 1200
+                     FIXTURES_SETUP region_mca)
+add_test(NAME region_out_roundtrip COMMAND python3
+         ${CMAKE_SOURCE_DIR}/tools/golden/check_region_roundtrip.py
+         ${CMAKE_BINARY_DIR}/region_out_r.0.0.mca
+         ${CMAKE_SOURCE_DIR}/golden/seed1234567890_r.0.0.mca)
+set_tests_properties(region_out_roundtrip PROPERTIES
+                     FIXTURES_REQUIRED region_mca)
+add_test(NAME region_out_residuals COMMAND python3
+         ${CMAKE_SOURCE_DIR}/tools/golden/check_region_residuals.py
+         ${CMAKE_BINARY_DIR}/region_out_r.0.0.mca
+         ${CMAKE_SOURCE_DIR}/golden/seed1234567890_r.0.0.mca)
+set_tests_properties(region_out_residuals PROPERTIES
+                     FIXTURES_REQUIRED region_mca)

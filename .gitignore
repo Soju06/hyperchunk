@@ -12,6 +12,9 @@ compile_commands.json
 # coherent (dumps + order.manifest) pair, and the manifest is the Tier-2
 # replay input.
 golden/*.mca
+# canonical per-chunk payloads extracted from the .mca by
+# tools/golden/extract_region_ref.py — local-only, hashes in SHA256SUMS
+golden/region-ref/
 golden/stages/**
 !golden/stages/FORMAT.md
 !golden/stages/*/
