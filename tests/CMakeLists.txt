@@ -108,3 +108,17 @@ add_test(NAME features_walk COMMAND test_features_walk
          ${CMAKE_SOURCE_DIR}/golden/features-trace/seed1234567890
          ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
          1234567890)
+
+# 라이트 스테이지 패리티 (Task 10). 08/09 덤프 18개 게이트 — 11x11 월드
+# 체인(노이즈 지배적)이라 무겁다.
+add_executable(test_light_stages parity/test_light_stages.c)
+target_link_libraries(test_light_stages PRIVATE hyperchunk)
+add_test(NAME light_stages COMMAND test_light_stages
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/stages-alt/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/features-trace/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
+         ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_seed1234567890.txt
+         1234567890)
+set_tests_properties(light_stages PROPERTIES TIMEOUT 1200)

@@ -57,7 +57,7 @@ int32_t hc_mth_next_int_range(hc_wgr_t *r, int32_t lo, int32_t hi);
  * 밖 읽기는 AIR (VOID_AIR.isAir / BulkSectionAccess 의 범위 밖 AIR 규약,
  * task9a A3 §5 — 술어 결과가 동일). 하이트맵: *_WG 만 읽는다 (frozen,
  * A4 §4.1); FINAL 4종 유지관리는 step 9 가 읽기 시작하는 9b 에서. */
-enum { HC_FEAT_REGION_N = 8 };
+enum { HC_FEAT_REGION_N = 11 }; /* Task 10: 11x11 (radius-5) 재생 월드 */
 
 typedef struct {
     hc_chunk_t *chunks[HC_FEAT_REGION_N * HC_FEAT_REGION_N]; /* [dz*n+dx] */
