@@ -63,6 +63,14 @@ typedef struct {
     hc_chunk_t *chunks[HC_FEAT_REGION_N * HC_FEAT_REGION_N]; /* [dz*n+dx] */
     int32_t     cx0, cz0, n;
     int32_t     center_cx, center_cz; /* 지금 데코 중인 청크 */
+    /* Task 10 (트레이스+덤프 실증): 기록 서버는 manifest seq 9 직전에
+     * 전 청크를 저장/언로드했다 — *_WG 하이트맵은 NBT 에 안 실리므로
+     * 이후의 *_WG 읽기는 청크·타입별 "현재 블록에서 첫-읽기 재프라임 후
+     * 동결" 의미가 된다 (그리드 07: 06 동결 0-diff / 링2 07: 재프라임
+     * 16/16 — heightmapsAfter 는 CARVERS 부터 FINAL 4종이라 *_WG 는
+     * setBlockState 로는 절대 안 갱신된다). 리플레이어가 entry 9 재생
+     * 직전에 1 로 올린다. */
+    int         wg_dropped;
 } hc_feat_region_t;
 
 hc_chunk_t *hc_feat_region_chunk(const hc_feat_region_t *rg, int32_t cx,
@@ -76,8 +84,10 @@ uint16_t    hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
 int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
                       uint16_t id);
 /* ctx.getHeight(type,x,z) = getFirstAvailable (top blocking y + 1).
- * *_WG 는 frozen 저장값; FINAL 4종은 지연 프라임 (읽기 = 단일 타입 프라임,
- * ChunkAccess.getHeight 의 lazy 경로) — 그래서 region 이 non-const. */
+ * *_WG: wg_dropped 전엔 frozen 저장값, 후엔 청크·타입별 첫-읽기 재프라임
+ * (아래 wg_dropped 주석); FINAL 4종은 지연 프라임 (읽기 = 단일 타입
+ * 프라임, ChunkAccess.getHeight 의 lazy 경로) — 그래서 region 이
+ * non-const. */
 int32_t hc_feat_height(hc_feat_region_t *rg, int hm_type, int32_t x,
                        int32_t z);
 /* 데코 시작 시 센터 청크 FINAL 4종 재프라임 (ChunkStatusTasks
@@ -190,6 +200,7 @@ enum {
     HC_PM_RANDOM_OFFSET,
     HC_PM_SURFACE_WATER_DEPTH, /* WS−OF (live) <= max — 드로우 0 (9b) */
     HC_PM_NOISE_THRESHOLD_COUNT, /* BIOME_INFO_NOISE 카운트 — 드로우 0 (9b) */
+    HC_PM_NOISE_BASED_COUNT, /* ceil((noise+off)*ratio) 반복 — 드로우 0 (T10) */
     /* 그리드 밖 바이옴 전용 modifier — 컴파일 허용, 실행 도달 시 즉사.
      * (합집합에 든 feature 의 파이프라인은 전부 실행되므로, 합집합 밖
      * feature 만 이 마커를 가질 수 있다.) */
@@ -210,6 +221,8 @@ typedef struct {
     hc_bpred_t allowed;   /* env_scan allowed (has_allowed) */
     double     noise_level; /* noise_threshold_count */
     int32_t    below_noise, above_noise;
+    double     noise_factor, noise_offset; /* noise_based_count */
+    int32_t    noise_ratio;                /* noise_based_count */
     const char *die_what; /* HC_PM_DIE */
 } hc_pmod_t;
 

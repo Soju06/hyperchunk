@@ -655,6 +655,21 @@ static int pmod_compile(fc_t *fc, const hc_json_t *j, hc_pmod_t *m) {
         m->max_incl = (int32_t)d->num;
         return 0;
     }
+    if (hc_json_streq(t, "minecraft:noise_based_count")) {
+        /* NoiseBasedCountPlacement CODEC: noise_to_count_ratio INT 필수,
+         * noise_factor DOUBLE 필수, noise_offset optionalFieldOf 기본 0.0 */
+        const hc_json_t *ratio = hc_json_get(j, "noise_to_count_ratio");
+        const hc_json_t *fac = hc_json_get(j, "noise_factor");
+        const hc_json_t *off = hc_json_get(j, "noise_offset");
+        if (!ratio || ratio->kind != HC_JSON_NUM || !fac ||
+            fac->kind != HC_JSON_NUM)
+            FAIL("noise_based_count malformed");
+        m->kind = HC_PM_NOISE_BASED_COUNT;
+        m->noise_ratio = (int32_t)ratio->num;
+        m->noise_factor = fac->num;
+        m->noise_offset = off && off->kind == HC_JSON_NUM ? off->num : 0.0;
+        return 0;
+    }
     if (hc_json_streq(t, "minecraft:noise_threshold_count")) {
         const hc_json_t *nl = hc_json_get(j, "noise_level");
         const hc_json_t *below = hc_json_get(j, "below_noise");

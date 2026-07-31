@@ -42,6 +42,12 @@ typedef struct {
      * features 밖 스테이지는 건드리지 않는다. */
     int32_t   heightmap_final[HC_HMF_COUNT][256];
     uint8_t   hm_final_primed; /* 타입별 비트 (1<<HC_HMF_*) */
+    /* *_WG 리로드-리프라임 맵 (Task 10): 기록 서버의 seq-9 저장/언로드
+     * 웨이브가 *_WG 맵을 떨어뜨린다 (NBT 미직렬화). 이후 첫 getHeight 가
+     * 현재 블록에서 타입별 지연 재프라임 → 다시 동결 (features.c 참조).
+     * [0]=OCEAN_FLOOR_WG, [1]=WORLD_SURFACE_WG. */
+    int32_t   heightmap_wg_reprimed[2][256];
+    uint8_t   wg_reprimed; /* 타입별 비트 (1<<0 OF_WG, 1<<1 WS_WG) */
     /* 쿼트 바이옴 id (내부 인턴 id — 스테이지/테스트가 채운다. 바이옴
      * '생성'(multi-noise sampler)은 후속 태스크: 지금은 03_biomes golden
      * 로더가 유일한 공급자다). zero-fill == id 0. */

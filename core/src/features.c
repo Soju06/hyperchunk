@@ -147,14 +147,44 @@ int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
     return 1;
 }
 
+/* *_WG 리프라임 (rg->wg_dropped 이후): OF_WG 는 blocksMotion, WS_WG 는
+ * !isAir — FINAL 짝과 같은 술어지만 동결 시점이 다르므로 별도 저장. */
+static void wg_prime_one(hc_chunk_t *c, int wg) {
+    int ftype = wg == 0 ? HC_HMF_OCEAN_FLOOR : HC_HMF_WORLD_SURFACE;
+    for (int lz = 0; lz < 16; lz++)
+        for (int lx = 0; lx < 16; lx++) {
+            size_t  col = hc_col_idx(lx, lz);
+            int32_t v = HC_MIN_Y;
+            for (int32_t y = HC_MAX_Y; y >= HC_MIN_Y; y--) {
+                uint16_t s = c->states[hc_idx(lx, y, lz)];
+                if (s != HC_B_AIR && hm_opaque(ftype, s)) {
+                    v = y + 1;
+                    break;
+                }
+            }
+            c->heightmap_wg_reprimed[wg][col] = v;
+        }
+    c->wg_reprimed |= (uint8_t)(1u << wg);
+}
+
 int32_t hc_feat_height(hc_feat_region_t *rg, int hm_type, int32_t x,
                        int32_t z) {
     hc_chunk_t *c = hc_feat_region_chunk(rg, floor_div16(x), floor_div16(z));
     size_t col = hc_col_idx(x & 15, z & 15);
     switch (hm_type) {
     case HC_HM_OCEAN_FLOOR_WG:
+        if (rg->wg_dropped) {
+            if (!(c->wg_reprimed & 1u))
+                wg_prime_one(c, 0);
+            return c->heightmap_wg_reprimed[0][col];
+        }
         return c->heightmap_ocean_floor[col];
     case HC_HM_WORLD_SURFACE_WG:
+        if (rg->wg_dropped) {
+            if (!(c->wg_reprimed & 2u))
+                wg_prime_one(c, 1);
+            return c->heightmap_wg_reprimed[1][col];
+        }
         return c->heightmap_ws[col];
     default: {
         /* ChunkAccess.getHeight: 없는 단일 타입 지연 프라임 후 반환 */
@@ -899,6 +929,11 @@ static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
                    hc_feat_get_block(e->rg, x, y + 1, z)) &&
                mask_test(e->reg->tag_supports_vegetation, below);
     }
+    if (s == HC_B_MELON)
+        /* 26.2 에서 melon 은 전용 클래스 없이 plain Block 등록
+         * (Blocks 2-인자 register → bsm#10 Block::new) —
+         * BlockBehaviour.canSurvive 기본값 iconst_1 (항상 생존) */
+        return 1;
     die("canSurvive unmapped block state", hc_block_name(s));
     return 0;
 }
@@ -1239,6 +1274,18 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
          * below : above — 드로우 0; NaN/동치 → above (A2 검증 dcmpg) */
         double  n = hc_biome_info_noise((double)x / 200.0, (double)z / 200.0);
         int32_t cnt = n < m->noise_level ? m->below_noise : m->above_noise;
+        for (int32_t i = 0; i < cnt; i++)
+            run_mods(e, mi + 1, x, y, z);
+        return;
+    }
+    case HC_PM_NOISE_BASED_COUNT: {
+        /* NoiseBasedCountPlacement.count — 드로우 0:
+         * d2i(Math.ceil((BIOME_INFO_NOISE(x/factor, z/factor) + offset)
+         * * ratio)); 노이즈 |값| 유계라 d2i 포화/NaN 경로 도달 불가 */
+        double n = hc_biome_info_noise((double)x / m->noise_factor,
+                                       (double)z / m->noise_factor);
+        int32_t cnt =
+            (int32_t)ceil((n + m->noise_offset) * (double)m->noise_ratio);
         for (int32_t i = 0; i < cnt; i++)
             run_mods(e, mi + 1, x, y, z);
         return;

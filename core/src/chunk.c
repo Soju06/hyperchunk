@@ -16,6 +16,8 @@ int hc_chunk_init(hc_chunk_t *c, hc_arena_t *a, int32_t cx, int32_t cz) {
     memset(c->heightmap_ocean_floor, 0, sizeof c->heightmap_ocean_floor);
     memset(c->heightmap_final, 0, sizeof c->heightmap_final);
     c->hm_final_primed = 0;
+    memset(c->heightmap_wg_reprimed, 0, sizeof c->heightmap_wg_reprimed);
+    c->wg_reprimed = 0;
     memset(c->biomes, 0, sizeof c->biomes);
     return 0;
 }
