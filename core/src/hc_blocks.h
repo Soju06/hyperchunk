@@ -112,7 +112,10 @@ enum {
     HC_B_BIG_DRIPLEAF_STEM_BASE = HC_B_BIG_DRIPLEAF_BASE + 8,
     /* small_dripleaf: BASE + facing*4 + half*2 + wl (half lower,upper) */
     HC_B_SMALL_DRIPLEAF_BASE = HC_B_BIG_DRIPLEAF_STEM_BASE + 8,
-    HC_B_COUNT = HC_B_SMALL_DRIPLEAF_BASE + 16
+    /* fallen_tree attached_to_logs 데코레이터 (R2 §11/§13) */
+    HC_B_RED_MUSHROOM = HC_B_SMALL_DRIPLEAF_BASE + 16,
+    HC_B_BROWN_MUSHROOM,
+    HC_B_COUNT
 };
 
 /* 수평 방향 인덱스 (팔레트 오프셋용 내부 규약 — MC Direction 값과의

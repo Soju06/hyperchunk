@@ -315,9 +315,45 @@ typedef struct {
     float probability;
 } hc_bamboo_cfg_t;
 
-/* tree / fallen_tree config — R2 recon 확정 후 features_tree.c 와 함께 */
-typedef struct hc_tree_cfg hc_tree_cfg_t;
-typedef struct hc_ftree_cfg hc_ftree_cfg_t;
+/* --- tree / fallen_tree (task9b R2) --- */
+
+enum { HC_TRUNK_STRAIGHT = 0, HC_TRUNK_MEGA_JUNGLE, HC_TRUNK_FANCY };
+enum { HC_FOL_BLOB = 0, HC_FOL_BUSH, HC_FOL_MEGA_JUNGLE, HC_FOL_FANCY };
+enum {
+    HC_TDEC_COCOA = 0,
+    HC_TDEC_TRUNK_VINE,
+    HC_TDEC_LEAVE_VINE,
+    HC_TDEC_ATTACHED_TO_LOGS,
+};
+typedef struct {
+    uint8_t    kind;
+    float      prob;
+    hc_sprov_t provider; /* attached_to_logs block_provider */
+    int8_t     dir;      /* attached_to_logs 단일 direction (Direction ord) */
+} hc_tdec_t;
+
+typedef struct hc_tree_cfg {
+    uint8_t    trunk_kind, fol_kind;
+    int32_t    base_height, rand_a, rand_b;
+    hc_iprov_t fol_radius, fol_offset;
+    int32_t    fol_height;
+    uint16_t   trunk_state;   /* simple provider (jungle/oak log axis=y) */
+    uint16_t   foliage_state; /* leaves[d7,pf,wl=false] */
+    /* below_trunk rule_based: if !mask(cannot_replace…) → below_state */
+    uint64_t   below_not_mask[(HC_B_COUNT + 63) / 64];
+    uint16_t   below_state;
+    uint8_t    ignore_vines;
+    int32_t    ts_limit, ts_lower, ts_upper, ts_min_clipped; /* -1 = 없음 */
+    int32_t    n_decorators;
+    hc_tdec_t *decorators;
+} hc_tree_cfg_t;
+
+typedef struct hc_ftree_cfg {
+    uint16_t   trunk_state;
+    hc_iprov_t log_length;
+    int32_t    n_stump_dec, n_log_dec;
+    hc_tdec_t *stump_dec, *log_dec;
+} hc_ftree_cfg_t;
 
 struct hc_pfeat {
     const char *name; /* "minecraft:ore_dirt" (arena 사본; 인라인은 NULL) */
@@ -358,6 +394,10 @@ typedef struct {
     uint64_t tag_supports_small_dripleaf[(HC_B_COUNT + 63) / 64];
     uint64_t tag_supports_big_dripleaf[(HC_B_COUNT + 63) / 64];
     uint64_t tag_supports_cocoa[(HC_B_COUNT + 63) / 64];
+    /* tree 본문 (R2): validTreePos/isFree/getOptionalDistanceAt */
+    uint64_t tag_replaceable_by_trees[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_logs[(HC_B_COUNT + 63) / 64];
+    uint64_t tag_prevents_leaf_decay[(HC_B_COUNT + 63) / 64];
     /* 멤버십 비트셋: member[step][biome_id * words + w]. biome_id 는
      * hc_biome_reg_t 인턴 id — reg_init 이 biome_features 의 전 바이옴을
      * 인턴한다. */

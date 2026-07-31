@@ -636,6 +636,47 @@ static int pmod_compile(fc_t *fc, const hc_json_t *j, hc_pmod_t *m) {
     FAIL("unsupported placement modifier type");
 }
 
+/* --- tree decorator (R2 §11) --- */
+
+static int tdec_compile(fc_t *fc, const hc_json_t *j, hc_tdec_t *d) {
+    memset(d, 0, sizeof *d);
+    const hc_json_t *t = hc_json_get(j, "type");
+    if (!t || t->kind != HC_JSON_STR)
+        FAIL("tree decorator without type");
+    const hc_json_t *pr = hc_json_get(j, "probability");
+    if (hc_json_streq(t, "minecraft:cocoa")) {
+        if (!pr || pr->kind != HC_JSON_NUM)
+            FAIL("cocoa without probability");
+        d->kind = HC_TDEC_COCOA;
+        d->prob = (float)pr->num;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:trunk_vine")) {
+        d->kind = HC_TDEC_TRUNK_VINE;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:leave_vine")) {
+        if (!pr || pr->kind != HC_JSON_NUM)
+            FAIL("leave_vine without probability");
+        d->kind = HC_TDEC_LEAVE_VINE;
+        d->prob = (float)pr->num;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:attached_to_logs")) {
+        const hc_json_t *bp = hc_json_get(j, "block_provider");
+        const hc_json_t *dirs = hc_json_get(j, "directions");
+        if (!pr || pr->kind != HC_JSON_NUM || !bp || !dirs ||
+            dirs->kind != HC_JSON_ARR || dirs->count != 1 ||
+            !hc_json_streq(dirs->child, "up"))
+            FAIL("attached_to_logs shape unsupported (directions != [up])");
+        d->kind = HC_TDEC_ATTACHED_TO_LOGS;
+        d->prob = (float)pr->num;
+        d->dir = 1; /* UP */
+        return sprov_compile(fc, bp, &d->provider, 0);
+    }
+    FAIL("unsupported tree decorator");
+}
+
 /* --- placed feature (파이프라인 + 본문), 중첩/인라인 지원 --- */
 
 static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
@@ -1089,8 +1130,210 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
         pf->cf_kind = HC_CF_FREEZE_TOP_LAYER;
         return 0;
     }
-    /* tree / fallen_tree — R2 recon 랜딩 후 features_tree.c 와 함께.
-     * 그 외 (root_system, 그리드-외 exotics) — 본문 도달 시 placed=-1. */
+    if (hc_json_streq(t, "minecraft:tree")) {
+        pf->cf_kind = HC_CF_TREE;
+        hc_tree_cfg_t *c = hc_arena_alloc(fc->arena, sizeof *c,
+                                          _Alignof(hc_tree_cfg_t));
+        if (!c)
+            FAIL("arena exhausted (tree)");
+        memset(c, 0, sizeof *c);
+        pf->cf.tree = c;
+        if (hc_json_get(cfg, "root_placer"))
+            FAIL("tree root_placer unsupported");
+        const hc_json_t *tp = hc_json_get(cfg, "trunk_placer");
+        const hc_json_t *fp = hc_json_get(cfg, "foliage_placer");
+        const hc_json_t *tpr = hc_json_get(cfg, "trunk_provider");
+        const hc_json_t *fpr = hc_json_get(cfg, "foliage_provider");
+        const hc_json_t *btp = hc_json_get(cfg, "below_trunk_provider");
+        const hc_json_t *ms = hc_json_get(cfg, "minimum_size");
+        const hc_json_t *dec = hc_json_get(cfg, "decorators");
+        const hc_json_t *iv = hc_json_get(cfg, "ignore_vines");
+        if (!tp || !fp || !tpr || !fpr || !ms || !dec ||
+            dec->kind != HC_JSON_ARR)
+            FAIL("tree config malformed");
+        /* trunk placer */
+        const hc_json_t *tt = hc_json_get(tp, "type");
+        if (!tt)
+            FAIL("trunk placer without type");
+        if (hc_json_streq(tt, "minecraft:straight_trunk_placer"))
+            c->trunk_kind = HC_TRUNK_STRAIGHT;
+        else if (hc_json_streq(tt, "minecraft:mega_jungle_trunk_placer"))
+            c->trunk_kind = HC_TRUNK_MEGA_JUNGLE;
+        else if (hc_json_streq(tt, "minecraft:fancy_trunk_placer"))
+            c->trunk_kind = HC_TRUNK_FANCY;
+        else
+            FAIL("unsupported trunk placer");
+        const hc_json_t *bh = hc_json_get(tp, "base_height");
+        const hc_json_t *ra = hc_json_get(tp, "height_rand_a");
+        const hc_json_t *rb = hc_json_get(tp, "height_rand_b");
+        if (!bh || !ra || !rb)
+            FAIL("trunk placer heights missing");
+        c->base_height = (int32_t)bh->num;
+        c->rand_a = (int32_t)ra->num;
+        c->rand_b = (int32_t)rb->num;
+        /* foliage placer */
+        const hc_json_t *ft = hc_json_get(fp, "type");
+        if (!ft)
+            FAIL("foliage placer without type");
+        if (hc_json_streq(ft, "minecraft:blob_foliage_placer"))
+            c->fol_kind = HC_FOL_BLOB;
+        else if (hc_json_streq(ft, "minecraft:bush_foliage_placer"))
+            c->fol_kind = HC_FOL_BUSH;
+        else if (hc_json_streq(ft, "minecraft:jungle_foliage_placer"))
+            c->fol_kind = HC_FOL_MEGA_JUNGLE;
+        else if (hc_json_streq(ft, "minecraft:fancy_foliage_placer"))
+            c->fol_kind = HC_FOL_FANCY;
+        else
+            FAIL("unsupported foliage placer");
+        const hc_json_t *fr = hc_json_get(fp, "radius");
+        const hc_json_t *fo = hc_json_get(fp, "offset");
+        const hc_json_t *fhh = hc_json_get(fp, "height");
+        if (!fr || !fo || !fhh || fhh->kind != HC_JSON_NUM)
+            FAIL("foliage placer fields missing");
+        if (iprov_compile(fc, fr, &c->fol_radius, 0) ||
+            iprov_compile(fc, fo, &c->fol_offset, 0))
+            return -1;
+        c->fol_height = (int32_t)fhh->num;
+        /* providers — simple 전용 */
+        hc_sprov_t sp;
+        if (sprov_compile(fc, tpr, &sp, 0))
+            return -1;
+        if (sp.kind != HC_SP_SIMPLE)
+            FAIL("tree trunk provider not simple");
+        c->trunk_state = sp.state;
+        if (sprov_compile(fc, fpr, &sp, 0))
+            return -1;
+        if (sp.kind != HC_SP_SIMPLE)
+            FAIL("tree foliage provider not simple");
+        c->foliage_state = sp.state;
+        if (!(c->foliage_state >= HC_B_OAK_LEAVES_BASE &&
+              c->foliage_state < HC_B_OAK_LEAVES_BASE + 28))
+            FAIL("tree foliage state not a leaf");
+        /* below_trunk: rule_based {rules:[{if_true: not(matching_block_tag),
+         * then: simple}]} — 정확히 이 형태만 */
+        if (!btp)
+            FAIL("below_trunk_provider missing");
+        {
+            const hc_json_t *bt = hc_json_get(btp, "type");
+            const hc_json_t *rules = hc_json_get(btp, "rules");
+            if (!bt ||
+                !hc_json_streq(bt, "minecraft:rule_based_state_provider") ||
+                !rules || rules->kind != HC_JSON_ARR || rules->count != 1)
+                FAIL("below_trunk provider shape unsupported");
+            const hc_json_t *rule = rules->child;
+            const hc_json_t *cond = hc_json_get(rule, "if_true");
+            const hc_json_t *then = hc_json_get(rule, "then");
+            const hc_json_t *ct = cond ? hc_json_get(cond, "type") : NULL;
+            const hc_json_t *inner =
+                cond ? hc_json_get(cond, "predicate") : NULL;
+            const hc_json_t *itag =
+                inner ? hc_json_get(inner, "tag") : NULL;
+            if (!ct || !hc_json_streq(ct, "minecraft:not") || !inner ||
+                !itag || itag->kind != HC_JSON_STR || !then)
+                FAIL("below_trunk rule shape unsupported");
+            char ref[96];
+            if (itag->slen + 1 >= (int32_t)sizeof ref)
+                FAIL("tag name too long");
+            ref[0] = '#';
+            memcpy(ref + 1, itag->s, (size_t)itag->slen);
+            if (tag_expand(fc, c->below_not_mask, ref, itag->slen + 1, 0))
+                return -1;
+            if (sprov_compile(fc, then, &sp, 0))
+                return -1;
+            if (sp.kind != HC_SP_SIMPLE)
+                FAIL("below_trunk then-provider not simple");
+            c->below_state = sp.state;
+        }
+        c->ignore_vines =
+            iv ? (uint8_t)(iv->kind == HC_JSON_BOOL && iv->boolean) : 0;
+        /* minimum_size: two_layers_feature_size */
+        {
+            const hc_json_t *mt = hc_json_get(ms, "type");
+            if (!mt ||
+                !hc_json_streq(mt, "minecraft:two_layers_feature_size"))
+                FAIL("minimum_size type unsupported");
+            const hc_json_t *lim = hc_json_get(ms, "limit");
+            const hc_json_t *lo = hc_json_get(ms, "lower_size");
+            const hc_json_t *up = hc_json_get(ms, "upper_size");
+            const hc_json_t *mc = hc_json_get(ms, "min_clipped_height");
+            c->ts_limit = lim && lim->kind == HC_JSON_NUM ? (int32_t)lim->num
+                                                          : 1;
+            c->ts_lower = lo && lo->kind == HC_JSON_NUM ? (int32_t)lo->num
+                                                        : 0;
+            c->ts_upper = up && up->kind == HC_JSON_NUM ? (int32_t)up->num
+                                                        : 1;
+            c->ts_min_clipped =
+                mc && mc->kind == HC_JSON_NUM ? (int32_t)mc->num : -1;
+        }
+        c->n_decorators = dec->count;
+        if (c->n_decorators > 0) {
+            c->decorators = hc_arena_alloc(
+                fc->arena, sizeof(hc_tdec_t) * (size_t)c->n_decorators,
+                _Alignof(hc_tdec_t));
+            if (!c->decorators)
+                FAIL("arena exhausted (decorators)");
+            int32_t i = 0;
+            for (const hc_json_t *dj = dec->child; dj; dj = dj->next, i++)
+                if (tdec_compile(fc, dj, &c->decorators[i]))
+                    return -1;
+        }
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:fallen_tree")) {
+        pf->cf_kind = HC_CF_FALLEN_TREE;
+        hc_ftree_cfg_t *c = hc_arena_alloc(fc->arena, sizeof *c,
+                                           _Alignof(hc_ftree_cfg_t));
+        if (!c)
+            FAIL("arena exhausted (fallen_tree)");
+        memset(c, 0, sizeof *c);
+        pf->cf.ftree = c;
+        const hc_json_t *tpr = hc_json_get(cfg, "trunk_provider");
+        const hc_json_t *ll = hc_json_get(cfg, "log_length");
+        const hc_json_t *sd = hc_json_get(cfg, "stump_decorators");
+        const hc_json_t *ld = hc_json_get(cfg, "log_decorators");
+        if (!tpr || !ll)
+            FAIL("fallen_tree config malformed");
+        hc_sprov_t sp;
+        if (sprov_compile(fc, tpr, &sp, 0))
+            return -1;
+        if (sp.kind != HC_SP_SIMPLE)
+            FAIL("fallen_tree trunk provider not simple");
+        c->trunk_state = sp.state;
+        if (iprov_compile(fc, ll, &c->log_length, 0))
+            return -1;
+        if (sd) {
+            if (sd->kind != HC_JSON_ARR)
+                FAIL("stump_decorators malformed");
+            c->n_stump_dec = sd->count;
+            c->stump_dec = hc_arena_alloc(
+                fc->arena, sizeof(hc_tdec_t) * (size_t)(sd->count ? sd->count
+                                                                  : 1),
+                _Alignof(hc_tdec_t));
+            if (!c->stump_dec)
+                FAIL("arena exhausted (stump dec)");
+            int32_t i = 0;
+            for (const hc_json_t *dj = sd->child; dj; dj = dj->next, i++)
+                if (tdec_compile(fc, dj, &c->stump_dec[i]))
+                    return -1;
+        }
+        if (ld) {
+            if (ld->kind != HC_JSON_ARR)
+                FAIL("log_decorators malformed");
+            c->n_log_dec = ld->count;
+            c->log_dec = hc_arena_alloc(
+                fc->arena, sizeof(hc_tdec_t) * (size_t)(ld->count ? ld->count
+                                                                  : 1),
+                _Alignof(hc_tdec_t));
+            if (!c->log_dec)
+                FAIL("arena exhausted (log dec)");
+            int32_t i = 0;
+            for (const hc_json_t *dj = ld->child; dj; dj = dj->next, i++)
+                if (tdec_compile(fc, dj, &c->log_dec[i]))
+                    return -1;
+        }
+        return 0;
+    }
+    /* root_system 등 그리드-외 exotics — 본문 도달 시 placed=-1. */
     pf->cf_kind = HC_CF_UNIMPLEMENTED;
     return 0;
 }
@@ -1160,6 +1403,11 @@ int hc_feat_reg_init(hc_feat_reg_t *reg, hc_arena_t *arena,
          offsetof(hc_feat_reg_t, tag_supports_big_dripleaf)},
         {"#minecraft:supports_cocoa",
          offsetof(hc_feat_reg_t, tag_supports_cocoa)},
+        {"#minecraft:replaceable_by_trees",
+         offsetof(hc_feat_reg_t, tag_replaceable_by_trees)},
+        {"#minecraft:logs", offsetof(hc_feat_reg_t, tag_logs)},
+        {"#minecraft:prevents_nearby_leaf_decay",
+         offsetof(hc_feat_reg_t, tag_prevents_leaf_decay)},
     };
     for (size_t i = 0; i < sizeof RT_TAGS / sizeof RT_TAGS[0]; i++)
         if (tag_expand(fc, (uint64_t *)((char *)reg + RT_TAGS[i].off),

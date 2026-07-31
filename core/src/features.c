@@ -1,5 +1,5 @@
 #include "hc_carvers.h" /* hc_mth_sin (Mth 테이블) */
-#include "hc_features.h"
+#include "features_internal.h"
 #include "hc_jdk_trig.h" /* ore 각도 sin/cos (JDK 스텁 이식) */
 
 #include <assert.h>
@@ -7,6 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define die hc_featx_die
+#define mask_test hc_featx_mask_test
+#define iprov_sample hc_featx_iprov_sample
+#define sprov_sample hc_featx_sprov_sample
+#define run_nested_pf hc_featx_run_nested
 
 /* 07_features — 리전/술어/배치 파이프라인/피처 본문.
  * 시맨틱 출처 (전부 26.2 바이트코드 재구성):
@@ -43,7 +49,7 @@ uint16_t hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
     return c->states[hc_idx(x & 15, y, z & 15)];
 }
 
-static void die(const char *what, const char *detail) {
+void hc_featx_die(const char *what, const char *detail) {
     fprintf(stderr, "hc_features FATAL: %s%s%s\n", what, detail ? ": " : "",
             detail ? detail : "");
     abort();
@@ -161,33 +167,11 @@ int32_t hc_feat_height(hc_feat_region_t *rg, int hm_type, int32_t x,
     }
 }
 
-/* --- 실행 환경 --- */
-
-typedef struct {
-    hc_feat_region_t       *rg;
-    hc_wgr_t               *rng;
-    const hc_feat_reg_t    *reg;
-    const hc_biome_view_t  *view;
-    const hc_biome_reg_t   *biomes; /* freeze_top_layer 온도 게이트 */
-    int32_t                 sea_level;
-    const hc_pfeat_t       *pf;
-    int32_t                 step, index;
-    const hc_feat_trace_t  *trace;
-    int32_t                 npos;
-    int32_t                 placed_any; /* 0/1 */
-    int32_t                 unknown;    /* 미구현 본문 도달 */
-    int32_t                 nested;     /* PlacedFeature.place 경로 (biome 금지) */
-} feat_env_t;
-
-/* 중첩 placed feature 실행 (PlacedFeature.place — topFeature 비어 있음).
- * 트레이스 p-라인은 최상위 전용 (FORMAT.md) — 중첩은 기록하지 않는다.
- * 반환 = placedAny. */
-static int run_nested_pf(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
-                         int32_t y, int32_t z);
+/* --- 실행 환경: feat_env_t 는 features_internal.h --- */
 
 /* --- 블록 술어 (드로우 0) --- */
 
-static int mask_test(const uint64_t *mask, uint16_t id) {
+int hc_featx_mask_test(const uint64_t *mask, uint16_t id) {
     return (mask[id >> 6] >> (id & 63)) & 1u;
 }
 
@@ -246,7 +230,7 @@ static int bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x, int32_t y,
 
 /* --- providers --- */
 
-static int32_t iprov_sample(hc_wgr_t *r, const hc_iprov_t *p) {
+int32_t hc_featx_iprov_sample(hc_wgr_t *r, const hc_iprov_t *p) {
     switch (p->kind) {
     case HC_IP_CONST:
         return p->a;
@@ -284,8 +268,7 @@ static int32_t iprov_sample(hc_wgr_t *r, const hc_iprov_t *p) {
 
 /* --- BlockState provider 샘플 (R3: source 먼저, values 나중) --- */
 
-__attribute__((unused)) /* 9b 본문 채우면서 사용 — 스텁 단계 한정 */
-static uint16_t sprov_sample(hc_wgr_t *r, const hc_sprov_t *p) {
+uint16_t hc_featx_sprov_sample(hc_wgr_t *r, const hc_sprov_t *p) {
     switch (p->kind) {
     case HC_SP_SIMPLE:
         return p->state;
@@ -784,28 +767,21 @@ static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
 
 static int would_survive(feat_env_t *e, const char *name, int32_t x,
                          int32_t y, int32_t z) {
-    (void)e;
-    (void)x;
-    (void)y;
-    (void)z;
-    die("would_survive dispatch not yet implemented (R2)", name);
+    /* SaplingBlock 은 VegetationBlock canSurvive 를 오버라이드하지 않는다
+     * (R2 §2): below.is(#supports_vegetation) */
+    if (strcmp(name, "minecraft:oak_sapling") == 0 ||
+        strcmp(name, "minecraft:jungle_sapling") == 0)
+        return mask_test(e->reg->tag_supports_vegetation,
+                         hc_feat_get_block(e->rg, x, y - 1, z));
+    die("would_survive dispatch unmapped", name);
     return 0;
 }
 
 static int tree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
-    (void)e;
-    (void)x;
-    (void)y;
-    (void)z;
-    die("tree body not yet implemented (R2)", e->pf->name);
-    return 0;
+    return hc_featx_tree_place(e, x, y, z);
 }
 static int ftree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
-    (void)x;
-    (void)y;
-    (void)z;
-    die("fallen_tree body not yet implemented (R2)", e->pf->name);
-    return 0;
+    return hc_featx_ftree_place(e, x, y, z);
 }
 static int vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t x,
                         int32_t y, int32_t z) {
@@ -1124,8 +1100,8 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
     die("unknown placement modifier kind", NULL);
 }
 
-static int run_nested_pf(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
-                         int32_t y, int32_t z) {
+int hc_featx_run_nested(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
+                        int32_t y, int32_t z) {
     feat_env_t ne = *e;
     ne.pf = pf;
     ne.npos = 0;

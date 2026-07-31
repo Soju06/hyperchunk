@@ -349,6 +349,8 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:small_dripleaf[facing=west,half=lower,waterlogged=true]",
     "minecraft:small_dripleaf[facing=west,half=upper,waterlogged=false]",
     "minecraft:small_dripleaf[facing=west,half=upper,waterlogged=true]",
+    "minecraft:red_mushroom",
+    "minecraft:brown_mushroom",
 };
 
 const char *hc_block_name(uint16_t id) {
@@ -460,6 +462,7 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     F_REPL|F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, 
     F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, 
     F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG, 0, F_WLOG,
+    0, 0, /* mushrooms */
 };
 
 int hc_block_is_air(uint16_t id) {
