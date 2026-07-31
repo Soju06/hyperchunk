@@ -65,7 +65,11 @@ does not equal itself across runs. The gate is redefined in **ADR-007** as:
 - [x] Regenerate golden bundle with the order manifest included
       (2026-07-31; plus a second bundle `golden/stages-alt/` with a distinct
       recorded order, ADR-007 D3).
-- [ ] Plan Task 9 (features) consumes the manifest for replay verification.
+- [x] Plan Task 9 (features) consumes the manifest for replay verification
+      (2026-07-31, Task 9a: tests/parity/test_features_walk.c replays both
+      bundles' grid order — 81+81 manifest seeds verified, ore/blob+magma
+      block parity on both 07 dump sets; trace golden bundle under
+      golden/features-trace/, see its FORMAT.md).
 
 ## Order manifest (Task 9-pre, 2026-07-31)
 

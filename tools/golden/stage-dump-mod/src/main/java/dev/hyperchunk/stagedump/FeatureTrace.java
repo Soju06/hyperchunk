@@ -171,6 +171,24 @@ public final class FeatureTrace {
                 + (placed ? 1 : 0) + " " + id);
     }
 
+    private static final boolean ORE_TRACE = Boolean.getBoolean("hyperchunk.dump.oretrace");
+
+    /** OreFeature#canPlaceOre RETURN — debug-only candidate ground truth. */
+    public static void onOreCandidate(net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState state, boolean result) {
+        if (!ORE_TRACE) {
+            return;
+        }
+        Ctx c = CTX.get();
+        if (c == null || c.out == null) {
+            return;
+        }
+        write(c, "o " + c.step + " " + c.index + " " + pos.getX() + " " + pos.getY()
+                + " " + pos.getZ() + " "
+                + net.minecraft.commands.arguments.blocks.BlockStateParser.serialize(state)
+                + " " + (result ? 1 : 0));
+    }
+
     /** StructureStart#placeInChunk HEAD — evidence that a structure placed. */
     public static void onStructurePlace(Structure structure, WorldGenLevel level) {
         Ctx c = CTX.get();

@@ -8,7 +8,8 @@
     "WorldgenRandomMixin",
     "ConfiguredFeatureMixin",
     "PlacedFeatureMixin",
-    "StructureStartMixin"
+    "StructureStartMixin",
+    "OreFeatureMixin"
   ],
   "injectors": {
     "defaultRequire": 1
