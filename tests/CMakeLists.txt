@@ -28,6 +28,12 @@ add_executable(test_json unit/test_json.c)
 target_link_libraries(test_json PRIVATE hyperchunk)
 add_test(NAME json COMMAND test_json)
 
+# NBT 라이터 (Task 12). HashMap 순서 에뮬레이터는 golden r.0.0.mca 전
+# 청크 실측 키 순서로 검증한다 (실측표는 테스트에 내장).
+add_executable(test_nbt unit/test_nbt.c)
+target_link_libraries(test_nbt PRIVATE hyperchunk)
+add_test(NAME nbt COMMAND test_nbt)
+
 # 노이즈 스택 (Task 6a). 한 바이너리, 모드별 golden 대조.
 add_executable(test_noise unit/test_noise.c)
 target_link_libraries(test_noise PRIVATE hyperchunk)
