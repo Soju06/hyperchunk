@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import dev.hyperchunk.stagedump.FeatureTrace;
 import dev.hyperchunk.stagedump.OrderManifest;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.util.StaticCache2D;
@@ -30,12 +31,14 @@ public abstract class ChunkStatusTasksMixin {
             StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
             CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
         OrderManifest.armFeatures(ctx, chunk);
+        FeatureTrace.armFeatures(ctx, chunk);
     }
 
     @Inject(method = "generateFeatures", at = @At("RETURN"))
     private static void hyperchunk$finishOrderCapture(WorldGenContext ctx, ChunkStep step,
             StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
             CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
+        FeatureTrace.finishFeatures(chunk);
         OrderManifest.finishFeatures(chunk);
     }
 }

@@ -22,6 +22,12 @@ golden/stages-alt/**
 !golden/stages-alt/*/
 !golden/stages-alt/*/order.manifest
 !golden/stages-alt/*/order.snapshots
+golden/features-trace/**
+!golden/features-trace/FORMAT.md
+!golden/features-trace/SHA256SUMS
+!golden/features-trace/*/
+!golden/features-trace/*/order.manifest
+!golden/features-trace/*/order.snapshots
 tools/golden/libs/
 tools/golden/*.class
 tools/golden/work/

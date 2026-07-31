@@ -5,7 +5,10 @@
   "mixins": [
     "ChunkStepMixin",
     "ChunkStatusTasksMixin",
-    "WorldgenRandomMixin"
+    "WorldgenRandomMixin",
+    "ConfiguredFeatureMixin",
+    "PlacedFeatureMixin",
+    "StructureStartMixin"
   ],
   "injectors": {
     "defaultRequire": 1
