@@ -181,6 +181,9 @@ int hc_featx_lake_place(feat_env_t *e, const hc_lake_cfg_t *c, int32_t ox,
                 /* y>=4: scheduleTick(CAVE_AIR,0) + markAboveForPostProcessing
                  * — block_ticks/PostProcessing NBT 만, 월드 바이트 없음
                  * (@828-847, R5b §5) */
+                if (y >= 4)
+                    hc_feat_schedule_tick(e->rg, wx, wy, wz, HC_B_CAVE_AIR,
+                                          HC_TICK_BLOCK, 0);
             }
     /* PASS 3: 배리어 셸 (@868-1229) — barrier=stone 은 isAir 아님 */
     if (!hc_block_is_air(c->barrier)) {
@@ -477,9 +480,28 @@ int hc_featx_geode_place(feat_env_t *e, const hc_geode_cfg_t *c, int32_t ox,
                 if (sum < l_outer)
                     continue; /* dcmpg ifge (place@887-895) */
                 if (do_crack && csum >= l_crack && sum < l_fill) {
-                    /* 크랙: 리터럴 AIR + 인접 유체 scheduleTick (NBT 만,
+                    /* 크랙: 리터럴 AIR + 인접 유체 scheduleTick(np,
+                     * fs.getType(), 0) — DIRECTIONS 순 (R5a §7,
                      * place@898-1011) */
                     geode_safe_set(e, c, x, y, z, HC_B_AIR);
+                    if (e->rg->ticks) {
+                        static const int8_t D6[6][3] = {
+                            {0, -1, 0}, {0, 1, 0},  {0, 0, -1},
+                            {0, 0, 1},  {-1, 0, 0}, {1, 0, 0}};
+                        for (int d = 0; d < 6; d++) {
+                            int32_t nx = x + D6[d][0], ny = y + D6[d][1],
+                                    nz = z + D6[d][2];
+                            uint16_t nst = hc_feat_get_block(e->rg, nx, ny,
+                                                             nz);
+                            if (hc_block_fluid_nonempty(nst))
+                                hc_feat_schedule_tick(
+                                    e->rg, nx, ny, nz, nst,
+                                    hc_block_fluid_is_water(nst)
+                                        ? HC_TICK_WATER
+                                        : HC_TICK_LAVA,
+                                    0);
+                        }
+                    }
                     continue;
                 }
                 if (sum >= l_fill) {

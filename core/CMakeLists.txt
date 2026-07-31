@@ -36,6 +36,8 @@ add_library(hyperchunk STATIC
   src/gen_light_stages.c
   src/gen_spawn_full_stages.c
   src/nbt.c
+  src/chunk_nbt.c
+  src/region.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc

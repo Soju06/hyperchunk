@@ -59,10 +59,44 @@ int32_t hc_mth_next_int_range(hc_wgr_t *r, int32_t lo, int32_t hi);
  * A4 §4.1); FINAL 4종 유지관리는 step 9 가 읽기 시작하는 9b 에서. */
 enum { HC_FEAT_REGION_N = 11 }; /* Task 10: 11x11 (radius-5) 재생 월드 */
 
+/* --- Task 12: 스케줄-틱 레코더 (ProtoChunkTicks 등가, R-D) ---
+ *
+ * 바닐라 WorldGenTickAccess.schedule → pos 소속 청크의 ProtoChunkTicks:
+ *  - 저장 delay 는 스케줄 delay 와 무관하게 0 고정 (ProtoChunkTicks
+ *    .schedule @12 iconst_0) — 월드젠 틱의 NBT t 는 전부 0.
+ *  - 중복 제거 first-wins, 키 = (블록/유체 타입, pos) — 상태/delay 무관.
+ *  - 저장 순서 = 청크별 스케줄 시간순 (ArrayList; LevelChunkTicks.pack 은
+ *    subTickOrder 재정렬이라 save/load/FULL 을 지나도 불변).
+ * 기록은 리전 전체 시간순 단일 배열 — 직렬화가 청크/종류로 거른다. */
+enum {
+    HC_TICK_BLOCK = 0,     /* block_ticks — i = 상태 이름의 '[' 앞부분 */
+    HC_TICK_WATER,         /* fluid_ticks minecraft:water */
+    HC_TICK_FLOWING_WATER, /* minecraft:flowing_water */
+    HC_TICK_LAVA,          /* minecraft:lava */
+    HC_TICK_FLOWING_LAVA,  /* minecraft:flowing_lava */
+};
+typedef struct {
+    int32_t  x, y, z; /* 절대 블록 좌표 */
+    uint16_t block;   /* HC_TICK_BLOCK 전용: 스케줄 주체 상태 id */
+    uint8_t  kind;
+    int32_t  t;       /* 저장 t (월드젠 0; postProcess 라이브 스케줄 5 등) */
+} hc_tick_rec_t;
+typedef struct {
+    hc_tick_rec_t *recs;
+    int32_t        n, cap;
+    int32_t       *hset; /* open addressing: recs 인덱스, -1 = 빈 슬롯 */
+    uint32_t       hcap; /* 2^k */
+} hc_tick_recorder_t;
+
+/* cap 개 기록 + 2^k >= 4*cap 해시를 arena 에서 할당. 실패 -1. */
+int hc_tick_recorder_init(hc_tick_recorder_t *tr, hc_arena_t *a, int32_t cap);
+
 typedef struct {
     hc_chunk_t *chunks[HC_FEAT_REGION_N * HC_FEAT_REGION_N]; /* [dz*n+dx] */
     int32_t     cx0, cz0, n;
     int32_t     center_cx, center_cz; /* 지금 데코 중인 청크 */
+    /* Task 12: NULL = 기록 끔 (기존 게이트 불변) */
+    hc_tick_recorder_t *ticks;
     /* Task 10 (트레이스+덤프 실증): 기록 서버는 manifest seq 9 직전에
      * 전 청크를 저장/언로드했다 — *_WG 하이트맵은 NBT 에 안 실리므로
      * 이후의 *_WG 읽기는 청크·타입별 "현재 블록에서 첫-읽기 재프라임 후
@@ -83,6 +117,11 @@ uint16_t    hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
  * 무갱신 — 광석은 불투명→불투명 치환이라 순수함수 등가). 성공 1. */
 int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
                       uint16_t id);
+/* ScheduledTickAccess.scheduleTick 등가 — rg->ticks 없으면 no-op.
+ * t 는 저장 t 값 (월드젠 경로 = 0). */
+void hc_feat_schedule_tick(hc_feat_region_t *rg, int32_t x, int32_t y,
+                           int32_t z, uint16_t block_state, int kind,
+                           int32_t t);
 /* ctx.getHeight(type,x,z) = getFirstAvailable (top blocking y + 1).
  * *_WG: wg_dropped 전엔 frozen 저장값, 후엔 청크·타입별 첫-읽기 재프라임
  * (아래 wg_dropped 주석); FINAL 4종은 지연 프라임 (읽기 = 단일 타입
