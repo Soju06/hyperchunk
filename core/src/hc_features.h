@@ -564,4 +564,13 @@ void hc_gen_features_chunk(hc_feat_region_t *rg, int32_t cx, int32_t cz,
                            int32_t walk_max_step,
                            const hc_feat_trace_t *trace);
 
+/* --- 10_spawn / 11_full 스테이지 (Task 11, gen_spawn_full_stages.c) ---
+ *
+ * 실측 (golden 09→10→11 diff) + 바이트코드 (task11-spawnfull/): spawn 은
+ * 덤프 관측면 순수 pass-through (NaturalSpawner 부기만), full 은 하이트맵
+ * kind 프루닝만 — proto 맵 중 FINAL 4종만 setRawData 비트 복사로 생존,
+ * *_WG 소멸, 전환 시점 프라임 없음. 블록/바이옴/하이트맵 값 연산 없음. */
+void hc_gen_spawn_stage(hc_chunk_t *c);
+void hc_gen_full_stage(hc_chunk_t *c);
+
 #endif /* HC_FEATURES_H */

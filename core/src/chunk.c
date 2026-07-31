@@ -19,5 +19,6 @@ int hc_chunk_init(hc_chunk_t *c, hc_arena_t *a, int32_t cx, int32_t cz) {
     memset(c->heightmap_wg_reprimed, 0, sizeof c->heightmap_wg_reprimed);
     c->wg_reprimed = 0;
     memset(c->biomes, 0, sizeof c->biomes);
+    c->promoted = 0;
     return 0;
 }

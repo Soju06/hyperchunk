@@ -122,3 +122,17 @@ add_test(NAME light_stages COMMAND test_light_stages
          ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_seed1234567890.txt
          1234567890)
 set_tests_properties(light_stages PROPERTIES TIMEOUT 1200)
+
+# 10_spawn/11_full 패리티 (Task 11). 36 덤프 게이트 (9청크 x 2스테이지 x
+# 2번들) — 라이트 없는 order-replay, 09 잔차 캡 이월.
+add_executable(test_spawn_full parity/test_spawn_full.c)
+target_link_libraries(test_spawn_full PRIVATE hyperchunk)
+add_test(NAME spawn_full COMMAND test_spawn_full
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/stages-alt/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/features-trace/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt
+         ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_seed1234567890.txt
+         1234567890)
+set_tests_properties(spawn_full PROPERTIES TIMEOUT 1200)

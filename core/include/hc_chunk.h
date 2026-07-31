@@ -52,6 +52,11 @@ typedef struct {
      * '생성'(multi-noise sampler)은 후속 태스크: 지금은 03_biomes golden
      * 로더가 유일한 공급자다). zero-fill == id 0. */
     uint16_t  biomes[HC_QUARTS];
+    /* 스테이지 부기 (Task 11): 0 = pre-spawn, 10 = spawn 통과 (관측면
+     * no-op — NaturalSpawner 만), 11 = full 통과 (ProtoChunk→LevelChunk
+     * 전환: FINAL 4종만 생존, *_WG 는 이후 존재하지 않는다 —
+     * gen_spawn_full_stages.c). */
+    uint8_t   promoted;
 } hc_chunk_t;
 
 /* states 를 arena 에서 할당하고 전체를 zero-fill 한다. arena 재사용 시
