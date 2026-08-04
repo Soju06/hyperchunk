@@ -57,6 +57,15 @@ enum { HC_MIR_NONE = 0, HC_MIR_LEFT_RIGHT, HC_MIR_FRONT_BACK };
 uint16_t hc_state_mirror(uint16_t s, int mir);
 uint16_t hc_state_rotate(uint16_t s, int rot);
 
+/* 상태 문자열 분해/재조립 (structures.c 구현 — template/processor 계열이
+ * waterlogged 재작성·final_state 해석에 공유). build 는 미등재 시 die. */
+typedef struct {
+    char k[24], v[32];
+} hc_skv_t;
+int      hc_state_parse(const char *name, char *base, size_t base_cap,
+                        hc_skv_t *kv, int cap);
+uint16_t hc_state_build(const char *base, hc_skv_t *kv, int n);
+
 /* StructureTemplate.transform(pos, mirror, rot, pivot) — 로컬 좌표 */
 void hc_template_transform(int32_t *x, int32_t *y, int32_t *z, int mir,
                            int rot, int32_t pivot_x, int32_t pivot_z);

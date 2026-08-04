@@ -37,12 +37,8 @@
  *  - jigsaw orientation / door hinge 미러 — 이 리전 미사용 (도달 die)
  * 그 외 프로퍼티는 불변. 결과 상태 미등재 = die (fail-loud). */
 
-typedef struct {
-    char k[24], v[32];
-} kv_t;
-
-static int parse_state(const char *name, char *base, size_t base_cap,
-                       kv_t *kv, int cap) {
+int hc_state_parse(const char *name, char *base, size_t base_cap,
+                   hc_skv_t *kv, int cap) {
     const char *br = strchr(name, '[');
     if (!br) {
         snprintf(base, base_cap, "%s", name);
@@ -71,12 +67,12 @@ static int parse_state(const char *name, char *base, size_t base_cap,
     return n;
 }
 
-static uint16_t build_state(const char *base, kv_t *kv, int n) {
+uint16_t hc_state_build(const char *base, hc_skv_t *kv, int n) {
     /* 캐노니컬 = 프로퍼티 알파벳 오름차순 */
     for (int a = 0; a < n; a++)
         for (int b = a + 1; b < n; b++)
             if (strcmp(kv[a].k, kv[b].k) > 0) {
-                kv_t t = kv[a];
+                hc_skv_t t = kv[a];
                 kv[a] = kv[b];
                 kv[b] = t;
             }
@@ -122,8 +118,8 @@ uint16_t hc_state_rotate(uint16_t s, int rot) {
         return s;
     const char *nm = hc_block_name(s);
     char        base[128];
-    kv_t        kv[16];
-    int         n = parse_state(nm, base, sizeof base, kv, 16);
+    hc_skv_t    kv[16];
+    int         n = hc_state_parse(nm, base, sizeof base, kv, 16);
     if (n == 0)
         return s;
     int steps = rot_steps(rot);
@@ -167,7 +163,7 @@ uint16_t hc_state_rotate(uint16_t s, int rot) {
         } else if (strcmp(kv[i].k, "orientation") == 0)
             die("jigsaw orientation rotate unreachable", nm);
     }
-    return build_state(base, kv, n);
+    return hc_state_build(base, kv, n);
 }
 
 uint16_t hc_state_mirror(uint16_t s, int mir) {
@@ -175,8 +171,8 @@ uint16_t hc_state_mirror(uint16_t s, int mir) {
         return s;
     const char *nm = hc_block_name(s);
     char        base[128];
-    kv_t        kv[16];
-    int         n = parse_state(nm, base, sizeof base, kv, 16);
+    hc_skv_t    kv[16];
+    int         n = hc_state_parse(nm, base, sizeof base, kv, 16);
     if (n == 0)
         return s;
     const char *a = mir == HC_MIR_LEFT_RIGHT ? "north" : "east";
@@ -221,7 +217,7 @@ uint16_t hc_state_mirror(uint16_t s, int mir) {
         } else if (strcmp(kv[i].k, "hinge") == 0)
             die("door hinge mirror unreachable in this region", nm);
     }
-    return build_state(base, kv, n);
+    return hc_state_build(base, kv, n);
 }
 
 /* StructureTemplate.transform (디컴파일 @560-585 그대로) */
