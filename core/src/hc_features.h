@@ -7,6 +7,7 @@
 #include "hc_json.h"
 
 #include "../include/hc_chunk.h"
+#include "../include/hc_noise.h" /* hc_perlin_t (noise_threshold_provider) */
 #include "../include/hc_rng.h"
 
 /* 07_features 스테이지 — 내부 전용 (core/src). 시맨틱은 전부 26.2
@@ -57,7 +58,9 @@ int32_t hc_mth_next_int_range(hc_wgr_t *r, int32_t lo, int32_t hi);
  * 밖 읽기는 AIR (VOID_AIR.isAir / BulkSectionAccess 의 범위 밖 AIR 규약,
  * task9a A3 §5 — 술어 결과가 동일). 하이트맵: *_WG 만 읽는다 (frozen,
  * A4 §4.1); FINAL 4종 유지관리는 step 9 가 읽기 시작하는 9b 에서. */
-enum { HC_FEAT_REGION_N = 11 }; /* Task 10: 11x11 (radius-5) 재생 월드 */
+enum { HC_FEAT_REGION_N = 41 }; /* Task 14: 41x41 (r.0.0 + 생성 마진 -5..35)
+                                 * 재생 월드. Task 10 게이트들은 11x11 을
+                                 * 부분 사용 (n 필드가 실크기). */
 
 /* --- Task 12: 스케줄-틱 레코더 (ProtoChunkTicks 등가, R-D) ---
  *
@@ -91,7 +94,7 @@ typedef struct {
 /* cap 개 기록 + 2^k >= 4*cap 해시를 arena 에서 할당. 실패 -1. */
 int hc_tick_recorder_init(hc_tick_recorder_t *tr, hc_arena_t *a, int32_t cap);
 
-typedef struct {
+typedef struct hc_feat_region {
     hc_chunk_t *chunks[HC_FEAT_REGION_N * HC_FEAT_REGION_N]; /* [dz*n+dx] */
     int32_t     cx0, cz0, n;
     int32_t     center_cx, center_cz; /* 지금 데코 중인 청크 */
@@ -105,6 +108,13 @@ typedef struct {
      * setBlockState 로는 절대 안 갱신된다). 리플레이어가 entry 9 재생
      * 직전에 1 로 올린다. */
     int         wg_dropped;
+    /* Task 14: 구조물 스텝 훅 — applyBiomeDecoration 의 구조물 루프 자리
+     * (step 진입 시 feature 들보다 먼저; 구조물은 setFeatureSeed 로
+     * 자체 재시드하므로 feature RNG 에 무영향). NULL = 없음 (기존 게이트
+     * 불변). */
+    void (*struct_step)(void *ud, struct hc_feat_region *rg, int32_t cx,
+                        int32_t cz, int64_t deco_seed, int32_t step);
+    void *struct_ud;
 } hc_feat_region_t;
 
 hc_chunk_t *hc_feat_region_chunk(const hc_feat_region_t *rg, int32_t cx,
@@ -180,7 +190,25 @@ enum {
     HC_SP_SIMPLE = 0,     /* 드로우 0 */
     HC_SP_WEIGHTED,       /* WeightedRandom: nextInt(total) 1 드로우 */
     HC_SP_RANDOMIZED_INT, /* source 샘플 후 property 값 IntProvider 샘플 */
+    /* Task 14: noise_threshold_provider (flower_plain) — 위치 노이즈 +
+     * 조건부 1~2 드로우. 위치가 필요해서 hc_featx_sprov_sample_at 로만
+     * 샘플 가능 (위치 없는 경로 도달 시 die). */
+    HC_SP_NOISE_THRESHOLD,
 };
+
+/* NoiseBasedStateProvider 의 NormalNoise — 단일 옥타브 0/진폭 [1.0] 특화
+ * (flower_plain: seed 2345, scale 0.005). NormalNoise.create(
+ * WorldgenRandom(LegacyRandomSource(seed))) = LCG 에서 ImprovedNoise 2개
+ * 순차 생성; value = (first(x,y,z) + second(x*k,y*k,z*k)) * (1/6 / 0.2),
+ * k = 1.0181268882175227 (NormalNoise.INPUT_FACTOR). */
+typedef struct {
+    hc_perlin_t first, second;
+    float       scale, threshold, high_chance;
+    uint16_t    dflt;
+    int32_t     n_low, n_high;
+    uint16_t    low[8], high[8];
+} hc_nthresh_cfg_t;
+
 typedef struct hc_sprov hc_sprov_t;
 struct hc_sprov {
     uint8_t kind;
@@ -195,6 +223,7 @@ struct hc_sprov {
     /* randomized_int 의 property — 현 데이터는 cave_vines "age" 뿐.
      * 적용은 블록 패밀리별 명시 매핑 (features.c) — 모르면 컴파일 실패. */
     uint8_t     prop_age;
+    hc_nthresh_cfg_t *nthresh; /* NOISE_THRESHOLD */
 };
 
 enum { HC_HP_UNIFORM = 0, HC_HP_TRAPEZOID, HC_HP_VERY_BIASED_TO_BOTTOM };
@@ -392,6 +421,7 @@ enum {
     HC_TRUNK_MEGA_JUNGLE,
     HC_TRUNK_FANCY,
     HC_TRUNK_BENDING, /* azalea (Task 10 R5c §5) */
+    HC_TRUNK_FORKING, /* acacia (Task 14 — savanna 마진) */
 };
 enum {
     HC_FOL_BLOB = 0,
@@ -399,18 +429,25 @@ enum {
     HC_FOL_MEGA_JUNGLE,
     HC_FOL_FANCY,
     HC_FOL_RANDOM_SPREAD, /* azalea (Task 10 R5c §6) */
+    HC_FOL_ACACIA,        /* acacia (Task 14) — foliageHeight() = 0 */
 };
 enum {
     HC_TDEC_COCOA = 0,
     HC_TDEC_TRUNK_VINE,
     HC_TDEC_LEAVE_VINE,
     HC_TDEC_ATTACHED_TO_LOGS,
-};
+    /* Task 14 (26.2 신규): beehive 는 트리거/셔플 드로우까지 재현하고
+     * 실제 배치 성공 시 die (골든 리전에 bee_nest 부재 — BE 미구현),
+     * place_on_ground 는 leaf_litter 패치 (트라이당 3 드로우 고정). */
+    HC_TDEC_BEEHIVE,
+    HC_TDEC_PLACE_ON_GROUND,
+} ;
 typedef struct {
     uint8_t    kind;
     float      prob;
-    hc_sprov_t provider; /* attached_to_logs block_provider */
+    hc_sprov_t provider; /* attached_to_logs / place_on_ground provider */
     int8_t     dir;      /* attached_to_logs 단일 direction (Direction ord) */
+    int32_t    tries, radius, height; /* place_on_ground (기본 128/2/1) */
 } hc_tdec_t;
 
 typedef struct hc_tree_cfg {
@@ -585,8 +622,23 @@ typedef struct {
     void *ud;
 } hc_feat_trace_t;
 
+/* Task 14: monster_room 등 feature 본문의 BE 기록 싱크 (structures.c 가
+ * 구현; 싱크 미설정 = no-op — 기존 게이트 불변). */
+void hc_feat_record_chest_loot(int32_t x, int32_t y, int32_t z,
+                               uint16_t state, const char *loot,
+                               int64_t seed);
+void hc_feat_record_spawner(int32_t x, int32_t y, int32_t z, uint16_t state,
+                            const char *entity);
+
 /* 데코 시드 — 순수 함수 (manifest 시드 열 검증용) */
 int64_t hc_features_decoration_seed(int64_t level_seed, int32_t cx, int32_t cz);
+
+/* Task 14 갭 서베이 모드 — 기본 0 (기존 fail-loud 그대로). 1 이면
+ * DIE-클래스 경로 (미지원 placement modifier / int provider / canSurvive
+ * 미매핑) 가 abort 대신 해당 feature 를 "미배치 + placed=-1" 로 강등한다.
+ * 풀 리전 갭 열거 전용 — 게이트는 절대 켜지 않는다 (survey 산출은 판정이
+ * 아니라 작업 목록이다). */
+extern int hc_features_survey;
 
 /* 한 placed feature 의 파이프라인+본문 실행 (features.c — walk 내부용).
  * biomes/sea_level 은 freeze_top_layer 온도 게이트가 읽는다. */

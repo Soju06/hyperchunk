@@ -55,6 +55,8 @@ _Noreturn void hc_featx_die(const char *what, const char *detail) {
     abort();
 }
 
+int hc_features_survey = 0; /* hc_features.h 주석 참조 (Task 14) */
+
 /* --- FINAL 하이트맵 4종 (task9pre A4 §4, 26.2 Heightmap 재구성) ---
  *
  * isOpaque 술어 (Heightmap$Types):
@@ -441,11 +443,50 @@ int32_t hc_featx_iprov_sample(hc_wgr_t *r, const hc_iprov_t *p) {
         return 0;
     }
     }
+    if (hc_features_survey) { /* 서베이: 벙어리 값 (feature 단위 재시드라
+                               * 오염은 이 feature 안에 갇힌다) */
+        fprintf(stderr,
+                "hc_features SURVEY: unsupported int provider sampled\n");
+        return 0;
+    }
     die("unsupported int provider sampled (clamped_normal?)", NULL);
     return 0;
 }
 
 /* --- BlockState provider 샘플 (R3: source 먼저, values 나중) --- */
+
+/* noise_threshold_provider (Task 14, flower_plain): 위치 노이즈 값으로
+ * low/high/default 분기. NormalNoise 단일 옥타브 특화 — 컴파일이 보장.
+ * NormalNoise.getValue: (first(x,y,z) + second(x*k,y*k,z*k)) * factor,
+ * k = INPUT_FACTOR, factor = (1/6)/expectedDeviation(0) = 5/6.
+ * PerlinNoise.getValue (옥타브 0, 진폭 1): improved.noise(wrap(v)...). */
+static uint16_t nthresh_sample(hc_wgr_t *r, const hc_nthresh_cfg_t *n,
+                               int32_t x, int32_t y, int32_t z) {
+    const double K = 1.0181268882175227; /* NormalNoise.INPUT_FACTOR */
+    double sx = (double)x * (double)n->scale;
+    double sy = (double)y * (double)n->scale;
+    double sz = (double)z * (double)n->scale;
+    double v1 = hc_perlin_sample(&n->first, hc_octaves_wrap(sx),
+                                 hc_octaves_wrap(sy), hc_octaves_wrap(sz));
+    double v2 = hc_perlin_sample(&n->second, hc_octaves_wrap(sx * K),
+                                 hc_octaves_wrap(sy * K),
+                                 hc_octaves_wrap(sz * K));
+    /* valueFactor = 0.16666666666666666 / expectedDeviation(0),
+     * expectedDeviation(n) = 0.1 * (1 + 1/(n+1)) — 바닐라 식 그대로 */
+    double val = (v1 + v2) * (0.16666666666666666 / (0.1 * (1.0 + 1.0)));
+    if (val < (double)n->threshold)
+        return n->low[hc_wgr_next_int(r, n->n_low)];
+    if (hc_wgr_next_float(r) < n->high_chance)
+        return n->high[hc_wgr_next_int(r, n->n_high)];
+    return n->dflt;
+}
+
+uint16_t hc_featx_sprov_sample_at(hc_wgr_t *r, const hc_sprov_t *p,
+                                  int32_t x, int32_t y, int32_t z) {
+    if (p->kind == HC_SP_NOISE_THRESHOLD)
+        return nthresh_sample(r, p->nthresh, x, y, z);
+    return hc_featx_sprov_sample(r, p);
+}
 
 uint16_t hc_featx_sprov_sample(hc_wgr_t *r, const hc_sprov_t *p) {
     switch (p->kind) {
@@ -1079,6 +1120,25 @@ static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
          * (Blocks 2-인자 register → bsm#10 Block::new) —
          * BlockBehaviour.canSurvive 기본값 iconst_1 (항상 생존) */
         return 1;
+    if (s == HC_B_BROWN_MUSHROOM || s == HC_B_RED_MUSHROOM) {
+        /* MushroomBlock.canSurvive (26.2 javap, Task 14): below 가
+         * #overrides_mushroom_light_requirement (mycelium/podzol/nylium —
+         * nylium 미등재) 이면 true; 아니면 getRawBrightness < 13 &&
+         * mayPlaceOn(below) = below.isSolidRender(). 월드젠 중 브라이트니스
+         * 는 0 (라이트 엔진 미가동) — 항상 통과. */
+        uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
+        if (below == HC_B_MYCELIUM || below == HC_B_PODZOL)
+            return 1;
+        return hc_block_is_full_cube(below);
+    }
+    if (s == HC_B_PUMPKIN)
+        /* PumpkinBlock extends Block — canSurvive 무오버라이드 (javap) */
+        return 1;
+    if (hc_features_survey) { /* 서베이: 생존 실패로 강등 */
+        fprintf(stderr, "hc_features SURVEY: canSurvive unmapped: %s\n",
+                hc_block_name(s));
+        return 0;
+    }
     die("canSurvive unmapped block state", hc_block_name(s));
     return 0;
 }
@@ -1090,6 +1150,8 @@ static int would_survive(feat_env_t *e, const char *name, int32_t x,
      * below.is(#supports_vegetation) */
     if (strcmp(name, "minecraft:oak_sapling") == 0 ||
         strcmp(name, "minecraft:jungle_sapling") == 0 ||
+        strcmp(name, "minecraft:acacia_sapling") == 0 ||
+        strcmp(name, "minecraft:birch_sapling") == 0 ||
         strcmp(name, "minecraft:firefly_bush") == 0)
         return mask_test(e->reg->tag_supports_vegetation,
                          hc_feat_get_block(e->rg, x, y - 1, z));
@@ -1107,6 +1169,11 @@ static int would_survive(feat_env_t *e, const char *name, int32_t x,
             if (hc_block_fluid_is_water(hc_feat_get_block(
                     e->rg, x + H4[i][0], y - 1, z + H4[i][1])))
                 return 1;
+        return 0;
+    }
+    if (hc_features_survey) { /* 서베이: 생존 실패로 강등 */
+        fprintf(stderr, "hc_features SURVEY: would_survive unmapped: %s\n",
+                name);
         return 0;
     }
     die("would_survive dispatch unmapped", name);
@@ -1163,8 +1230,9 @@ static int double_plant_halves(feat_env_t *e, uint16_t s, int32_t x,
 static int sblock_place(feat_env_t *e, const hc_sblock_cfg_t *c, int32_t x,
                         int32_t y, int32_t z) {
     /* 프로바이더 드로우가 canSurvive 보다 먼저 — 거부 위치도 드로우를
-     * 태운다 (R4 §1) */
-    uint16_t state = sprov_sample(e->rng, &c->to_place);
+     * 태운다 (R4 §1). 위치 인자는 noise_threshold_provider (flower_plain,
+     * Task 14) 가 소비. */
+    uint16_t state = hc_featx_sprov_sample_at(e->rng, &c->to_place, x, y, z);
     if (!can_survive_state(e, state, x, y, z))
         return 0;
     uint16_t lower, upper;
@@ -1439,6 +1507,11 @@ static void run_mods(feat_env_t *e, int32_t mi, int32_t x, int32_t y,
         fprintf(stderr, "hc_features: placed feature %s: %s\n",
                 e->pf->name ? e->pf->name : "<inline>",
                 m->die_what ? m->die_what : "?");
+        if (hc_features_survey) { /* 서베이: 미배치 강등 (Task 14) */
+            e->unknown = 1;
+            e->npos++;
+            return;
+        }
         die("unsupported placement modifier executed", e->pf->name);
         return;
     }

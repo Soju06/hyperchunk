@@ -26,6 +26,9 @@ _Noreturn void hc_featx_die(const char *what, const char *detail);
 int      hc_featx_mask_test(const uint64_t *mask, uint16_t id);
 int32_t  hc_featx_iprov_sample(hc_wgr_t *r, const hc_iprov_t *p);
 uint16_t hc_featx_sprov_sample(hc_wgr_t *r, const hc_sprov_t *p);
+/* 위치 인자 버전 — noise_threshold_provider (Task 14) 만 위치를 쓴다 */
+uint16_t hc_featx_sprov_sample_at(hc_wgr_t *r, const hc_sprov_t *p,
+                                  int32_t x, int32_t y, int32_t z);
 /* 블록 술어 평가 (features.c — 드로우 0) */
 int hc_featx_bpred_eval(feat_env_t *e, const hc_bpred_t *p, int32_t x,
                         int32_t y, int32_t z);
@@ -114,6 +117,8 @@ static inline int hc_featx_face_sturdy_full(uint16_t s, int dir_mc) {
 void hc_jset_init(hc_jset_t *s);
 /* HashSet.add — 이미 있으면 false (순서 불변) */
 int  hc_jset_add(hc_jset_t *s, int32_t x, int32_t y, int32_t z);
+/* 순회 위치 좌표 (Task 14 — BE 직렬화 순서 재구성) */
+int  hc_jit_pos(const hc_jit_t *it, int32_t *x, int32_t *y, int32_t *z);
 /* 첫 원소 꺼내 제거 (HashIterator.next+remove — movable=false) */
 int  hc_jset_poll_first(hc_jset_t *s, int32_t *x, int32_t *y, int32_t *z);
 /* 순회: 버킷 오름차순 → 체인 순 */

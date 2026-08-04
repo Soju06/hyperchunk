@@ -60,6 +60,9 @@ void hc_gen_features_chunk(hc_feat_region_t *rg, int32_t cx, int32_t cz,
 
     for (int32_t step = 0; step <= walk_max_step && step < HC_FEAT_STEPS;
          step++) {
+        /* Task 14: 구조물이 feature 보다 먼저 (R-placement §1) */
+        if (rg->struct_step)
+            rg->struct_step(rg->struct_ud, rg, cx, cz, deco, step);
         int32_t nf = reg->counts[step];
         if (nf == 0)
             continue;

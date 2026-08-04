@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+/* T14-GEN BEGIN count */
+#define HC_B_T14_COUNT 293
+/* T14-GEN END count */
+
 /* 내부 블록 id 테이블 — 내부 전용 (core/src). 공개 ABI 아님 (ADR-003 D2).
  *
  * hc_chunk_t.states 의 zero-fill == HC_B_AIR (바닐라 ProtoChunk 초기 상태).
@@ -162,10 +166,18 @@ enum {
      * 전부 falling-8 로 매핑 — R-D 후속 핀 §12). */
     HC_B_WATER_FLOW_BASE, /* +N-1 = water[level=N], N=1..15 */
     /* BubbleColumnBlock.updateColumn 산물 (postProcess LiquidBlock.tick).
-     * getFluidState = 물 소스 (R-D 후속 핀 §13). */
-    HC_B_BUBBLE_COLUMN_DRAG = HC_B_WATER_FLOW_BASE + 15, /* drag_down=true */
-    HC_B_BUBBLE_COLUMN_PUSH,                             /* drag_down=false */
-    HC_B_COUNT
+     * getFluidState = 물 소스 (R-D 후속 핀 §13). 26.2 직렬화 프로퍼티명은
+     * drag (drag_down 아님 — golden 팔레트 실측, Task 14). */
+    HC_B_BUBBLE_COLUMN_DRAG = HC_B_WATER_FLOW_BASE + 15, /* drag=true */
+    HC_B_BUBBLE_COLUMN_PUSH,                             /* drag=false */
+    /* --- Task 14: 풀 리전 확장 블록 (구조물 팔레트 + 신규 피처) ---
+     * 등록은 blocks.c 의 T14-GEN 구간 (생성기:
+     * tools/golden/experiments/gen_t14_blocks.py, 속성 근거:
+     * .hermes/notes/task14-fullregion/R-blockprops*.tsv — 26.2 바이트코드
+     * 핀). 코드는 전부 이름 조회 (init 시 hc_block_by_name) 로 접근한다
+     * — 개별 enum 앵커 없음. */
+    HC_B_T14_BASE,
+    HC_B_COUNT = HC_B_T14_BASE + HC_B_T14_COUNT
 };
 
 /* 수평 방향 인덱스 (팔레트 오프셋용 내부 규약 — MC Direction 값과의
@@ -214,5 +226,21 @@ int hc_block_is_waterlogged(uint16_t id);
 int hc_block_is_leaves(uint16_t id);
 /* BlockState.canBeReplaced() — 나무/초목 배치가 읽는다 */
 int hc_block_is_replaceable(uint16_t id);
+
+/* --- Task 14: T14 블록 광학/형상 테이블 (id >= HC_B_T14_BASE 전용;
+ * 값 근거 R-blockprops*.tsv — 26.2 getLightDampening/LIGHT_EMISSION/
+ * getFaceOcclusionShape/isCollisionShapeFullBlock) --- */
+
+/* getLightBlock (0..15). id < T14_BASE 는 -1 (호출자가 기존 파생 유지) */
+int hc_block_t14_light_damp(uint16_t id);
+/* getLightEmission. id < T14_BASE 는 -1 */
+int hc_block_t14_light_emission(uint16_t id);
+/* useShapeForLightOcclusion 상태의 6면 폐색 슬라이스 — 니블 순서 (LSB→)
+ * D,U,N,S,W,E, 면당 2x2 쿼드런트 4비트 (R-blockprops-evidence §4 규약).
+ * 0 = 라이트 폐색 형상 없음 (isEmptyShape). */
+uint32_t hc_block_face_occlusion(uint16_t id);
+/* isCollisionShapeFullBlock — StructureTemplate full 버킷 분류.
+ * 전 id 유효 (pre-T14 는 F_FULL/F_LEAVES/spawner 파생). */
+int hc_block_collision_full(uint16_t id);
 
 #endif /* HC_BLOCKS_H */

@@ -644,3 +644,14 @@ void hc_jit_next(hc_jit_t *it) {
     it->b = s->cap;
     it->e = NIL;
 }
+
+/* Task 14: 순회 위치의 좌표 접근자 (structures.c BE 순서 재구성용) */
+int hc_jit_pos(const hc_jit_t *it, int32_t *x, int32_t *y, int32_t *z) {
+    if (!hc_jit_valid(it))
+        return 0;
+    const hc_jent_t *e = &it->s->ent[it->e];
+    *x = e->x;
+    *y = e->y;
+    *z = e->z;
+    return 1;
+}

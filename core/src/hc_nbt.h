@@ -35,6 +35,8 @@ enum {
     HC_NBT_SHORT = 2,
     HC_NBT_INT = 3,
     HC_NBT_LONG = 4,
+    HC_NBT_FLOAT = 5,
+    HC_NBT_DOUBLE = 6,
     HC_NBT_BYTE_ARRAY = 7,
     HC_NBT_STRING = 8,
     HC_NBT_LIST = 9,
@@ -49,6 +51,10 @@ hc_nbt_t *hc_nbt_byte(hc_arena_t *a, int32_t v);
 hc_nbt_t *hc_nbt_short(hc_arena_t *a, int32_t v);
 hc_nbt_t *hc_nbt_int(hc_arena_t *a, int32_t v);
 hc_nbt_t *hc_nbt_long(hc_arena_t *a, int64_t v);
+/* Task 14: 구조물 starts NBT (Integrity float 등). 비트 보존 (IEEE754
+ * 빅엔디언 방출 — 라운딩 없음). */
+hc_nbt_t *hc_nbt_float(hc_arena_t *a, float v);
+hc_nbt_t *hc_nbt_double(hc_arena_t *a, double v);
 /* s 는 NUL 종단, 복사하지 않음 */
 hc_nbt_t *hc_nbt_string(hc_arena_t *a, const char *s);
 /* [s, s+n) 을 arena 로 복사 (부분 문자열용 — 팔레트 프로퍼티 파싱) */
@@ -56,6 +62,8 @@ hc_nbt_t *hc_nbt_string_n(hc_arena_t *a, const char *s, size_t n);
 hc_nbt_t *hc_nbt_byte_array(hc_arena_t *a, const uint8_t *d, int32_t n);
 /* 호스트 순서 long 배열 — 직렬화 시 빅엔디언 변환 */
 hc_nbt_t *hc_nbt_long_array(hc_arena_t *a, const int64_t *d, int32_t n);
+/* 호스트 순서 int 배열 (구조물 BB) — 직렬화 시 빅엔디언 변환 */
+hc_nbt_t *hc_nbt_int_array(hc_arena_t *a, const int32_t *d, int32_t n);
 hc_nbt_t *hc_nbt_compound(hc_arena_t *a);
 hc_nbt_t *hc_nbt_list(hc_arena_t *a);
 
@@ -72,5 +80,37 @@ ptrdiff_t hc_nbt_write(const hc_nbt_t *root, uint8_t *out, size_t cap);
  * keys[0..n) 를 삽입 순서로 보고 perm[i] = i번째로 방출되는 키의 삽입
  * 인덱스를 쓴다. n <= 64. */
 void hc_nbt_java_map_order(const char *const *keys, int n, uint8_t *perm);
+
+/* ------------------------------------------------------------------
+ * Task 14: 범용 리더 + 접근자 — 골든 starts NBT 프래그먼트(ADR-003 D4
+ * 재생 입력)와 구조물 템플릿(.nbt, 무압축) 소비용.
+ *
+ * 파스 트리는 이 라이터의 노드 그대로다: 컴파운드 키는 파일 등장 순서로
+ * put 되므로, 그대로 재직렬화하면 HashMap 에뮬레이션이 원본 바이트를
+ * 복원한다 (파일 순서 = 같은 키 집합의 HashMap 순회 순서이고, 그 순서로
+ * 재삽입하면 버킷 체인 상대 순서가 보존된다 — nbt.c 헤더 §순서).
+ * 문자열/키는 arena 로 복사 (NUL 종단), 배열은 호스트 순서로 변환 복사.
+ * 실패(잘린 입력/모르는 태그/arena 소진)는 NULL — 호출자 fail-loud. */
+
+/* buf 는 무명 루트 컴파운드 (0x0A 0x0000 ...). 소비 길이는 len 전체와
+ * 일치해야 한다 (트레일링 바이트 = 오류). */
+hc_nbt_t *hc_nbt_parse(hc_arena_t *a, const uint8_t *buf, size_t len);
+
+/* 접근자 — 태그 불일치는 assert (골든 입력 스키마 위반 = 버그). */
+int             hc_nbt_tag(const hc_nbt_t *t);
+const hc_nbt_t *hc_nbt_get(const hc_nbt_t *comp, const char *key); /* 없음=NULL */
+int32_t         hc_nbt_comp_count(const hc_nbt_t *comp);
+/* 삽입(=파일) 순서 i번째 엔트리; *key 에 키를 쓴다 */
+const hc_nbt_t *hc_nbt_comp_at(const hc_nbt_t *comp, int32_t i,
+                               const char **key);
+int32_t         hc_nbt_list_count(const hc_nbt_t *list);
+const hc_nbt_t *hc_nbt_list_at(const hc_nbt_t *list, int32_t i);
+int64_t         hc_nbt_i64(const hc_nbt_t *t); /* byte/short/int/long */
+float           hc_nbt_f32(const hc_nbt_t *t);
+double          hc_nbt_f64(const hc_nbt_t *t);
+const char     *hc_nbt_str(const hc_nbt_t *t);
+const int32_t  *hc_nbt_ia(const hc_nbt_t *t, int32_t *n);
+const int64_t  *hc_nbt_la(const hc_nbt_t *t, int32_t *n);
+const uint8_t  *hc_nbt_ba(const hc_nbt_t *t, int32_t *n);
 
 #endif /* HC_NBT_H */

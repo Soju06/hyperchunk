@@ -53,10 +53,13 @@ static void build_tables(void) {
     }
     /* F_FULL/유도 규칙이 26.2 값과 어긋나는 (이 지역에 등장 불가한) 블록:
      * ice 는 noOcclusion(솔리드렌더 아님 — F_FULL 근사가 틀림),
-     * powder_snow/mud 는 비-풀 형상 특례. 조우 즉시 abort (fail-loud). */
+     * powder_snow 는 비-풀 형상 특례. 조우 즉시 abort (fail-loud).
+     * mud 는 Task 14 에서 등장 (trial chambers 아트리움 데코) — MudBlock
+     * 은 collision/support/visual 만 오버라이드하고 outline/occlusion 은
+     * 풀 큐브 (javap), canOcclude 기본 → solidRender → damp 15. */
     g_damp[HC_B_ICE] = DAMP_DIE;
     g_damp[HC_B_POWDER_SNOW] = DAMP_DIE;
-    g_damp[HC_B_MUD] = DAMP_DIE;
+    g_damp[HC_B_MUD] = 15;
     /* spawner: noOcclusion (solidRender 아님) 인데 getShape 오버라이드가
      * 없어 형상은 풀 큐브 → PSD false → dampening 1 (R4 §3/§5 — F_FULL
      * 유도가 못 잡는 유일 케이스) */
@@ -77,6 +80,15 @@ static void build_tables(void) {
         for (int i = 0; i < 12; i++)
             g_emit[HC_B_AMETHYST_BUD_BASE + size * 12 + i] = AME_EM[size];
     g_emit[HC_B_FIREFLY_BUSH] = 2; /* R4 §4 lambda$static$410 */
+
+    /* Task 14 확장 블록: damp/emit 는 실측 테이블 (blocks.c T14_*,
+     * 26.2 getLightDampening/LIGHT_EMISSION 바이트코드 핀 —
+     * R-blockprops*.tsv). 파생 규칙과의 차이 (예: waterlogged 비폐색 = 1,
+     * 스테인드글라스/그레이트 = 0) 가 전부 값에 반영돼 있다. */
+    for (int32_t id = HC_B_T14_BASE; id < HC_B_COUNT; id++) {
+        g_damp[id] = (uint8_t)hc_block_t14_light_damp((uint16_t)id);
+        g_emit[id] = (uint8_t)hc_block_t14_light_emission((uint16_t)id);
+    }
 
     g_tables_ready = 1;
 }
@@ -198,6 +210,13 @@ static void bfs_run(bfs_t *q, int layer) {
         if (lvl != from)
             continue; /* stale */
 
+        /* Task 14: shapeOccludes (LightEngine.java:82-86) — USO 상태
+         * (슬랩/스테어) 의 면 슬라이스 합집합이 풀 페이스면 차단.
+         * faceShapeOccludes(from.face(d), to.face(opp(d))); 마스크는
+         * 월드축 쿼드런트 (hc_block_face_occlusion — 대향면 동일 프레임,
+         * R-blockprops-evidence §4/§5). 완전 폐색 큐브는 damp 15 경로. */
+        uint32_t focc = hc_block_face_occlusion(l_state(w, x, y, z));
+
         for (int d = 0; d < 6; d++) {
             if (!(mask & (1u << d)))
                 continue;
@@ -207,11 +226,18 @@ static void bfs_run(bfs_t *q, int layer) {
             int nl = l_stored_get(w, layer, nx, ny, nz);
             if (from - 1 <= nl)
                 continue;
-            int op = damp_of(l_state(w, nx, ny, nz));
+            uint16_t nst = l_state(w, nx, ny, nz);
+            uint32_t nocc = hc_block_face_occlusion(nst);
+            if (focc | nocc) {
+                unsigned fm = (focc >> (4 * d)) & 0xFu;
+                unsigned tm = (nocc >> (4 * DIR_OPP[d])) & 0xFu;
+                if ((fm | tm) == 0xFu)
+                    continue; /* shapeOccludes */
+            }
+            int op = damp_of(nst);
             int newl = from - (op < 1 ? 1 : op);
             if (newl <= nl)
                 continue;
-            /* shapeOccludes: USO 상태 부재로 항상 false (파일 헤더 주석) */
             l_stored_set(w, layer, nx, ny, nz, newl);
             if (newl > 1)
                 q_push(q, nx, ny, nz, newl, MASK_ALL & ~(1u << DIR_OPP[d]), 0);
@@ -312,31 +338,45 @@ static int section_has_data(const hc_chunk_t *c, int32_t sec) {
     return 0;
 }
 
-/* ChunkSkyLightSources.fillFrom + findLowestSourceY (R3 §4.3): 위에서
- * 내려오며 첫 dampening!=0 블록에서 멈춘다 (isEdgeOccluded 의 형상 항은
- * USO 부재로 소거). floor = 그 블록 위 y. 없으면 열린 컬럼 센티널. */
+/* ChunkSkyLightSources.fillFrom + findLowestSourceY (R3 §4.3 + Task 14):
+ * 위에서 내려오며 isEdgeOccluded(top, bottom) — bottom dampening != 0
+ * 이거나 top.face(DOWN) ∪ bottom.face(UP) 이 풀 페이스 (USO 슬랩/스테어,
+ * ChunkSkyLightSources.java:143-147) — 인 첫 페어에서 멈춘다. floor =
+ * top 의 y (= bottom 위). 없으면 열린 컬럼 센티널. */
 static void fill_src_y(hc_light_chunk_t *s) {
     const hc_chunk_t *c = s->chunk;
     /* 섹션별 비-공기 마스크로 전부-공기 구간을 통째로 건너뛴다
-     * (vanilla 의 hasOnlyAir 섹션 스킵과 등가) */
+     * (vanilla 의 hasOnlyAir 섹션 스킵과 등가; top 상태는 AIR 로 리셋) */
     uint32_t nonair = 0;
     for (int32_t sec = -4; sec <= 19; sec++)
         if (section_has_data(c, sec))
             nonair |= 1u << (sec + 4);
     for (int z = 0; z < 16; z++) {
         for (int x = 0; x < 16; x++) {
-            int32_t floor_y = HC_LIGHT_OPEN;
+            int32_t  floor_y = HC_LIGHT_OPEN;
+            uint16_t top_st = HC_B_AIR;
             for (int32_t sec = 19; sec >= -4; sec--) {
-                if (!(nonair & (1u << (sec + 4))))
+                if (!(nonair & (1u << (sec + 4)))) {
+                    top_st = HC_B_AIR;
                     continue;
+                }
                 for (int32_t y = sec * 16 + 15; y >= sec * 16; y--) {
                     uint16_t st = c->states[hc_idx(x, y, z)];
-                    if (st == HC_B_AIR)
-                        continue;
                     if (damp_of(st) != 0) {
                         floor_y = y + 1;
                         goto done;
                     }
+                    uint32_t bocc = hc_block_face_occlusion(st);
+                    uint32_t tocc = hc_block_face_occlusion(top_st);
+                    if (bocc | tocc) {
+                        unsigned tm = (tocc >> (4 * 0 /*D*/)) & 0xFu;
+                        unsigned bm = (bocc >> (4 * 1 /*U*/)) & 0xFu;
+                        if ((tm | bm) == 0xFu) {
+                            floor_y = y + 1;
+                            goto done;
+                        }
+                    }
+                    top_st = st;
                 }
             }
         done:

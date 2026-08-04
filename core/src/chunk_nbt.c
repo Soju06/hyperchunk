@@ -5,6 +5,8 @@
 
 #include "hc_blocks.h"
 #include "hc_nbt.h"
+#include "hc_structures.h" /* Task 14: starts/References/BE 소비 */
+#include "features_internal.h" /* hc_featx_die */
 
 /* Mth.ceillog2 (n >= 1) */
 static int ceil_log2(int32_t n) {
@@ -211,11 +213,153 @@ static hc_nbt_t *tick_entry(hc_arena_t *a, const hc_tick_rec_t *r) {
     return ent;
 }
 
+/* ================= Task 14: 블록엔티티 방출 =================
+ *
+ * saveWithFullMetadata 재구성 (R-serialization §4.2/4.3): [saveAdditional
+ * 필드…] → components{} (항상) → id → x → y → z → keepPacked(0).
+ * 컨테이너: LootTable(+LootTableSeed if != 0) 또는 Items(빈 리스트 포함
+ * 항상); hopper 는 그 뒤 TransferCooldown. 값 출처 = 템플릿 nbt ∪ 주입/
+ * 설정 시드 (hc_be_rec_t). */
+
+static const char *be_id_of_state(uint16_t state) {
+    const char *nm = hc_block_name(state);
+    const char *br = strchr(nm, '[');
+    size_t      n = br ? (size_t)(br - nm) : strlen(nm);
+#define IS(base) (n == strlen(base) && strncmp(nm, base, n) == 0)
+    if (IS("minecraft:chest"))
+        return "minecraft:chest";
+    if (IS("minecraft:barrel"))
+        return "minecraft:barrel";
+    if (IS("minecraft:dispenser"))
+        return "minecraft:dispenser";
+    if (IS("minecraft:hopper"))
+        return "minecraft:hopper";
+    if (IS("minecraft:decorated_pot"))
+        return "minecraft:decorated_pot";
+    if (IS("minecraft:suspicious_sand") || IS("minecraft:suspicious_gravel"))
+        return "minecraft:brushable_block";
+    if (IS("minecraft:spawner"))
+        return "minecraft:mob_spawner";
+    if (IS("minecraft:trial_spawner"))
+        return "minecraft:trial_spawner";
+    if (IS("minecraft:vault"))
+        return "minecraft:vault";
+#undef IS
+    hc_featx_die("block entity id unmapped for state", nm);
+    return NULL;
+}
+
+/* 컨테이너 루트/아이템 파트: [LootTable(+seed) | Items] put */
+static int be_put_container(hc_arena_t *a, hc_nbt_t *t,
+                            const hc_be_rec_t *r) {
+    const char     *loot = r->loot;
+    const hc_nbt_t *tpl_items = NULL;
+    if (r->tpl_nbt) {
+        const hc_nbt_t *lt = hc_nbt_get(r->tpl_nbt, "LootTable");
+        if (lt)
+            loot = hc_nbt_str(lt);
+        tpl_items = hc_nbt_get(r->tpl_nbt, "Items");
+    }
+    if (loot) {
+        if (hc_nbt_put(a, t, "LootTable", hc_nbt_string(a, loot)) != 0)
+            return -1;
+        if (r->loot_seed != 0 &&
+            hc_nbt_put(a, t, "LootTableSeed",
+                       hc_nbt_long(a, r->loot_seed)) != 0)
+            return -1;
+        return 0;
+    }
+    /* no-loot: Items 항상 (빈 리스트 포함). 템플릿 Items 는 이 리전에서
+     * 전부 빈 리스트 (아이템 보유 컨테이너는 전부 LootTable) — 비면
+     * 그대로, 아니면 die (아이템 재직렬화 미구현). */
+    if (tpl_items && hc_nbt_list_count(tpl_items) != 0)
+        hc_featx_die("container with literal Items unimplemented", NULL);
+    return hc_nbt_put(a, t, "Items", hc_nbt_list(a));
+}
+
+static hc_nbt_t *be_to_nbt(hc_arena_t *a, const hc_be_rec_t *r) {
+    hc_nbt_t *t = hc_nbt_compound(a);
+    if (!t)
+        return NULL;
+    const char *id = be_id_of_state(r->state);
+    int         bad = 0;
+    if (strcmp(id, "minecraft:chest") == 0 ||
+        strcmp(id, "minecraft:barrel") == 0 ||
+        strcmp(id, "minecraft:dispenser") == 0) {
+        bad |= be_put_container(a, t, r);
+    } else if (strcmp(id, "minecraft:hopper") == 0) {
+        bad |= be_put_container(a, t, r);
+        int32_t cd = -1;
+        if (r->tpl_nbt) {
+            const hc_nbt_t *v = hc_nbt_get(r->tpl_nbt, "TransferCooldown");
+            if (v)
+                cd = (int32_t)hc_nbt_i64(v);
+        }
+        bad |= hc_nbt_put(a, t, "TransferCooldown", hc_nbt_int(a, cd));
+    } else if (strcmp(id, "minecraft:decorated_pot") == 0) {
+        /* sherds (decorations != EMPTY 일 때만 — 템플릿 nbt 그대로) */
+        const hc_nbt_t *sh =
+            r->tpl_nbt ? hc_nbt_get(r->tpl_nbt, "sherds") : NULL;
+        if (sh)
+            bad |= hc_nbt_put(a, t, "sherds", (hc_nbt_t *)sh);
+        bad |= be_put_container(a, t, r);
+    } else if (strcmp(id, "minecraft:brushable_block") == 0) {
+        if (r->loot) {
+            bad |= hc_nbt_put(a, t, "LootTable", hc_nbt_string(a, r->loot));
+            if (r->loot_seed != 0)
+                bad |= hc_nbt_put(a, t, "LootTableSeed",
+                                  hc_nbt_long(a, r->loot_seed));
+        }
+    } else if (strcmp(id, "minecraft:mob_spawner") == 0) {
+        bad |= hc_nbt_put(a, t, "Delay", hc_nbt_short(a, 20));
+        bad |= hc_nbt_put(a, t, "MinSpawnDelay", hc_nbt_short(a, 200));
+        bad |= hc_nbt_put(a, t, "MaxSpawnDelay", hc_nbt_short(a, 800));
+        bad |= hc_nbt_put(a, t, "SpawnCount", hc_nbt_short(a, 4));
+        bad |= hc_nbt_put(a, t, "MaxNearbyEntities", hc_nbt_short(a, 6));
+        bad |= hc_nbt_put(a, t, "RequiredPlayerRange", hc_nbt_short(a, 16));
+        bad |= hc_nbt_put(a, t, "SpawnRange", hc_nbt_short(a, 4));
+        hc_nbt_t *sd = hc_nbt_compound(a);
+        hc_nbt_t *ent = hc_nbt_compound(a);
+        if (!sd || !ent)
+            return NULL;
+        bad |= hc_nbt_put(a, ent, "id", hc_nbt_string(a, r->entity));
+        bad |= hc_nbt_put(a, sd, "entity", ent);
+        bad |= hc_nbt_put(a, t, "SpawnData", sd);
+        bad |= hc_nbt_put(a, t, "SpawnPotentials", hc_nbt_list(a));
+    } else if (strcmp(id, "minecraft:trial_spawner") == 0) {
+        const hc_nbt_t *nc =
+            r->tpl_nbt ? hc_nbt_get(r->tpl_nbt, "normal_config") : NULL;
+        const hc_nbt_t *oc =
+            r->tpl_nbt ? hc_nbt_get(r->tpl_nbt, "ominous_config") : NULL;
+        if (nc)
+            bad |= hc_nbt_put(a, t, "normal_config", (hc_nbt_t *)nc);
+        if (oc)
+            bad |= hc_nbt_put(a, t, "ominous_config", (hc_nbt_t *)oc);
+    } else if (strcmp(id, "minecraft:vault") == 0) {
+        const hc_nbt_t *cfg =
+            r->tpl_nbt ? hc_nbt_get(r->tpl_nbt, "config") : NULL;
+        bad |= hc_nbt_put(a, t, "config",
+                          cfg ? (hc_nbt_t *)cfg : hc_nbt_compound(a));
+        bad |= hc_nbt_put(a, t, "shared_data", hc_nbt_compound(a));
+        bad |= hc_nbt_put(a, t, "server_data", hc_nbt_compound(a));
+    } else {
+        hc_featx_die("block entity emitter missing", id);
+    }
+    /* 공통 꼬리: components{} → id → x/y/z → keepPacked(false) */
+    bad |= hc_nbt_put(a, t, "components", hc_nbt_compound(a));
+    bad |= hc_nbt_put(a, t, "id", hc_nbt_string(a, id));
+    bad |= hc_nbt_put(a, t, "x", hc_nbt_int(a, r->x));
+    bad |= hc_nbt_put(a, t, "y", hc_nbt_int(a, r->y));
+    bad |= hc_nbt_put(a, t, "z", hc_nbt_int(a, r->z));
+    bad |= hc_nbt_put(a, t, "keepPacked", hc_nbt_byte(a, 0));
+    return bad ? NULL : t;
+}
+
 ptrdiff_t hc_chunk_to_nbt(const hc_chunk_t *c, const hc_biome_reg_t *biomes,
                           const hc_light_chunk_t *ls,
                           const hc_tick_rec_t *ticks, int32_t n_ticks,
-                          int64_t last_update, hc_arena_t *scratch,
-                          uint8_t *out, size_t cap) {
+                          int64_t last_update, const struct hc_sctx *sctx,
+                          hc_arena_t *scratch, uint8_t *out, size_t cap) {
     hc_arena_t *a = scratch;
     hc_nbt_t   *root = hc_nbt_compound(a);
     if (!root)
@@ -283,8 +427,24 @@ ptrdiff_t hc_chunk_to_nbt(const hc_chunk_t *c, const hc_biome_reg_t *biomes,
     if (ls->enabled &&
         hc_nbt_put(a, root, "isLightOn", hc_nbt_byte(a, 1)) != 0)
         return -1;
-    if (hc_nbt_put(a, root, "block_entities", hc_nbt_list(a)) != 0)
-        return -1;
+    /* block_entities (Task 14 — 순서는 hc_structures_chunk_bes 가
+     * HashSet<BlockPos>/fastutil 순회 에뮬로 재구성) */
+    {
+        hc_nbt_t *bes = hc_nbt_list(a);
+        if (!bes)
+            return -1;
+        if (sctx) {
+            const hc_be_rec_t *recs[64];
+            int32_t n = hc_structures_chunk_bes(sctx, c->cx, c->cz, recs, 64);
+            for (int32_t i = 0; i < n; i++) {
+                hc_nbt_t *t = be_to_nbt(a, recs[i]);
+                if (!t || hc_nbt_add(a, bes, t) != 0)
+                    return -1;
+            }
+        }
+        if (hc_nbt_put(a, root, "block_entities", bes) != 0)
+            return -1;
+    }
 
     /* 틱: 레코더 배열에서 이 청크 소속만, 기록순 (R-D §4) */
     hc_nbt_t *bt = hc_nbt_list(a);
@@ -338,11 +498,34 @@ ptrdiff_t hc_chunk_to_nbt(const hc_chunk_t *c, const hc_biome_reg_t *biomes,
     if (hc_nbt_put(a, root, "Heightmaps", hm) != 0)
         return -1;
 
-    /* structures: starts, References — 빈 컴파운드라도 항상 (R-C §8) */
+    /* structures: starts, References — 빈 컴파운드라도 항상 (R-C §8).
+     * starts 값은 골든 파스 트리 재방출 (파일 순서 put — HashMap 순회
+     * 항등, nbt_read 왕복 게이트가 증명), References 는 파생 배열. */
     hc_nbt_t *st = hc_nbt_compound(a);
-    if (!st ||
-        hc_nbt_put(a, st, "starts", hc_nbt_compound(a)) != 0 ||
-        hc_nbt_put(a, st, "References", hc_nbt_compound(a)) != 0 ||
+    if (!st)
+        return -1;
+    const hc_nbt_t *starts_tag =
+        sctx ? hc_structures_starts_tag(sctx, c->cx, c->cz) : NULL;
+    if (hc_nbt_put(a, st, "starts",
+                   starts_tag ? (hc_nbt_t *)starts_tag
+                              : hc_nbt_compound(a)) != 0)
+        return -1;
+    hc_nbt_t *refs = hc_nbt_compound(a);
+    if (!refs)
+        return -1;
+    if (sctx) {
+        const char    *names[8];
+        const int64_t *arrays[8];
+        int32_t        lens[8];
+        int32_t nr = hc_structures_references((const hc_sctx_t *)sctx, a,
+                                              c->cx, c->cz, names, arrays,
+                                              lens, 8);
+        for (int32_t i = 0; i < nr; i++)
+            if (hc_nbt_put(a, refs, names[i],
+                           hc_nbt_long_array(a, arrays[i], lens[i])) != 0)
+                return -1;
+    }
+    if (hc_nbt_put(a, st, "References", refs) != 0 ||
         hc_nbt_put(a, root, "structures", st) != 0)
         return -1;
 

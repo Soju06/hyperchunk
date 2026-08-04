@@ -25,6 +25,7 @@ struct hc_nbt {
         const char    *s;
         const uint8_t *ba;
         const int64_t *la;
+        const int32_t *ia;
         struct {
             hc_nbt_ent_t *head, *tail;
         } comp;
@@ -119,6 +120,28 @@ hc_nbt_t *hc_nbt_long(hc_arena_t *a, int64_t v) {
     return t;
 }
 
+/* float/double 은 비트 패턴으로 보관 (v.i 에 zero-extend) — 파스→재방출
+ * 왕복에서 라운딩이 개입할 수 없다. */
+hc_nbt_t *hc_nbt_float(hc_arena_t *a, float v) {
+    hc_nbt_t *t = node(a, HC_NBT_FLOAT);
+    if (t) {
+        uint32_t bits;
+        memcpy(&bits, &v, 4);
+        t->v.i = (int64_t)bits;
+    }
+    return t;
+}
+
+hc_nbt_t *hc_nbt_double(hc_arena_t *a, double v) {
+    hc_nbt_t *t = node(a, HC_NBT_DOUBLE);
+    if (t) {
+        uint64_t bits;
+        memcpy(&bits, &v, 8);
+        t->v.i = (int64_t)bits;
+    }
+    return t;
+}
+
 hc_nbt_t *hc_nbt_string(hc_arena_t *a, const char *s) {
     hc_nbt_t *t = node(a, HC_NBT_STRING);
     if (t)
@@ -150,6 +173,16 @@ hc_nbt_t *hc_nbt_long_array(hc_arena_t *a, const int64_t *d, int32_t n) {
     hc_nbt_t *t = node(a, HC_NBT_LONG_ARRAY);
     if (t) {
         t->v.la = d;
+        t->n = n;
+    }
+    return t;
+}
+
+hc_nbt_t *hc_nbt_int_array(hc_arena_t *a, const int32_t *d, int32_t n) {
+    assert(n >= 0);
+    hc_nbt_t *t = node(a, HC_NBT_INT_ARRAY);
+    if (t) {
+        t->v.ia = d;
         t->n = n;
     }
     return t;
@@ -320,6 +353,17 @@ static void write_payload(wr_t *w, const hc_nbt_t *t) {
         for (int32_t i = 0; i < t->n; i++)
             put_i64(w, t->v.la[i]);
         break;
+    case HC_NBT_INT_ARRAY:
+        put_i32(w, t->n);
+        for (int32_t i = 0; i < t->n; i++)
+            put_i32(w, t->v.ia[i]);
+        break;
+    case HC_NBT_FLOAT:
+        put_i32(w, (int32_t)(uint32_t)t->v.i); /* 비트 패턴 */
+        break;
+    case HC_NBT_DOUBLE:
+        put_i64(w, t->v.i); /* 비트 패턴 */
+        break;
     default:
         assert(0 && "unsupported NBT tag");
     }
@@ -333,4 +377,287 @@ ptrdiff_t hc_nbt_write(const hc_nbt_t *root, uint8_t *out, size_t cap) {
     put_u16(&w, 0);
     write_compound_payload(&w, root);
     return w.overflow ? -1 : (ptrdiff_t)(w.p - out);
+}
+
+/* ------------------------------------------------------------------ */
+/* Task 14: 리더 (hc_nbt.h §리더 — 파일 순서 put, 배열은 호스트 변환)   */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    const uint8_t *p, *end;
+    hc_arena_t    *a;
+    int            bad;
+} rd_t;
+
+static uint8_t rd_u8(rd_t *r) {
+    if (r->bad || r->p >= r->end) {
+        r->bad = 1;
+        return 0;
+    }
+    return *r->p++;
+}
+
+static uint16_t rd_u16(rd_t *r) {
+    uint16_t hi = rd_u8(r);
+    return (uint16_t)(hi << 8 | rd_u8(r));
+}
+
+static int32_t rd_i32(rd_t *r) {
+    uint32_t v = 0;
+    for (int i = 0; i < 4; i++)
+        v = v << 8 | rd_u8(r);
+    return (int32_t)v;
+}
+
+static int64_t rd_i64(rd_t *r) {
+    uint64_t v = 0;
+    for (int i = 0; i < 8; i++)
+        v = v << 8 | rd_u8(r);
+    return (int64_t)v;
+}
+
+static char *rd_str(rd_t *r) {
+    uint16_t n = rd_u16(r);
+    if (r->bad || (size_t)(r->end - r->p) < n) {
+        r->bad = 1;
+        return NULL;
+    }
+    char *s = hc_arena_alloc(r->a, (size_t)n + 1, 1);
+    if (!s) {
+        r->bad = 1;
+        return NULL;
+    }
+    memcpy(s, r->p, n);
+    s[n] = '\0';
+    r->p += n;
+    return s;
+}
+
+static hc_nbt_t *rd_payload(rd_t *r, uint8_t tag) {
+    if (r->bad)
+        return NULL;
+    switch (tag) {
+    case HC_NBT_BYTE:
+        return hc_nbt_byte(r->a, (int8_t)rd_u8(r));
+    case HC_NBT_SHORT:
+        return hc_nbt_short(r->a, (int16_t)rd_u16(r));
+    case HC_NBT_INT:
+        return hc_nbt_int(r->a, rd_i32(r));
+    case HC_NBT_LONG:
+        return hc_nbt_long(r->a, rd_i64(r));
+    case HC_NBT_FLOAT: {
+        hc_nbt_t *t = node(r->a, HC_NBT_FLOAT);
+        int32_t   bits = rd_i32(r);
+        if (t)
+            t->v.i = (int64_t)(uint32_t)bits;
+        return t;
+    }
+    case HC_NBT_DOUBLE: {
+        hc_nbt_t *t = node(r->a, HC_NBT_DOUBLE);
+        t ? (void)(t->v.i = rd_i64(r)) : (void)0;
+        return t;
+    }
+    case HC_NBT_BYTE_ARRAY: {
+        int32_t n = rd_i32(r);
+        if (r->bad || n < 0 || (size_t)(r->end - r->p) < (size_t)n) {
+            r->bad = 1;
+            return NULL;
+        }
+        uint8_t *d = hc_arena_alloc(r->a, n ? (size_t)n : 1, 1);
+        if (!d) {
+            r->bad = 1;
+            return NULL;
+        }
+        memcpy(d, r->p, (size_t)n);
+        r->p += n;
+        return hc_nbt_byte_array(r->a, d, n);
+    }
+    case HC_NBT_STRING: {
+        char *s = rd_str(r);
+        return s ? hc_nbt_string(r->a, s) : NULL;
+    }
+    case HC_NBT_LIST: {
+        uint8_t etag = rd_u8(r);
+        int32_t n = rd_i32(r);
+        if (r->bad || n < 0) {
+            r->bad = 1;
+            return NULL;
+        }
+        hc_nbt_t *list = hc_nbt_list(r->a);
+        if (!list) {
+            r->bad = 1;
+            return NULL;
+        }
+        for (int32_t i = 0; i < n; i++) {
+            hc_nbt_t *v = rd_payload(r, etag);
+            if (!v || hc_nbt_add(r->a, list, v) != 0) {
+                r->bad = 1;
+                return NULL;
+            }
+        }
+        return list;
+    }
+    case HC_NBT_COMPOUND: {
+        hc_nbt_t *comp = hc_nbt_compound(r->a);
+        if (!comp) {
+            r->bad = 1;
+            return NULL;
+        }
+        for (;;) {
+            uint8_t t = rd_u8(r);
+            if (r->bad)
+                return NULL;
+            if (t == HC_NBT_END)
+                return comp;
+            char *key = rd_str(r);
+            if (!key)
+                return NULL;
+            hc_nbt_t *v = rd_payload(r, t);
+            if (!v || hc_nbt_put(r->a, comp, key, v) != 0) {
+                r->bad = 1;
+                return NULL;
+            }
+        }
+    }
+    case HC_NBT_INT_ARRAY: {
+        int32_t n = rd_i32(r);
+        if (r->bad || n < 0 || (size_t)(r->end - r->p) < (size_t)n * 4) {
+            r->bad = 1;
+            return NULL;
+        }
+        int32_t *d =
+            hc_arena_alloc(r->a, sizeof(int32_t) * (n ? (size_t)n : 1),
+                           _Alignof(int32_t));
+        if (!d) {
+            r->bad = 1;
+            return NULL;
+        }
+        for (int32_t i = 0; i < n; i++)
+            d[i] = rd_i32(r);
+        return hc_nbt_int_array(r->a, d, n);
+    }
+    case HC_NBT_LONG_ARRAY: {
+        int32_t n = rd_i32(r);
+        if (r->bad || n < 0 || (size_t)(r->end - r->p) < (size_t)n * 8) {
+            r->bad = 1;
+            return NULL;
+        }
+        int64_t *d =
+            hc_arena_alloc(r->a, sizeof(int64_t) * (n ? (size_t)n : 1),
+                           _Alignof(int64_t));
+        if (!d) {
+            r->bad = 1;
+            return NULL;
+        }
+        for (int32_t i = 0; i < n; i++)
+            d[i] = rd_i64(r);
+        return hc_nbt_long_array(r->a, d, n);
+    }
+    default:
+        r->bad = 1;
+        return NULL;
+    }
+}
+
+hc_nbt_t *hc_nbt_parse(hc_arena_t *a, const uint8_t *buf, size_t len) {
+    rd_t r = {buf, buf + len, a, 0};
+    if (rd_u8(&r) != HC_NBT_COMPOUND)
+        return NULL;
+    if (rd_u16(&r) != 0)
+        return NULL; /* 무명 루트만 */
+    hc_nbt_t *root = rd_payload(&r, HC_NBT_COMPOUND);
+    if (!root || r.bad || r.p != r.end)
+        return NULL; /* 트레일링 = 오류 */
+    return root;
+}
+
+/* --- 접근자 --- */
+
+int hc_nbt_tag(const hc_nbt_t *t) {
+    return t->tag;
+}
+
+const hc_nbt_t *hc_nbt_get(const hc_nbt_t *comp, const char *key) {
+    assert(comp->tag == HC_NBT_COMPOUND);
+    for (const hc_nbt_ent_t *e = comp->v.comp.head; e; e = e->next)
+        if (strcmp(e->key, key) == 0)
+            return e->val;
+    return NULL;
+}
+
+int32_t hc_nbt_comp_count(const hc_nbt_t *comp) {
+    assert(comp->tag == HC_NBT_COMPOUND);
+    return comp->n;
+}
+
+const hc_nbt_t *hc_nbt_comp_at(const hc_nbt_t *comp, int32_t i,
+                               const char **key) {
+    assert(comp->tag == HC_NBT_COMPOUND && i >= 0 && i < comp->n);
+    const hc_nbt_ent_t *e = comp->v.comp.head;
+    while (i-- > 0)
+        e = e->next;
+    if (key)
+        *key = e->key;
+    return e->val;
+}
+
+int32_t hc_nbt_list_count(const hc_nbt_t *list) {
+    assert(list->tag == HC_NBT_LIST);
+    return list->n;
+}
+
+const hc_nbt_t *hc_nbt_list_at(const hc_nbt_t *list, int32_t i) {
+    assert(list->tag == HC_NBT_LIST && i >= 0 && i < list->n);
+    const hc_nbt_item_t *it = list->v.list.head;
+    while (i-- > 0)
+        it = it->next;
+    return it->val;
+}
+
+int64_t hc_nbt_i64(const hc_nbt_t *t) {
+    assert(t->tag == HC_NBT_BYTE || t->tag == HC_NBT_SHORT ||
+           t->tag == HC_NBT_INT || t->tag == HC_NBT_LONG);
+    return t->v.i;
+}
+
+float hc_nbt_f32(const hc_nbt_t *t) {
+    assert(t->tag == HC_NBT_FLOAT);
+    uint32_t bits = (uint32_t)t->v.i;
+    float    v;
+    memcpy(&v, &bits, 4);
+    return v;
+}
+
+double hc_nbt_f64(const hc_nbt_t *t) {
+    assert(t->tag == HC_NBT_DOUBLE);
+    uint64_t bits = (uint64_t)t->v.i;
+    double   v;
+    memcpy(&v, &bits, 8);
+    return v;
+}
+
+const char *hc_nbt_str(const hc_nbt_t *t) {
+    assert(t->tag == HC_NBT_STRING);
+    return t->v.s;
+}
+
+const int32_t *hc_nbt_ia(const hc_nbt_t *t, int32_t *n) {
+    assert(t->tag == HC_NBT_INT_ARRAY);
+    if (n)
+        *n = t->n;
+    return t->v.ia;
+}
+
+const int64_t *hc_nbt_la(const hc_nbt_t *t, int32_t *n) {
+    assert(t->tag == HC_NBT_LONG_ARRAY);
+    if (n)
+        *n = t->n;
+    return t->v.la;
+}
+
+const uint8_t *hc_nbt_ba(const hc_nbt_t *t, int32_t *n) {
+    assert(t->tag == HC_NBT_BYTE_ARRAY);
+    if (n)
+        *n = t->n;
+    return t->v.ba;
 }

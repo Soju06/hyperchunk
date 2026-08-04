@@ -55,9 +55,17 @@ static int is_free_pos(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
            mask_test(e->reg->tag_logs, s);
 }
 
+/* is(Blocks.VINE) — 상태 무관 블록 판정. 월드젠 배치는 단면 상태만
+ * (VINE_BASE 5종) 이지만 T14 확장 상태 (다면) 도 방어적으로 커버. */
+static int is_vine_state(uint16_t s) {
+    if (s >= HC_B_VINE_BASE && s < HC_B_VINE_BASE + 5)
+        return 1;
+    return s >= HC_B_T14_BASE &&
+           strncmp(hc_block_name(s), "minecraft:vine[", 15) == 0;
+}
+
 static int is_vine_pos(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
-    uint16_t s = hc_feat_get_block(e->rg, x, y, z);
-    return s >= HC_B_VINE_BASE && s < HC_B_VINE_BASE + 5;
+    return is_vine_state(hc_feat_get_block(e->rg, x, y, z));
 }
 
 /* isOverSolidGround = 아래 블록 isFaceSturdy(UP) — support shape (잎 제외,
@@ -156,6 +164,13 @@ static int fol_should_skip(tree_ctx_t *t, int32_t lx, int32_t y, int32_t lz,
         float fx = (float)lx + 0.5f, fz = (float)lz + 0.5f;
         return fx * fx + fz * fz > (float)(range * range);
     }
+    case HC_FOL_ACACIA:
+        /* AcaciaFoliagePlacer.shouldSkipLocation (26.2, Task 14):
+         * y==0 → (dx>1||dz>1) && dx!=0 && dz!=0;
+         * else → dx==range && dz==range && range>0. 드로우 0. */
+        if (y == 0)
+            return (lx > 1 || lz > 1) && lx != 0 && lz != 0;
+        return lx == range && lz == range && range > 0;
     }
     die("unknown foliage placer kind", NULL);
     (void)large;
@@ -248,6 +263,23 @@ static void create_foliage(tree_ctx_t *t, const attach_t *att, int32_t fh,
             try_place_leaf(t, att->x + (x1 - x2), att->y + (y1 - y2),
                            att->z + (z1 - z2));
         }
+        return;
+    }
+    case HC_FOL_ACACIA: {
+        /* AcaciaFoliagePlacer.createFoliage (26.2, Task 14): fh = 0
+         * (foliageHeight 오버라이드). 3 행:
+         *   (r + attRadOff,     -1 - fh)
+         *   (r - 1,             -fh)
+         *   (r + attRadOff - 1,  0)
+         * 오프셋은 attachment.pos.above(offset) — offset 샘플은 공통
+         * 경로에서 이미 소비됨 (상수 0). */
+        int32_t ao = att->radius_offset;
+        place_leaves_row(t, att->x, att->y + offset, att->z, rad + ao,
+                         -1 - fh, att->double_trunk);
+        place_leaves_row(t, att->x, att->y + offset, att->z, rad - 1, -fh,
+                         att->double_trunk);
+        place_leaves_row(t, att->x, att->y + offset, att->z, rad + ao - 1, 0,
+                         att->double_trunk);
         return;
     }
     }
@@ -485,6 +517,59 @@ static const struct {
 /* bending (azalea — R5c §5, BendingTrunkPlacer.placeTrunk@0-227).
  * Direction.Plane.HORIZONTAL.getRandomDirection = faces[nextInt(4)],
  * faces = [N,E,S,W] — HORIZ 인덱스와 1:1. */
+/* forking (acacia, 26.2 ForkingTrunkPlacer — Task 14).
+ * 드로우 순서: lean 방향 nextInt(4) → leanHeight = h - nextInt(4) - 1 →
+ * leanSteps = 3 - nextInt(3) → [로그 배치] → branch 방향 nextInt(4) →
+ * (lean 과 다르면) branchPos = leanHeight - nextInt(2) - 1,
+ * branchSteps = 1 + nextInt(3). 메인 attachment radius_offset = 1,
+ * 브랜치 = 0. HORIZONTAL 순서 N,E,S,W. */
+static int32_t trunk_forking(tree_ctx_t *t, int32_t x, int32_t y, int32_t z,
+                             int32_t free, attach_t *out) {
+    static const int8_t HDX[4] = {0, 1, 0, -1}; /* N,E,S,W */
+    static const int8_t HDZ[4] = {-1, 0, 1, 0};
+    feat_env_t *e = t->e;
+    place_below_trunk(t, x, y - 1, z);
+    int32_t n_att = 0;
+    int32_t lean = hc_wgr_next_int(e->rng, 4);            /* DRAW */
+    int32_t lean_h = free - hc_wgr_next_int(e->rng, 4) - 1; /* DRAW */
+    int32_t lean_steps = 3 - hc_wgr_next_int(e->rng, 3);  /* DRAW */
+    int32_t tx = x, tz = z;
+    int32_t ey = INT32_MIN;
+    for (int32_t yo = 0; yo < free; yo++) {
+        int32_t yy = y + yo;
+        if (yo >= lean_h && lean_steps > 0) {
+            tx += HDX[lean];
+            tz += HDZ[lean];
+            lean_steps--;
+        }
+        if (place_log(t, tx, yy, tz))
+            ey = yy + 1;
+    }
+    if (ey != INT32_MIN)
+        out[n_att++] = (attach_t){tx, ey, tz, 1, 0};
+    tx = x;
+    tz = z;
+    int32_t branch = hc_wgr_next_int(e->rng, 4); /* DRAW */
+    if (branch != lean) {
+        int32_t bpos = lean_h - hc_wgr_next_int(e->rng, 2) - 1; /* DRAW */
+        int32_t bsteps = 1 + hc_wgr_next_int(e->rng, 3);        /* DRAW */
+        ey = INT32_MIN;
+        for (int32_t yo = bpos; yo < free && bsteps > 0; bsteps--) {
+            if (yo >= 1) {
+                int32_t yy = y + yo;
+                tx += HDX[branch];
+                tz += HDZ[branch];
+                if (place_log(t, tx, yy, tz))
+                    ey = yy + 1;
+            }
+            yo++;
+        }
+        if (ey != INT32_MIN)
+            out[n_att++] = (attach_t){tx, ey, tz, 0, 0};
+    }
+    return n_att;
+}
+
 static int32_t trunk_bending(tree_ctx_t *t, int32_t x, int32_t y, int32_t z,
                              int32_t free, attach_t *out) {
     feat_env_t *e = t->e;
@@ -634,6 +719,106 @@ static void dec_attached_to_logs(tree_ctx_t *t, jset_t *deco,
     }
 }
 
+/* beehive (26.2 BeehiveDecorator — Task 14): 트리거/셔플/탐색 드로우까지
+ * 재현. 실제 배치 성공은 die — 골든 리전에 bee_nest 가 없다 (BE 미구현;
+ * 도달 = 상류 리플레이 발산 신호). */
+static void dec_beehive(tree_ctx_t *t, const hc_tdec_t *dec,
+                        const cpos_t *logs, int32_t n_logs,
+                        const cpos_t *leaves, int32_t n_leaves) {
+    feat_env_t *e = t->e;
+    if (n_logs == 0)
+        return; /* 드로우 0 */
+    if (hc_wgr_next_float(e->rng) >= dec->prob)
+        return;
+    int32_t hive_y;
+    if (n_leaves > 0) {
+        int32_t a = leaves[0].y - 1, b = logs[0].y + 1;
+        hive_y = a > b ? a : b;
+    } else {
+        int32_t a = logs[0].y + 1 + hc_wgr_next_int(e->rng, 3);
+        int32_t b = logs[n_logs - 1].y;
+        hive_y = a < b ? a : b;
+    }
+    /* SPAWN_DIRECTIONS = HORIZONTAL − NORTH(=SOUTH.opposite) = [E, S, W] */
+    static const int8_t SDX[3] = {1, 0, -1}, SDZ[3] = {0, 1, 0};
+    enum { MAX_PL = 512 };
+    cpos_t  pl[MAX_PL];
+    int32_t n_pl = 0;
+    for (int32_t i = 0; i < n_logs; i++) {
+        if (logs[i].y != hive_y)
+            continue;
+        for (int d = 0; d < 3; d++) {
+            if (n_pl >= MAX_PL)
+                die("beehive placement list overflow", NULL);
+            pl[n_pl++] = (cpos_t){logs[i].x + SDX[d], logs[i].y,
+                                  logs[i].z + SDZ[d]};
+        }
+    }
+    if (n_pl == 0)
+        return;
+    for (int32_t j = n_pl; j > 1; j--) { /* Util.shuffle */
+        int32_t k = hc_wgr_next_int(e->rng, j);
+        cpos_t  tmp = pl[j - 1];
+        pl[j - 1] = pl[k];
+        pl[k] = tmp;
+    }
+    for (int32_t i = 0; i < n_pl; i++)
+        if (ctx_is_air(e, pl[i].x, pl[i].y, pl[i].z) &&
+            ctx_is_air(e, pl[i].x, pl[i].y, pl[i].z + 1))
+            die("beehive placement fired — bee_nest unimplemented (golden "
+                "region has none; upstream replay diverged?)",
+                NULL);
+}
+
+/* place_on_ground (26.2 PlaceOnGroundDecorator — Task 14, leaf_litter):
+ * 최저 y 로그들의 xz 박스를 radius/height 로 인플레이트, tries 회
+ * (rbi ×3 드로우 고정) 시도. above 가 air/vine && pos 가 isSolidRender
+ * && MBNL 하이트맵 <= above.y 일 때만 프로바이더 샘플 (조건부 드로우) +
+ * setBlock flag 19. */
+static void dec_place_on_ground(tree_ctx_t *t, jset_t *deco,
+                                const hc_tdec_t *dec, const cpos_t *logs,
+                                int32_t n_logs) {
+    feat_env_t *e = t->e;
+    if (n_logs == 0)
+        return; /* getLowestTrunkOrRootOfTree 빈 리스트 (roots 없음) */
+    int32_t min_y = logs[0].y; /* ctx 리스트는 y 오름차순 안정 정렬 */
+    int32_t x0 = logs[0].x, x1 = logs[0].x, z0 = logs[0].z, z1 = logs[0].z;
+    for (int32_t i = 0; i < n_logs; i++) {
+        if (logs[i].y != min_y)
+            continue;
+        if (logs[i].x < x0)
+            x0 = logs[i].x;
+        if (logs[i].x > x1)
+            x1 = logs[i].x;
+        if (logs[i].z < z0)
+            z0 = logs[i].z;
+        if (logs[i].z > z1)
+            z1 = logs[i].z;
+    }
+    x0 -= dec->radius;
+    x1 += dec->radius;
+    z0 -= dec->radius;
+    z1 += dec->radius;
+    int32_t y0 = min_y - dec->height, y1 = min_y + dec->height;
+    for (int32_t i = 0; i < dec->tries; i++) {
+        int32_t px = hc_mth_random_between_inclusive(e->rng, x0, x1);
+        int32_t py = hc_mth_random_between_inclusive(e->rng, y0, y1);
+        int32_t pz = hc_mth_random_between_inclusive(e->rng, z0, z1);
+        uint16_t above = hc_feat_get_block(e->rg, px, py + 1, pz);
+        if (!(hc_block_is_air(above) || is_vine_state(above)))
+            continue;
+        if (!hc_block_is_full_cube(hc_feat_get_block(e->rg, px, py, pz)))
+            continue; /* isSolidRender */
+        if (hc_feat_height(e->rg, HC_HM_MOTION_BLOCKING_NO_LEAVES, px, pz) >
+            py + 1)
+            continue;
+        uint16_t st =
+            hc_featx_sprov_sample_at(e->rng, &dec->provider, px, py + 1, pz);
+        jset_add(deco, px, py + 1, pz);
+        hc_feat_set_block_ks(e->rg, px, py + 1, pz, st); /* flag 19 */
+    }
+}
+
 /* 데코레이터 실행 (Context 생성 = 리스트 + 정렬) */
 static void run_decorators(tree_ctx_t *t, const hc_tdec_t *decs, int32_t n_dec,
                            jset_t *logs, jset_t *leaves, jset_t *deco) {
@@ -655,6 +840,12 @@ static void run_decorators(tree_ctx_t *t, const hc_tdec_t *decs, int32_t n_dec,
             break;
         case HC_TDEC_ATTACHED_TO_LOGS:
             dec_attached_to_logs(t, deco, &decs[i], log_arr, n_logs);
+            break;
+        case HC_TDEC_BEEHIVE:
+            dec_beehive(t, &decs[i], log_arr, n_logs, leaf_arr, n_leaves);
+            break;
+        case HC_TDEC_PLACE_ON_GROUND:
+            dec_place_on_ground(t, deco, &decs[i], log_arr, n_logs);
             break;
         default:
             die("unknown tree decorator", NULL);
@@ -1228,6 +1419,9 @@ int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
         break;
     case HC_TRUNK_BENDING:
         n_att = trunk_bending(t, ox, oy, oz, max_free, atts);
+        break;
+    case HC_TRUNK_FORKING:
+        n_att = trunk_forking(t, ox, oy, oz, max_free, atts);
         break;
     default:
         die("unknown trunk placer kind", NULL);

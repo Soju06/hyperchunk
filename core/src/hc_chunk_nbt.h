@@ -29,11 +29,15 @@
  *    페이로드(마스킹본)와 직접 바이트 비교 가능).
  *
  * 반환: 페이로드 길이, 실패(-1: arena/버퍼 소진). scratch 는 노드/중간
- * 배열용 (호출자가 리셋 관리). */
+ * 배열용 (호출자가 리셋 관리).
+ *
+ * sctx (Task 14): 구조물 컨텍스트 — starts/References/block_entities 를
+ * 채운다. NULL = 기존 게이트 그대로 (빈 리스트/컴파운드). */
+struct hc_sctx; /* hc_structures.h */
 ptrdiff_t hc_chunk_to_nbt(const hc_chunk_t *c, const hc_biome_reg_t *biomes,
                           const hc_light_chunk_t *ls,
                           const hc_tick_rec_t *ticks, int32_t n_ticks,
-                          int64_t last_update, hc_arena_t *scratch,
-                          uint8_t *out, size_t cap);
+                          int64_t last_update, const struct hc_sctx *sctx,
+                          hc_arena_t *scratch, uint8_t *out, size_t cap);
 
 #endif /* HC_CHUNK_NBT_H */

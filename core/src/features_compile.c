@@ -357,6 +357,62 @@ static int sprov_compile(fc_t *fc, const hc_json_t *j, hc_sprov_t *p,
             FAIL("weighted state zero total weight");
         return 0;
     }
+    if (hc_json_streq(t, "minecraft:noise_threshold_provider")) {
+        /* Task 14 (flower_plain): NormalNoise(seed, 옥타브 0, 진폭 [1.0])
+         * 특화 — 다른 파라미터 조합은 미지원 (die). ImprovedNoise 2개를
+         * WorldgenRandom(LegacyRandomSource(seed)) 에서 순차 생성
+         * (NoiseBasedStateProvider 생성자와 동일 소비). */
+        const hc_json_t *seed = hc_json_get(j, "seed");
+        const hc_json_t *noise = hc_json_get(j, "noise");
+        const hc_json_t *scale = hc_json_get(j, "scale");
+        const hc_json_t *thresh = hc_json_get(j, "threshold");
+        const hc_json_t *hchance = hc_json_get(j, "high_chance");
+        const hc_json_t *dflt = hc_json_get(j, "default_state");
+        const hc_json_t *lows = hc_json_get(j, "low_states");
+        const hc_json_t *highs = hc_json_get(j, "high_states");
+        if (!seed || !noise || !scale || !thresh || !hchance || !dflt ||
+            !lows || lows->kind != HC_JSON_ARR || !highs ||
+            highs->kind != HC_JSON_ARR)
+            FAIL("noise_threshold_provider malformed");
+        const hc_json_t *fo = hc_json_get(noise, "firstOctave");
+        const hc_json_t *amps = hc_json_get(noise, "amplitudes");
+        if (!fo || fo->num != 0 || !amps || amps->kind != HC_JSON_ARR ||
+            amps->count != 1 || amps->child->num != 1.0)
+            FAIL("noise_threshold_provider noise != (octave 0, [1.0])");
+        p->kind = HC_SP_NOISE_THRESHOLD;
+        p->nthresh = hc_arena_alloc(fc->arena, sizeof(hc_nthresh_cfg_t),
+                                    _Alignof(hc_nthresh_cfg_t));
+        if (!p->nthresh)
+            FAIL("arena exhausted (noise_threshold)");
+        hc_nthresh_cfg_t *n = p->nthresh;
+        memset(n, 0, sizeof *n);
+        hc_lcg_t r;
+        hc_lcg_init(&r, (int64_t)seed->num);
+        hc_perlin_init_from_lcg(&n->first, &r);
+        hc_perlin_init_from_lcg(&n->second, &r);
+        n->scale = (float)scale->num;
+        n->threshold = (float)thresh->num;
+        n->high_chance = (float)hchance->num;
+        int32_t id = compile_blockstate(fc, dflt);
+        if (id < 0)
+            return -1;
+        n->dflt = (uint16_t)id;
+        if (lows->count > 8 || highs->count > 8)
+            FAIL("noise_threshold_provider state list too long");
+        for (const hc_json_t *e = lows->child; e; e = e->next) {
+            id = compile_blockstate(fc, e);
+            if (id < 0)
+                return -1;
+            n->low[n->n_low++] = (uint16_t)id;
+        }
+        for (const hc_json_t *e = highs->child; e; e = e->next) {
+            id = compile_blockstate(fc, e);
+            if (id < 0)
+                return -1;
+            n->high[n->n_high++] = (uint16_t)id;
+        }
+        return 0;
+    }
     if (hc_json_streq(t, "minecraft:randomized_int_state_provider")) {
         const hc_json_t *prop = hc_json_get(j, "property");
         const hc_json_t *src = hc_json_get(j, "source");
@@ -725,6 +781,26 @@ static int tdec_compile(fc_t *fc, const hc_json_t *j, hc_tdec_t *d) {
         d->dir = 1; /* UP */
         return sprov_compile(fc, bp, &d->provider, 0);
     }
+    if (hc_json_streq(t, "minecraft:beehive")) { /* Task 14 */
+        if (!pr || pr->kind != HC_JSON_NUM)
+            FAIL("beehive without probability");
+        d->kind = HC_TDEC_BEEHIVE;
+        d->prob = (float)pr->num;
+        return 0;
+    }
+    if (hc_json_streq(t, "minecraft:place_on_ground")) { /* Task 14 */
+        const hc_json_t *bp = hc_json_get(j, "block_state_provider");
+        const hc_json_t *tr = hc_json_get(j, "tries");
+        const hc_json_t *ra = hc_json_get(j, "radius");
+        const hc_json_t *he = hc_json_get(j, "height");
+        if (!bp)
+            FAIL("place_on_ground without block_state_provider");
+        d->kind = HC_TDEC_PLACE_ON_GROUND;
+        d->tries = tr && tr->kind == HC_JSON_NUM ? (int32_t)tr->num : 128;
+        d->radius = ra && ra->kind == HC_JSON_NUM ? (int32_t)ra->num : 2;
+        d->height = he && he->kind == HC_JSON_NUM ? (int32_t)he->num : 1;
+        return sprov_compile(fc, bp, &d->provider, 0);
+    }
     FAIL("unsupported tree decorator");
 }
 
@@ -793,6 +869,10 @@ static int compile_placed_into(fc_t *fc, const hc_json_t *pj, hc_pfeat_t *pf,
          * 트레이스 게이트에서 diff 로 드러난다 (파일 머리 정책). */
         pf->cf_kind = HC_CF_UNIMPLEMENTED;
         pf->unimpl_why = *fc->err;
+        if (hc_features_survey) /* Task 14 서베이: 중첩 강등도 노출 */
+            fprintf(stderr, "hc_features SURVEY degrade: %s — %s\n",
+                    pf->name ? pf->name : "<inline>",
+                    pf->unimpl_why ? pf->unimpl_why : "?");
         *fc->err = NULL;
     }
     return 0;
@@ -1221,6 +1301,8 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
             c->trunk_kind = HC_TRUNK_FANCY;
         else if (hc_json_streq(tt, "minecraft:bending_trunk_placer"))
             c->trunk_kind = HC_TRUNK_BENDING;
+        else if (hc_json_streq(tt, "minecraft:forking_trunk_placer"))
+            c->trunk_kind = HC_TRUNK_FORKING; /* Task 14 (acacia) */
         else
             FAIL("unsupported trunk placer");
         const hc_json_t *bh = hc_json_get(tp, "base_height");
@@ -1257,22 +1339,28 @@ static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,
             c->fol_kind = HC_FOL_FANCY;
         else if (hc_json_streq(ft, "minecraft:random_spread_foliage_placer"))
             c->fol_kind = HC_FOL_RANDOM_SPREAD;
+        else if (hc_json_streq(ft, "minecraft:acacia_foliage_placer"))
+            c->fol_kind = HC_FOL_ACACIA; /* Task 14 — height 필드 없음 */
         else
             FAIL("unsupported foliage placer");
         const hc_json_t *fr = hc_json_get(fp, "radius");
         const hc_json_t *fo = hc_json_get(fp, "offset");
         /* random_spread 는 height 가 없고 foliage_height +
-         * leaf_placement_attempts 를 갖는다 (R5c §7.3.5) */
+         * leaf_placement_attempts 를 갖는다 (R5c §7.3.5); acacia 는
+         * foliageHeight() 오버라이드 = 0 (config 무관, Task 14). */
         const hc_json_t *fhh =
             hc_json_get(fp, c->fol_kind == HC_FOL_RANDOM_SPREAD
                                 ? "foliage_height"
                                 : "height");
-        if (!fr || !fo || !fhh || fhh->kind != HC_JSON_NUM)
+        if (!fr || !fo ||
+            (c->fol_kind != HC_FOL_ACACIA &&
+             (!fhh || fhh->kind != HC_JSON_NUM)))
             FAIL("foliage placer fields missing");
         if (iprov_compile(fc, fr, &c->fol_radius, 0) ||
             iprov_compile(fc, fo, &c->fol_offset, 0))
             return -1;
-        c->fol_height = (int32_t)fhh->num;
+        c->fol_height =
+            c->fol_kind == HC_FOL_ACACIA ? 0 : (int32_t)fhh->num;
         if (c->fol_kind == HC_FOL_RANDOM_SPREAD) {
             const hc_json_t *la = hc_json_get(fp, "leaf_placement_attempts");
             if (!la || la->kind != HC_JSON_NUM)
