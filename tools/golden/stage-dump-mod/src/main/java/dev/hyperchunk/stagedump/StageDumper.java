@@ -58,6 +58,7 @@ public final class StageDumper {
     private static final int RADIUS;
     private static final Set<String> STAGES; // null => all
     private static final String DIMENSION;
+    private static final boolean NO_SAVE;
     private static final Set<String> WRITTEN = ConcurrentHashMap.newKeySet();
     private static final AtomicBoolean Y_RANGE_LOGGED = new AtomicBoolean();
 
@@ -70,10 +71,11 @@ public final class StageDumper {
         String stages = System.getProperty(PROP_PREFIX + "stages", "all");
         STAGES = "all".equals(stages) ? null : Set.of(stages.toLowerCase(Locale.ROOT).split(","));
         DIMENSION = System.getProperty(PROP_PREFIX + "dimension", "minecraft:overworld");
+        NO_SAVE = Boolean.getBoolean(PROP_PREFIX + "nosave");
         if (DUMP_DIR != null) {
             log("enabled: dir=" + DUMP_DIR + " center=(" + CENTER_X + "," + CENTER_Z
                     + ") radius=" + RADIUS + " stages=" + (STAGES == null ? "all" : STAGES)
-                    + " dimension=" + DIMENSION);
+                    + " dimension=" + DIMENSION + " nosave=" + NO_SAVE);
         }
     }
 
@@ -106,6 +108,15 @@ public final class StageDumper {
 
     public static int radius() {
         return RADIUS;
+    }
+
+    /**
+     * -Dhyperchunk.dump.nosave=true — suppress autosave AND unload processing
+     * from t=0 via ServerLevelMixin (noSave=true on every level). Independent
+     * of enabled() on purpose: the property is explicit opt-in either way.
+     */
+    public static boolean noSave() {
+        return NO_SAVE;
     }
 
     /** Only steps of the generation pyramid — never dump on chunk *loading*. */

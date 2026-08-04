@@ -763,7 +763,7 @@ int main(int argc, char **argv) {
     load_climate(ref_dir);
 
     /* --- 게이트 (a): 두 번들 manifest 전 라인 시드 재계산 --- */
-    enum { MAX_MANIFEST = 256 };
+    enum { MAX_MANIFEST = 4096 };
     static manifest_line_t man_pri[MAX_MANIFEST], man_alt[MAX_MANIFEST];
     char mpath[1024];
     snprintf(mpath, sizeof mpath, "%s/order.manifest", stages_dir);

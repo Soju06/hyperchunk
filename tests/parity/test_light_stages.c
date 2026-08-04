@@ -497,6 +497,45 @@ static int32_t load_manifest(const char *path, int64_t level_seed,
     return n;
 }
 
+/* stages.log — 모든 청크(링 포함)의 스테이지 완료 순서 (Task 13 unified
+ * 캡처). 09 덤프의 라이트 상태는 "덤프 시점까지 라이트 스테이지가 완료된
+ * 청크 집합"의 고정점 — 링 청크의 09 완료 시점은 order.manifest 로는 알
+ * 수 없어 이 로그가 재생 입력이다 (기존 3x3-데코 자격 휴리스틱 대체). */
+typedef struct {
+    int32_t cx, cz;
+} lightlog_t;
+
+static int32_t load_lightlog(const char *path, lightlog_t *out, int32_t cap) {
+    size_t  len = 0;
+    char   *buf = read_file(path, &len);
+    char   *p = buf;
+    int32_t n = 0;
+    while (*p) {
+        char *nl = strchr(p, '\n');
+        if (!nl)
+            break;
+        *nl = '\0';
+        if (p[0] != '#' && p[0] != '\0') {
+            int       si;
+            char      sname[64];
+            int32_t   cx, cz;
+            long long seq, nanos;
+            if (sscanf(p, "%d %63s %d %d %lld %lld", &si, sname, &cx, &cz,
+                       &seq, &nanos) != 6)
+                die("bad stages.log line", p);
+            if (strcmp(sname, "light") == 0) {
+                if (n >= cap)
+                    die("stages.log light entries exceed cap", path);
+                out[n].cx = cx;
+                out[n].cz = cz;
+                n++;
+            }
+        }
+        p = nl + 1;
+    }
+    return n;
+}
+
 typedef struct {
     int      stage; /* 8 또는 9 */
     int32_t  cx, cz;
@@ -1014,7 +1053,7 @@ int main(int argc, char **argv) {
                 &g_world.chunks[widx(cx, cz)];
 
     /* --- 번들 재생 --- */
-    enum { MAX_MANIFEST = 128, MAX_SNAPS = 32 };
+    enum { MAX_MANIFEST = 4096, MAX_SNAPS = 32 };
     static manifest_line_t man[MAX_MANIFEST];
     static snap_t          snaps[MAX_SNAPS];
 
@@ -1027,8 +1066,11 @@ int main(int argc, char **argv) {
         int32_t n_man = load_manifest(mpath, seed, man, MAX_MANIFEST);
         snprintf(mpath, sizeof mpath, "%s/order.snapshots", bdir);
         int32_t n_snap = load_snapshots(mpath, snaps, MAX_SNAPS);
-        if (n_man < 81 || n_snap != 18)
-            die("manifest/snapshots unexpectedly short", bname);
+        static lightlog_t ll[MAX_MANIFEST];
+        snprintf(mpath, sizeof mpath, "%s/stages.log", bdir);
+        int32_t n_ll = load_lightlog(mpath, ll, MAX_MANIFEST);
+        if (n_man < 81 || n_snap != 18 || n_ll < 9)
+            die("manifest/snapshots/stages.log unexpectedly short", bname);
 
         int32_t max_prefix = 0;
         for (int32_t i = 0; i < n_snap; i++)
@@ -1060,10 +1102,6 @@ int main(int argc, char **argv) {
             g_world.chunks[i].wg_reprimed = 0;
         }
         rg.wg_dropped = 0;
-
-        /* 그리드 09 덤프 순서 (nanos) — S 가설의 "먼저 덤프된 그리드" */
-        int32_t dumped_before_n = 0;
-        int32_t dumped_before[9][2];
 
         int32_t next_snap = 0;
         int64_t bundle_fails = 0;
@@ -1177,30 +1215,24 @@ int main(int argc, char **argv) {
                     hc_gen_initialize_light_stage(&lw, man[k].cx, man[k].cz);
                 }
                 if (sn->stage == 9) {
-                    /* S: 먼저 09-덤프된 그리드 + 자신 + 자격 있는 링 전부 */
-                    for (int32_t k = 0; k < dumped_before_n; k++)
-                        hc_gen_light_stage(&lw, dumped_before[k][0],
-                                           dumped_before[k][1]);
-                    hc_gen_light_stage(&lw, sn->cx, sn->cz);
-                    for (int32_t cz2 = -WR + 1; cz2 <= WR - 1; cz2++)
-                        for (int32_t cx2 = -WR + 1; cx2 <= WR - 1; cx2++) {
-                            if (is_grid(cx2, cz2))
-                                continue;
-                            int elig = 1;
-                            for (int dz = -1; dz <= 1 && elig; dz++)
-                                for (int dx = -1; dx <= 1 && elig; dx++) {
-                                    int found = 0;
-                                    for (int32_t k = 0; k < pos && !found;
-                                         k++)
-                                        if (man[k].cx == cx2 + dx &&
-                                            man[k].cz == cz2 + dz)
-                                            found = 1;
-                                    if (!found)
-                                        elig = 0;
-                                }
-                            if (elig)
-                                hc_gen_light_stage(&lw, cx2, cz2);
-                        }
+                    /* 기록된 09 완료 순서 (stages.log) 그대로: 자기 완료
+                     * 이벤트까지의 모든 라이트 스테이지를 enable — 링
+                     * 자격 휴리스틱 없음 (Task 13 unified 캡처). */
+                    int found = 0;
+                    for (int32_t k = 0; k < n_ll && !found; k++) {
+                        if (ll[k].cx < -(WR - 2) || ll[k].cx > WR - 2 ||
+                            ll[k].cz < -(WR - 2) || ll[k].cz > WR - 2)
+                            die("09 light completion outside ±(WR-2) before "
+                                "a grid dump — enlarge WR",
+                                bname);
+                        hc_gen_light_stage(&lw, ll[k].cx, ll[k].cz);
+                        if (ll[k].cx == sn->cx && ll[k].cz == sn->cz)
+                            found = 1;
+                    }
+                    if (!found)
+                        die("09 dump chunk missing from stages.log light "
+                            "order",
+                            bname);
                 }
                 hc_light_solve(&lw);
 
@@ -1221,12 +1253,6 @@ int main(int argc, char **argv) {
                          sname, sn->cx, sn->cz);
                 int64_t ls_bad =
                     compare_light(&lw, HC_LIGHT_SKY, c, glight, what, 10);
-
-                if (sn->stage == 9 && is_grid(sn->cx, sn->cz)) {
-                    dumped_before[dumped_before_n][0] = sn->cx;
-                    dumped_before[dumped_before_n][1] = sn->cz;
-                    dumped_before_n++;
-                }
 
                 int64_t total = bbad + hmbad + lb_bad + ls_bad;
                 /* --- 09 부분 게이트 (fallback 프로토콜, 2026-07-31) ---
@@ -1282,10 +1308,13 @@ int main(int argc, char **argv) {
             }
 
             /* manifest 엔트리 pos 적용 (UNIMPLEMENTED 본문 발화는 즉사).
-             * seq 9 직전 = 기록 서버의 저장/언로드 웨이브 — *_WG 하이트맵
-             * 드롭 (hc_features.h 참조; 그리드/링2 07 덤프로 실증). */
-            if (pos == 9)
-                rg.wg_dropped = 1;
+             * Task 13 unified 번들: noSave 캡처 — 저장/언로드 웨이브 없음,
+             * wg_dropped 모델링 제거. 창(±(WR-1)) 밖 엔트리는 스킵 (리전
+             * 전체 manifest; 프리픽스 시맨틱은 글로벌 seq 그대로). */
+            if (pos < max_prefix &&
+                (man[pos].cx < -(WR - 1) || man[pos].cx > WR - 1 ||
+                 man[pos].cz < -(WR - 1) || man[pos].cz > WR - 1))
+                continue;
             if (pos < max_prefix) {
                 if (getenv("HC_LIGHT_TRACE_DIAG") && bundle == 0) {
                     static char ours_buf[256 << 10], gold_buf[256 << 10];

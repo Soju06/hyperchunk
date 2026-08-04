@@ -9,7 +9,9 @@
     "ConfiguredFeatureMixin",
     "PlacedFeatureMixin",
     "StructureStartMixin",
-    "OreFeatureMixin"
+    "OreFeatureMixin",
+    "LevelChunkMixin",
+    "ServerLevelMixin"
   ],
   "injectors": {
     "defaultRequire": 1

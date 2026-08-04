@@ -585,7 +585,7 @@ int main(int argc, char **argv) {
     rg.ticks = &recorder;
 
     /* --- primary 번들 manifest 전체 재생 --- */
-    enum { MAX_MANIFEST = 128 };
+    enum { MAX_MANIFEST = 4096 };
     static manifest_line_t man[MAX_MANIFEST];
     char mpath[1024];
     snprintf(mpath, sizeof mpath, "%s/order.manifest", stages_dir);
@@ -593,9 +593,16 @@ int main(int argc, char **argv) {
     if (n_man < 81)
         die("manifest unexpectedly short", mpath);
 
+    /* Task 13 unified bundle: noSave 캡처라 저장/언로드 웨이브가 없다 —
+     * wg_dropped 모델링 제거. manifest 는 리전 전체 (1461 엔트리) 를
+     * 기록하므로 11x11 월드 밖 엔트리는 스킵한다. 이 필터가 게이트
+     * 4청크에 대해 EXACT 함은 캡처 시 실측 — 게이트 영향원뿔 (-2..3)^2
+     * 의 모든 엔트리보다 앞서 데코된 창밖 청크가 없다
+     * (tools/golden/check_capture_coherence.py check 7). */
     for (int32_t pos = 0; pos < n_man; pos++) {
-        if (pos == 9)
-            rg.wg_dropped = 1; /* seq-9 저장/언로드 웨이브 (Task 10) */
+        if (man[pos].cx < -(WR - 1) || man[pos].cx > WR - 1 ||
+            man[pos].cz < -(WR - 1) || man[pos].cz > WR - 1)
+            continue;
         hc_gen_features_chunk(&rg, man[pos].cx, man[pos].cz, seed, freg,
                               &view, &g_reg, (int32_t)sea->num, 10,
                               &g_guard_sink);
@@ -611,6 +618,9 @@ int main(int argc, char **argv) {
         if (hc_light_attach(&lw, &g_arena, &g_world.chunks[i]) != 0)
             die("arena exhausted (light chunks)", NULL);
     for (int32_t pos = 0; pos < n_man; pos++) {
+        if (man[pos].cx < -(WR - 1) || man[pos].cx > WR - 1 ||
+            man[pos].cz < -(WR - 1) || man[pos].cz > WR - 1)
+            continue; /* 리전 전체 manifest — 라이트 월드(±5) 밖 스킵 */
         hc_light_set_featured(&lw, man[pos].cx, man[pos].cz);
         hc_gen_initialize_light_stage(&lw, man[pos].cx, man[pos].cz);
     }

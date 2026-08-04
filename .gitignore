@@ -20,11 +20,15 @@ golden/stages/**
 !golden/stages/*/
 !golden/stages/*/order.manifest
 !golden/stages/*/order.snapshots
+!golden/stages/*/postprocess.manifest
+!golden/stages/*/stages.log
 golden/stages-alt/**
 !golden/stages-alt/SHA256SUMS
 !golden/stages-alt/*/
 !golden/stages-alt/*/order.manifest
 !golden/stages-alt/*/order.snapshots
+!golden/stages-alt/*/postprocess.manifest
+!golden/stages-alt/*/stages.log
 golden/features-trace/**
 !golden/features-trace/FORMAT.md
 !golden/features-trace/SHA256SUMS

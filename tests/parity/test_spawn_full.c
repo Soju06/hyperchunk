@@ -765,7 +765,7 @@ int main(int argc, char **argv) {
                 &g_world.chunks[widx(cx, cz)];
 
     /* --- 번들 재생 --- */
-    enum { MAX_MANIFEST = 128, MAX_SNAPS = 32 };
+    enum { MAX_MANIFEST = 4096, MAX_SNAPS = 32 };
     static manifest_line_t man[MAX_MANIFEST];
     static snap_t          snaps[MAX_SNAPS];
 
@@ -972,11 +972,12 @@ int main(int argc, char **argv) {
                                : "");
             }
 
-            /* manifest 엔트리 pos 적용. seq 9 직전 = 기록 서버의 저장/
-             * 언로드 웨이브 — *_WG 하이트맵 드롭 (09 게이트와 동일). */
-            if (pos == 9)
-                rg.wg_dropped = 1;
-            if (pos < max_prefix)
+            /* manifest 엔트리 pos 적용. Task 13 unified 번들: noSave 캡처 —
+             * 저장/언로드 웨이브 없음, wg_dropped 모델링 제거. 창 밖
+             * 엔트리 스킵 (09 게이트와 동일). */
+            if (pos < max_prefix &&
+                man[pos].cx >= -(WR - 1) && man[pos].cx <= WR - 1 &&
+                man[pos].cz >= -(WR - 1) && man[pos].cz <= WR - 1)
                 hc_gen_features_chunk(&rg, man[pos].cx, man[pos].cz, seed,
                                       freg, &view, &g_reg, (int32_t)sea->num,
                                       /*walk_max_step=*/10, &g_guard_sink);

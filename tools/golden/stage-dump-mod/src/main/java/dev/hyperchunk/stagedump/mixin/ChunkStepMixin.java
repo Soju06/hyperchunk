@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import dev.hyperchunk.stagedump.StageDumper;
+import dev.hyperchunk.stagedump.StageLog;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.util.StaticCache2D;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -39,11 +40,20 @@ public abstract class ChunkStepMixin {
         ChunkStep self = (ChunkStep) (Object) this;
         ChunkStatus status = self.targetStatus();
         if (!StageDumper.isGenerationStep(self, status)
-                || !StageDumper.wants(ctx, chunk.getPos(), status)) {
+                || !ctx.level().dimension().identifier().toString()
+                        .equals(StageDumper.dimension())) {
             return;
         }
+        // stages.log records EVERY chunk's stage completions (ring light
+        // timing is replay input — see StageLog); the full dump additionally
+        // runs for grid chunks only.
+        boolean wantsDump = StageDumper.wants(ctx, chunk.getPos(), status);
         cir.setReturnValue(cir.getReturnValue().thenApply(result -> {
-            StageDumper.dump(ctx, status, result);
+            StageLog.record(status.getIndex(), StageDumper.stageName(status),
+                    result.getPos());
+            if (wantsDump) {
+                StageDumper.dump(ctx, status, result);
+            }
             return result;
         }));
     }
