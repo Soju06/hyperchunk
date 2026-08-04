@@ -1,0 +1,301 @@
+state	blocksMotion	legacySolid	fullOcclude	replaceable	emission	lightBlock	shapeOcclusion	notes	collisionFull
+minecraft:brown_bed[facing=east,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:brown_bed[facing=east,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:jigsaw[orientation=down_east]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=down_north]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=down_south]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=down_west]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=east_up]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=north_up]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=south_up]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=up_east]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=up_north]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=up_south]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=up_west]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:jigsaw[orientation=west_up]	t	t	t	f	0	15	none	JigsawBlock: plain full cube, no shape/light overrides (javap); strength(-1,3.6e6)	t
+minecraft:magenta_bed[facing=east,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:magenta_bed[facing=east,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:mangrove_wood[axis=x]	t	t	t	f	0	15	none		t
+minecraft:muddy_mangrove_roots[axis=x]	t	t	t	f	0	15	none		t
+minecraft:oxidized_copper_trapdoor[facing=east,half=top,open=false,powered=false,waterlogged=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true	f
+minecraft:purple_bed[facing=west,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:purple_bed[facing=west,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:red_bed[facing=east,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:red_bed[facing=east,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr	f
+minecraft:stone_brick_slab[type=bottom,waterlogged=false]	t	t	f	f	0	0	D:f,U:0,N:3,S:3,W:3,E:3	useShapeForLightOcclusion (type!=double)	f
+minecraft:structure_block[mode=data]	t	t	t	f	0	15	none	StructureBlock: plain full cube, no shape/light overrides (javap); mode no effect	t
+minecraft:tripwire[attached=false,disarmed=false,east=false,north=false,powered=false,south=false,west=true]	f	f	f	f	0	0	none	noCollision; thin shape	f
+minecraft:vine[east=false,north=true,south=false,up=true,west=false]	f	f	f	t	0	0	none	replaceable; noCollision; VineBlock.propagatesSkylightDown=true	f
+minecraft:waxed_copper_door[facing=north,half=lower,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true	f
+minecraft:waxed_copper_door[facing=north,half=upper,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true	f
+minecraft:waxed_oxidized_copper_trapdoor[facing=north,half=top,open=false,powered=false,waterlogged=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true	f
+minecraft:waxed_oxidized_copper_trapdoor[facing=north,half=top,open=true,powered=false,waterlogged=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=outer_right,waterlogged=false]	t	t	f	f	0	0	D:f,U:8,N:3,S:b,W:3,E:b	useShapeForLightOcclusion=true	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=outer_left,waterlogged=false]	t	t	f	f	0	0	D:f,U:4,N:3,S:7,W:b,E:3	useShapeForLightOcclusion=true	f
+# features
+minecraft:birch_log[axis=x]	t	t	t	f	0	15	none		t
+minecraft:birch_log[axis=y]	t	t	t	f	0	15	none		t
+minecraft:birch_log[axis=z]	t	t	t	f	0	15	none		t
+minecraft:birch_leaves[distance=1,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override	t
+minecraft:birch_leaves[distance=2,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override	t
+minecraft:birch_leaves[distance=3,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override	t
+minecraft:birch_leaves[distance=4,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override	t
+minecraft:birch_leaves[distance=5,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override	t
+minecraft:birch_leaves[distance=6,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override	t
+minecraft:birch_leaves[distance=7,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override	t
+minecraft:birch_leaves[distance=1,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override; FLUID=water	t
+minecraft:birch_leaves[distance=2,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override; FLUID=water	t
+minecraft:birch_leaves[distance=3,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override; FLUID=water	t
+minecraft:birch_leaves[distance=4,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override; FLUID=water	t
+minecraft:birch_leaves[distance=5,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override; FLUID=water	t
+minecraft:birch_leaves[distance=6,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override; FLUID=water	t
+minecraft:birch_leaves[distance=7,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	LEAVES(TintedParticleLeavesBlock->LeavesBlock); getLightDampening=1 override; FLUID=water	t
+minecraft:oxeye_daisy	f	f	f	f	0	0	none	FlowerBlock; noCollision; VegetationBlock.propagatesSkylightDown=fluid.isEmpty()	f
+minecraft:cornflower	f	f	f	f	0	0	none	FlowerBlock; noCollision; VegetationBlock.propagatesSkylightDown=fluid.isEmpty()	f
+minecraft:orange_tulip	f	f	f	f	0	0	none	FlowerBlock; noCollision; VegetationBlock.propagatesSkylightDown=fluid.isEmpty()	f
+minecraft:red_tulip	f	f	f	f	0	0	none	FlowerBlock; noCollision; VegetationBlock.propagatesSkylightDown=fluid.isEmpty()	f
+minecraft:pink_tulip	f	f	f	f	0	0	none	FlowerBlock; noCollision; VegetationBlock.propagatesSkylightDown=fluid.isEmpty()	f
+minecraft:white_tulip	f	f	f	f	0	0	none	FlowerBlock; noCollision; VegetationBlock.propagatesSkylightDown=fluid.isEmpty()	f
+minecraft:leaf_litter[facing=east,segment_amount=1]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=east,segment_amount=2]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=east,segment_amount=3]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=east,segment_amount=4]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=north,segment_amount=1]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=north,segment_amount=2]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=north,segment_amount=3]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=north,segment_amount=4]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=south,segment_amount=1]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=south,segment_amount=2]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=south,segment_amount=3]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=south,segment_amount=4]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=west,segment_amount=1]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=west,segment_amount=2]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=west,segment_amount=3]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:leaf_litter[facing=west,segment_amount=4]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0	f
+minecraft:acacia_log[axis=x]	t	t	t	f	0	15	none	RotatedPillarBlock full cube (== birch_log)	t
+minecraft:acacia_log[axis=y]	t	t	t	f	0	15	none	RotatedPillarBlock full cube (== birch_log)	t
+minecraft:acacia_log[axis=z]	t	t	t	f	0	15	none	RotatedPillarBlock full cube (== birch_log)	t
+minecraft:acacia_leaves[distance=1,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=2,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=3,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=4,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=5,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=6,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=7,persistent=false,waterlogged=false]	t	t	f	f	0	1	none	TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=1,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=2,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=3,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=4,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=5,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=6,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; TintedParticleLeavesBlock (== birch_leaves)	t
+minecraft:acacia_leaves[distance=7,persistent=false,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; TintedParticleLeavesBlock (== birch_leaves)	t
+# appendix: collisionFull for the 209 states of R-blockprops.tsv (state<TAB>collisionFull)
+minecraft:azure_bluet	f
+minecraft:barrel[facing=up,open=false]	t
+minecraft:black_stained_glass	t
+minecraft:brown_bed[facing=south,occupied=false,part=foot]	f
+minecraft:brown_bed[facing=south,occupied=false,part=head]	f
+minecraft:bubble_column[drag=true]	f
+minecraft:candle[candles=1,lit=false,waterlogged=false]	f
+minecraft:candle[candles=2,lit=false,waterlogged=false]	f
+minecraft:candle[candles=3,lit=false,waterlogged=false]	f
+minecraft:candle[candles=4,lit=false,waterlogged=false]	f
+minecraft:chest[facing=north,type=single,waterlogged=true]	f
+minecraft:chest[facing=west,type=single,waterlogged=true]	f
+minecraft:chiseled_tuff	t
+minecraft:chiseled_tuff_bricks	t
+minecraft:cobbled_deepslate	t
+minecraft:cobweb	f
+minecraft:cracked_stone_bricks	t
+minecraft:crying_obsidian	t
+minecraft:cut_sandstone	t
+minecraft:decorated_pot[cracked=false,facing=east,waterlogged=false]	f
+minecraft:decorated_pot[cracked=false,facing=north,waterlogged=false]	f
+minecraft:decorated_pot[cracked=false,facing=south,waterlogged=false]	f
+minecraft:decorated_pot[cracked=false,facing=west,waterlogged=false]	f
+minecraft:dispenser[facing=east,triggered=false]	t
+minecraft:dispenser[facing=north,triggered=false]	t
+minecraft:dispenser[facing=south,triggered=false]	t
+minecraft:dispenser[facing=west,triggered=false]	t
+minecraft:flower_pot	f
+minecraft:hopper[enabled=true,facing=down]	f
+minecraft:iron_chain[axis=y,waterlogged=false]	f
+minecraft:jungle_fence[east=false,north=false,south=true,waterlogged=false,west=false]	f
+minecraft:jungle_fence[east=false,north=false,south=true,waterlogged=false,west=true]	f
+minecraft:jungle_fence[east=false,north=true,south=false,waterlogged=false,west=false]	f
+minecraft:jungle_fence[east=false,north=true,south=false,waterlogged=false,west=true]	f
+minecraft:jungle_fence[east=false,north=true,south=false,waterlogged=true,west=false]	f
+minecraft:jungle_fence[east=false,north=true,south=true,waterlogged=false,west=false]	f
+minecraft:jungle_fence[east=false,north=true,south=true,waterlogged=true,west=false]	f
+minecraft:jungle_fence[east=true,north=false,south=false,waterlogged=false,west=true]	f
+minecraft:jungle_fence[east=true,north=false,south=true,waterlogged=false,west=false]	f
+minecraft:jungle_fence[east=true,north=true,south=false,waterlogged=false,west=false]	f
+minecraft:jungle_planks	t
+minecraft:jungle_slab[type=bottom,waterlogged=false]	f
+minecraft:jungle_slab[type=bottom,waterlogged=true]	f
+minecraft:jungle_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:jungle_stairs[facing=north,half=top,shape=straight,waterlogged=false]	f
+minecraft:jungle_stairs[facing=north,half=top,shape=straight,waterlogged=true]	f
+minecraft:jungle_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:jungle_stairs[facing=south,half=top,shape=straight,waterlogged=false]	f
+minecraft:ladder[facing=east,waterlogged=false]	f
+minecraft:ladder[facing=north,waterlogged=false]	f
+minecraft:ladder[facing=south,waterlogged=false]	f
+minecraft:ladder[facing=west,waterlogged=false]	f
+minecraft:leaf_litter[facing=east,segment_amount=2]	f
+minecraft:leaf_litter[facing=north,segment_amount=2]	f
+minecraft:leaf_litter[facing=west,segment_amount=2]	f
+minecraft:leaf_litter[facing=west,segment_amount=4]	f
+minecraft:magenta_bed[facing=south,occupied=false,part=foot]	f
+minecraft:magenta_bed[facing=south,occupied=false,part=head]	f
+minecraft:mangrove_leaves[distance=1,persistent=true,waterlogged=false]	t
+minecraft:mangrove_leaves[distance=2,persistent=true,waterlogged=false]	t
+minecraft:mangrove_leaves[distance=3,persistent=true,waterlogged=false]	t
+minecraft:mangrove_leaves[distance=4,persistent=true,waterlogged=false]	t
+minecraft:mangrove_leaves[distance=7,persistent=true,waterlogged=false]	t
+minecraft:mangrove_log[axis=y]	t
+minecraft:mangrove_roots[waterlogged=false]	t
+minecraft:mangrove_wood[axis=y]	t
+minecraft:mangrove_wood[axis=z]	t
+minecraft:mossy_stone_brick_slab[type=bottom,waterlogged=true]	f
+minecraft:mossy_stone_brick_stairs[facing=east,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:mossy_stone_brick_stairs[facing=east,half=top,shape=outer_left,waterlogged=true]	f
+minecraft:mossy_stone_brick_stairs[facing=north,half=top,shape=straight,waterlogged=true]	f
+minecraft:mossy_stone_brick_stairs[facing=south,half=top,shape=outer_left,waterlogged=true]	f
+minecraft:mossy_stone_brick_stairs[facing=west,half=top,shape=straight,waterlogged=true]	f
+minecraft:mossy_stone_bricks	t
+minecraft:muddy_mangrove_roots[axis=z]	t
+minecraft:netherrack	t
+minecraft:oak_button[face=floor,facing=east,powered=false]	f
+minecraft:oak_button[face=floor,facing=north,powered=false]	f
+minecraft:oak_button[face=floor,facing=south,powered=false]	f
+minecraft:oak_button[face=floor,facing=west,powered=false]	f
+minecraft:oak_fence[east=false,north=false,south=false,waterlogged=false,west=false]	f
+minecraft:oak_fence[east=false,north=false,south=false,waterlogged=false,west=true]	f
+minecraft:oak_fence[east=false,north=false,south=true,waterlogged=false,west=false]	f
+minecraft:oak_fence[east=false,north=true,south=false,waterlogged=false,west=false]	f
+minecraft:oak_fence[east=false,north=true,south=true,waterlogged=false,west=false]	f
+minecraft:oak_fence[east=true,north=false,south=false,waterlogged=false,west=false]	f
+minecraft:oak_planks	t
+minecraft:obsidian	t
+minecraft:oxidized_copper_trapdoor[facing=south,half=top,open=false,powered=false,waterlogged=false]	f
+minecraft:oxidized_cut_copper	t
+minecraft:polished_andesite	t
+minecraft:polished_granite	t
+minecraft:polished_tuff	t
+minecraft:polished_tuff_slab[type=top,waterlogged=false]	f
+minecraft:potted_dead_bush	f
+minecraft:purple_bed[facing=north,occupied=false,part=foot]	f
+minecraft:purple_bed[facing=north,occupied=false,part=head]	f
+minecraft:rail[shape=east_west,waterlogged=false]	f
+minecraft:rail[shape=north_south,waterlogged=false]	f
+minecraft:red_bed[facing=south,occupied=false,part=foot]	f
+minecraft:red_bed[facing=south,occupied=false,part=head]	f
+minecraft:red_candle[candles=3,lit=true,waterlogged=false]	f
+minecraft:red_candle[candles=4,lit=true,waterlogged=false]	f
+minecraft:red_glazed_terracotta[facing=east]	t
+minecraft:red_glazed_terracotta[facing=north]	t
+minecraft:red_glazed_terracotta[facing=south]	t
+minecraft:red_glazed_terracotta[facing=west]	t
+minecraft:spruce_door[facing=east,half=lower,hinge=left,open=false,powered=false]	f
+minecraft:spruce_door[facing=east,half=upper,hinge=left,open=false,powered=false]	f
+minecraft:spruce_fence[east=false,north=false,south=false,waterlogged=false,west=true]	f
+minecraft:spruce_fence[east=false,north=false,south=true,waterlogged=false,west=true]	f
+minecraft:spruce_fence[east=true,north=false,south=false,waterlogged=false,west=false]	f
+minecraft:spruce_fence[east=true,north=false,south=true,waterlogged=false,west=false]	f
+minecraft:spruce_fence[east=true,north=true,south=false,waterlogged=false,west=false]	f
+minecraft:spruce_log[axis=y]	t
+minecraft:spruce_planks	t
+minecraft:spruce_slab[type=bottom,waterlogged=false]	f
+minecraft:spruce_slab[type=bottom,waterlogged=true]	f
+minecraft:spruce_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:spruce_stairs[facing=east,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:spruce_stairs[facing=east,half=top,shape=outer_left,waterlogged=true]	f
+minecraft:spruce_stairs[facing=east,half=top,shape=straight,waterlogged=false]	f
+minecraft:spruce_stairs[facing=east,half=top,shape=straight,waterlogged=true]	f
+minecraft:spruce_stairs[facing=north,half=top,shape=outer_left,waterlogged=false]	f
+minecraft:spruce_stairs[facing=north,half=top,shape=outer_right,waterlogged=false]	f
+minecraft:spruce_stairs[facing=north,half=top,shape=straight,waterlogged=false]	f
+minecraft:spruce_stairs[facing=north,half=top,shape=straight,waterlogged=true]	f
+minecraft:spruce_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:spruce_stairs[facing=south,half=top,shape=straight,waterlogged=true]	f
+minecraft:spruce_stairs[facing=west,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:spruce_stairs[facing=west,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:spruce_stairs[facing=west,half=top,shape=outer_right,waterlogged=true]	f
+minecraft:spruce_stairs[facing=west,half=top,shape=straight,waterlogged=false]	f
+minecraft:spruce_stairs[facing=west,half=top,shape=straight,waterlogged=true]	f
+minecraft:spruce_trapdoor[facing=north,half=top,open=false,powered=false,waterlogged=false]	f
+minecraft:stone_brick_slab[type=bottom,waterlogged=true]	f
+minecraft:stone_brick_stairs[facing=west,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:stone_bricks	t
+minecraft:suspicious_sand[dusted=0]	t
+minecraft:trial_spawner[ominous=false,trial_spawner_state=waiting_for_players]	t
+minecraft:tripwire[attached=false,disarmed=false,east=false,north=false,powered=false,south=false,west=false]	f
+minecraft:tripwire[attached=false,disarmed=false,east=true,north=false,powered=false,south=false,west=false]	f
+minecraft:tripwire[attached=false,disarmed=false,east=true,north=false,powered=false,south=false,west=true]	f
+minecraft:tripwire[attached=true,disarmed=false,east=true,north=false,powered=false,south=false,west=true]	f
+minecraft:tripwire_hook[attached=false,facing=east,powered=false]	f
+minecraft:tripwire_hook[attached=false,facing=west,powered=false]	f
+minecraft:tripwire_hook[attached=true,facing=east,powered=false]	f
+minecraft:tripwire_hook[attached=true,facing=west,powered=false]	f
+minecraft:tuff_bricks	t
+minecraft:vault[facing=east,ominous=false,vault_state=inactive]	t
+minecraft:vault[facing=east,ominous=true,vault_state=inactive]	t
+minecraft:vault[facing=north,ominous=false,vault_state=inactive]	t
+minecraft:vault[facing=north,ominous=true,vault_state=inactive]	t
+minecraft:vault[facing=south,ominous=false,vault_state=inactive]	t
+minecraft:vault[facing=south,ominous=true,vault_state=inactive]	t
+minecraft:vault[facing=west,ominous=false,vault_state=inactive]	t
+minecraft:vault[facing=west,ominous=true,vault_state=inactive]	t
+minecraft:vine[east=true,north=false,south=false,up=true,west=false]	f
+minecraft:wall_torch[facing=east]	f
+minecraft:wall_torch[facing=north]	f
+minecraft:wall_torch[facing=south]	f
+minecraft:wall_torch[facing=west]	f
+minecraft:waxed_chiseled_copper	t
+minecraft:waxed_copper_block	t
+minecraft:waxed_copper_bulb[lit=false,powered=false]	t
+minecraft:waxed_copper_bulb[lit=true,powered=false]	t
+minecraft:waxed_copper_door[facing=east,half=lower,hinge=right,open=false,powered=false]	f
+minecraft:waxed_copper_door[facing=east,half=upper,hinge=right,open=false,powered=false]	f
+minecraft:waxed_copper_grate[waterlogged=false]	t
+minecraft:waxed_cut_copper	t
+minecraft:waxed_cut_copper_slab[type=bottom,waterlogged=false]	f
+minecraft:waxed_cut_copper_slab[type=top,waterlogged=false]	f
+minecraft:waxed_cut_copper_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:waxed_cut_copper_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:waxed_exposed_copper_bulb[lit=true,powered=false]	t
+minecraft:waxed_oxidized_chiseled_copper	t
+minecraft:waxed_oxidized_copper	t
+minecraft:waxed_oxidized_copper_bulb[lit=true,powered=false]	t
+minecraft:waxed_oxidized_copper_door[facing=north,half=lower,hinge=right,open=false,powered=false]	f
+minecraft:waxed_oxidized_copper_door[facing=north,half=upper,hinge=right,open=false,powered=false]	f
+minecraft:waxed_oxidized_copper_door[facing=west,half=lower,hinge=right,open=false,powered=false]	f
+minecraft:waxed_oxidized_copper_door[facing=west,half=upper,hinge=right,open=false,powered=false]	f
+minecraft:waxed_oxidized_copper_grate[waterlogged=false]	t
+minecraft:waxed_oxidized_copper_trapdoor[facing=east,half=top,open=false,powered=false,waterlogged=false]	f
+minecraft:waxed_oxidized_copper_trapdoor[facing=east,half=top,open=true,powered=false,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper	t
+minecraft:waxed_oxidized_cut_copper_slab[type=bottom,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_slab[type=top,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=inner_left,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_left,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_left,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_right,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_right,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_left,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_left,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_right,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_right,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=inner_right,waterlogged=true]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=straight,waterlogged=false]	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=straight,waterlogged=true]	f
+minecraft:waxed_weathered_copper_bulb[lit=true,powered=false]	t
+minecraft:white_concrete	t
+minecraft:white_stained_glass	t

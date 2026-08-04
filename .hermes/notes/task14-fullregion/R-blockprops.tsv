@@ -1,0 +1,214 @@
+state	blocksMotion	legacySolid	fullOcclude	replaceable	emission	lightBlock	shapeOcclusion	notes
+minecraft:azure_bluet	f	f	f	f	0	0	none	noCollision; VegetationBlock.propagatesSkylightDown=fluid.isEmpty()
+minecraft:barrel[facing=up,open=false]	t	t	t	f	0	15	none	
+minecraft:black_stained_glass	t	t	f	f	0	0	none	TransparentBlock.propagatesSkylightDown=true; noOcclusion
+minecraft:brown_bed[facing=south,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:brown_bed[facing=south,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:bubble_column[drag=true]	f	f	f	t	0	1	none	FLUID=water source always (BubbleColumnBlock.getFluidState); shape empty; noCollision; replaceable
+minecraft:candle[candles=1,lit=false,waterlogged=false]	f	f	f	f	0	0	none	CandleBlock.LIGHT_EMISSION=lit?3*candles:0
+minecraft:candle[candles=2,lit=false,waterlogged=false]	f	f	f	f	0	0	none	CandleBlock.LIGHT_EMISSION=lit?3*candles:0
+minecraft:candle[candles=3,lit=false,waterlogged=false]	f	f	f	f	0	0	none	CandleBlock.LIGHT_EMISSION=lit?3*candles:0
+minecraft:candle[candles=4,lit=false,waterlogged=false]	f	f	f	f	0	0	none	CandleBlock.LIGHT_EMISSION=lit?3*candles:0
+minecraft:chest[facing=north,type=single,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; canOcclude=true but occl shape column(14,0,14) not full; bounds avg=0.875
+minecraft:chest[facing=west,type=single,waterlogged=true]	t	t	f	f	0	1	none	FLUID=water; canOcclude=true but occl shape column(14,0,14) not full; bounds avg=0.875
+minecraft:chiseled_tuff	t	t	t	f	0	15	none	
+minecraft:chiseled_tuff_bricks	t	t	t	f	0	15	none	
+minecraft:cobbled_deepslate	t	t	t	f	0	15	none	
+minecraft:cobweb	f	t	f	f	0	1	none	forceSolidOn+noCollision; blocksMotion special-cases COBWEB->false; full outline shape -> lb1
+minecraft:cracked_stone_bricks	t	t	t	f	0	15	none	
+minecraft:crying_obsidian	t	t	t	f	10	15	none	lightLevel(s->10)
+minecraft:cut_sandstone	t	t	t	f	0	15	none	
+minecraft:decorated_pot[cracked=false,facing=east,waterlogged=false]	t	t	f	f	0	0	none	shape column(14,0,16) not full; bounds avg~0.9167
+minecraft:decorated_pot[cracked=false,facing=north,waterlogged=false]	t	t	f	f	0	0	none	shape column(14,0,16) not full; bounds avg~0.9167
+minecraft:decorated_pot[cracked=false,facing=south,waterlogged=false]	t	t	f	f	0	0	none	shape column(14,0,16) not full; bounds avg~0.9167
+minecraft:decorated_pot[cracked=false,facing=west,waterlogged=false]	t	t	f	f	0	0	none	shape column(14,0,16) not full; bounds avg~0.9167
+minecraft:dispenser[facing=east,triggered=false]	t	t	t	f	0	15	none	
+minecraft:dispenser[facing=north,triggered=false]	t	t	t	f	0	15	none	
+minecraft:dispenser[facing=south,triggered=false]	t	t	t	f	0	15	none	
+minecraft:dispenser[facing=west,triggered=false]	t	t	t	f	0	15	none	
+minecraft:flower_pot	f	f	f	f	0	0	none	shape column(6,0,6); avg 0.375 < thr, ysize<1
+minecraft:hopper[enabled=true,facing=down]	t	t	f	f	0	0	none	noOcclusion; bounds avg>=0.9167
+minecraft:iron_chain[axis=y,waterlogged=false]	t	t	f	f	0	0	none	forceSolidOn; noOcclusion; 3x3 shape
+minecraft:jungle_fence[east=false,north=false,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=false,north=false,south=true,waterlogged=false,west=true]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=false,north=true,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=false,north=true,south=false,waterlogged=false,west=true]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=false,north=true,south=false,waterlogged=true,west=false]	t	t	f	f	0	1	none	FLUID=water; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=false,north=true,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=false,north=true,south=true,waterlogged=true,west=false]	t	t	f	f	0	1	none	FLUID=water; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=true,north=false,south=false,waterlogged=false,west=true]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=true,north=false,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_fence[east=true,north=true,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:jungle_planks	t	t	t	f	0	15	none	
+minecraft:jungle_slab[type=bottom,waterlogged=false]	t	t	f	f	0	0	D:f,U:0,N:3,S:3,W:3,E:3	useShapeForLightOcclusion (type!=double)
+minecraft:jungle_slab[type=bottom,waterlogged=true]	t	t	f	f	0	1	D:f,U:0,N:3,S:3,W:3,E:3	FLUID=water; useShapeForLightOcclusion (type!=double)
+minecraft:jungle_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:3,N:f,S:3,W:7,E:7	FLUID=water; useShapeForLightOcclusion=true
+minecraft:jungle_stairs[facing=north,half=top,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:3,U:f,N:f,S:c,W:d,E:d	useShapeForLightOcclusion=true
+minecraft:jungle_stairs[facing=north,half=top,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:3,U:f,N:f,S:c,W:d,E:d	FLUID=water; useShapeForLightOcclusion=true
+minecraft:jungle_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:c,N:3,S:f,W:b,E:b	useShapeForLightOcclusion=true
+minecraft:jungle_stairs[facing=south,half=top,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:c,U:f,N:c,S:f,W:e,E:e	useShapeForLightOcclusion=true
+minecraft:ladder[facing=east,waterlogged=false]	f	f	f	f	0	0	none	forceSolidOff
+minecraft:ladder[facing=north,waterlogged=false]	f	f	f	f	0	0	none	forceSolidOff
+minecraft:ladder[facing=south,waterlogged=false]	f	f	f	f	0	0	none	forceSolidOff
+minecraft:ladder[facing=west,waterlogged=false]	f	f	f	f	0	0	none	forceSolidOff
+minecraft:leaf_litter[facing=east,segment_amount=2]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0
+minecraft:leaf_litter[facing=north,segment_amount=2]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0
+minecraft:leaf_litter[facing=west,segment_amount=2]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0
+minecraft:leaf_litter[facing=west,segment_amount=4]	f	f	f	t	0	0	none	replaceable; noCollision; flat shape -> lb0
+minecraft:magenta_bed[facing=south,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:magenta_bed[facing=south,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:mangrove_leaves[distance=1,persistent=true,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(LeavesBlock); getLightDampening=1 override
+minecraft:mangrove_leaves[distance=2,persistent=true,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(LeavesBlock); getLightDampening=1 override
+minecraft:mangrove_leaves[distance=3,persistent=true,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(LeavesBlock); getLightDampening=1 override
+minecraft:mangrove_leaves[distance=4,persistent=true,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(LeavesBlock); getLightDampening=1 override
+minecraft:mangrove_leaves[distance=7,persistent=true,waterlogged=false]	t	t	f	f	0	1	none	LEAVES(LeavesBlock); getLightDampening=1 override
+minecraft:mangrove_log[axis=y]	t	t	t	f	0	15	none	
+minecraft:mangrove_roots[waterlogged=false]	t	t	f	f	0	1	none	noOcclusion; full default shape -> propagates=false -> lb1
+minecraft:mangrove_wood[axis=y]	t	t	t	f	0	15	none	
+minecraft:mangrove_wood[axis=z]	t	t	t	f	0	15	none	
+minecraft:mossy_stone_brick_slab[type=bottom,waterlogged=true]	t	t	f	f	0	1	D:f,U:0,N:3,S:3,W:3,E:3	FLUID=water; useShapeForLightOcclusion (type!=double)
+minecraft:mossy_stone_brick_stairs[facing=east,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:a,N:b,S:b,W:3,E:f	FLUID=water; useShapeForLightOcclusion=true
+minecraft:mossy_stone_brick_stairs[facing=east,half=top,shape=outer_left,waterlogged=true]	t	t	f	f	0	1	D:2,U:f,N:e,S:c,W:c,E:d	FLUID=water; useShapeForLightOcclusion=true
+minecraft:mossy_stone_brick_stairs[facing=north,half=top,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:3,U:f,N:f,S:c,W:d,E:d	FLUID=water; useShapeForLightOcclusion=true
+minecraft:mossy_stone_brick_stairs[facing=south,half=top,shape=outer_left,waterlogged=true]	t	t	f	f	0	1	D:8,U:f,N:c,S:e,W:c,E:e	FLUID=water; useShapeForLightOcclusion=true
+minecraft:mossy_stone_brick_stairs[facing=west,half=top,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:5,U:f,N:d,S:d,W:f,E:c	FLUID=water; useShapeForLightOcclusion=true
+minecraft:mossy_stone_bricks	t	t	t	f	0	15	none	
+minecraft:muddy_mangrove_roots[axis=z]	t	t	t	f	0	15	none	
+minecraft:netherrack	t	t	t	f	0	15	none	
+minecraft:oak_button[face=floor,facing=east,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:oak_button[face=floor,facing=north,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:oak_button[face=floor,facing=south,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:oak_button[face=floor,facing=west,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:oak_fence[east=false,north=false,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	forceSolidOn; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:oak_fence[east=false,north=false,south=false,waterlogged=false,west=true]	t	t	f	f	0	0	none	forceSolidOn; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:oak_fence[east=false,north=false,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	forceSolidOn; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:oak_fence[east=false,north=true,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	forceSolidOn; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:oak_fence[east=false,north=true,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	forceSolidOn; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:oak_fence[east=true,north=false,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	forceSolidOn; CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:oak_planks	t	t	t	f	0	15	none	
+minecraft:obsidian	t	t	t	f	0	15	none	
+minecraft:oxidized_copper_trapdoor[facing=south,half=top,open=false,powered=false,waterlogged=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:oxidized_cut_copper	t	t	t	f	0	15	none	
+minecraft:polished_andesite	t	t	t	f	0	15	none	
+minecraft:polished_granite	t	t	t	f	0	15	none	
+minecraft:polished_tuff	t	t	t	f	0	15	none	
+minecraft:polished_tuff_slab[type=top,waterlogged=false]	t	t	f	f	0	0	D:0,U:f,N:c,S:c,W:c,E:c	useShapeForLightOcclusion (type!=double)
+minecraft:potted_dead_bush	f	f	f	f	0	0	none	shape column(6,0,6); avg 0.375 < thr, ysize<1
+minecraft:purple_bed[facing=north,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:purple_bed[facing=north,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:rail[shape=east_west,waterlogged=false]	f	f	f	f	0	0	none	noCollision; flat shape
+minecraft:rail[shape=north_south,waterlogged=false]	f	f	f	f	0	0	none	noCollision; flat shape
+minecraft:red_bed[facing=south,occupied=false,part=foot]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:red_bed[facing=south,occupied=false,part=head]	t	t	f	f	0	0	none	noOcclusion; bounds avg=0.8541666666666666>=thr
+minecraft:red_candle[candles=3,lit=true,waterlogged=false]	f	f	f	f	9	0	none	CandleBlock.LIGHT_EMISSION=lit?3*candles:0
+minecraft:red_candle[candles=4,lit=true,waterlogged=false]	f	f	f	f	12	0	none	CandleBlock.LIGHT_EMISSION=lit?3*candles:0
+minecraft:red_glazed_terracotta[facing=east]	t	t	t	f	0	15	none	
+minecraft:red_glazed_terracotta[facing=north]	t	t	t	f	0	15	none	
+minecraft:red_glazed_terracotta[facing=south]	t	t	t	f	0	15	none	
+minecraft:red_glazed_terracotta[facing=west]	t	t	t	f	0	15	none	
+minecraft:spruce_door[facing=east,half=lower,hinge=left,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:spruce_door[facing=east,half=upper,hinge=left,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:spruce_fence[east=false,north=false,south=false,waterlogged=false,west=true]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:spruce_fence[east=false,north=false,south=true,waterlogged=false,west=true]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:spruce_fence[east=true,north=false,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:spruce_fence[east=true,north=false,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:spruce_fence[east=true,north=true,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	CrossCollisionBlock.propagatesSkylightDown=!waterlogged; collision ysize=1.5>=1.0
+minecraft:spruce_log[axis=y]	t	t	t	f	0	15	none	
+minecraft:spruce_planks	t	t	t	f	0	15	none	
+minecraft:spruce_slab[type=bottom,waterlogged=false]	t	t	f	f	0	0	D:f,U:0,N:3,S:3,W:3,E:3	useShapeForLightOcclusion (type!=double)
+minecraft:spruce_slab[type=bottom,waterlogged=true]	t	t	f	f	0	1	D:f,U:0,N:3,S:3,W:3,E:3	FLUID=water; useShapeForLightOcclusion (type!=double)
+minecraft:spruce_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:a,N:b,S:b,W:3,E:f	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=east,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:a,N:b,S:b,W:3,E:f	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=east,half=top,shape=outer_left,waterlogged=true]	t	t	f	f	0	1	D:2,U:f,N:e,S:c,W:c,E:d	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=east,half=top,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:a,U:f,N:e,S:e,W:c,E:f	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=east,half=top,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:a,U:f,N:e,S:e,W:c,E:f	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=north,half=top,shape=outer_left,waterlogged=false]	t	t	f	f	0	0	D:1,U:f,N:d,S:c,W:d,E:c	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=north,half=top,shape=outer_right,waterlogged=false]	t	t	f	f	0	0	D:2,U:f,N:e,S:c,W:c,E:d	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=north,half=top,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:3,U:f,N:f,S:c,W:d,E:d	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=north,half=top,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:3,U:f,N:f,S:c,W:d,E:d	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:c,N:3,S:f,W:b,E:b	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=south,half=top,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:c,U:f,N:c,S:f,W:e,E:e	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=west,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:5,N:7,S:7,W:f,E:3	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=west,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:5,N:7,S:7,W:f,E:3	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=west,half=top,shape=outer_right,waterlogged=true]	t	t	f	f	0	1	D:1,U:f,N:d,S:c,W:d,E:c	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=west,half=top,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:5,U:f,N:d,S:d,W:f,E:c	useShapeForLightOcclusion=true
+minecraft:spruce_stairs[facing=west,half=top,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:5,U:f,N:d,S:d,W:f,E:c	FLUID=water; useShapeForLightOcclusion=true
+minecraft:spruce_trapdoor[facing=north,half=top,open=false,powered=false,waterlogged=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:stone_brick_slab[type=bottom,waterlogged=true]	t	t	f	f	0	1	D:f,U:0,N:3,S:3,W:3,E:3	FLUID=water; useShapeForLightOcclusion (type!=double)
+minecraft:stone_brick_stairs[facing=west,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:5,N:7,S:7,W:f,E:3	FLUID=water; useShapeForLightOcclusion=true
+minecraft:stone_bricks	t	t	t	f	0	15	none	
+minecraft:suspicious_sand[dusted=0]	t	t	t	f	0	15	none	
+minecraft:trial_spawner[ominous=false,trial_spawner_state=waiting_for_players]	t	t	f	f	4	1	none	TrialSpawnerState.lightLevel(); noOcclusion+full shape -> lb1
+minecraft:tripwire[attached=false,disarmed=false,east=false,north=false,powered=false,south=false,west=false]	f	f	f	f	0	0	none	noCollision; thin shape
+minecraft:tripwire[attached=false,disarmed=false,east=true,north=false,powered=false,south=false,west=false]	f	f	f	f	0	0	none	noCollision; thin shape
+minecraft:tripwire[attached=false,disarmed=false,east=true,north=false,powered=false,south=false,west=true]	f	f	f	f	0	0	none	noCollision; thin shape
+minecraft:tripwire[attached=true,disarmed=false,east=true,north=false,powered=false,south=false,west=true]	f	f	f	f	0	0	none	noCollision; thin shape
+minecraft:tripwire_hook[attached=false,facing=east,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:tripwire_hook[attached=false,facing=west,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:tripwire_hook[attached=true,facing=east,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:tripwire_hook[attached=true,facing=west,powered=false]	f	f	f	f	0	0	none	noCollision
+minecraft:tuff_bricks	t	t	t	f	0	15	none	
+minecraft:vault[facing=east,ominous=false,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vault[facing=east,ominous=true,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vault[facing=north,ominous=false,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vault[facing=north,ominous=true,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vault[facing=south,ominous=false,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vault[facing=south,ominous=true,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vault[facing=west,ominous=false,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vault[facing=west,ominous=true,vault_state=inactive]	t	t	f	f	6	1	none	VaultState.lightLevel() HALF_LIT=6/LIT=12; ominous no effect; noOcclusion+full shape -> lb1
+minecraft:vine[east=true,north=false,south=false,up=true,west=false]	f	f	f	t	0	0	none	replaceable; noCollision; VineBlock.propagatesSkylightDown=true
+minecraft:wall_torch[facing=east]	f	f	f	f	14	0	none	lightLevel(s->14); noCollision
+minecraft:wall_torch[facing=north]	f	f	f	f	14	0	none	lightLevel(s->14); noCollision
+minecraft:wall_torch[facing=south]	f	f	f	f	14	0	none	lightLevel(s->14); noCollision
+minecraft:wall_torch[facing=west]	f	f	f	f	14	0	none	lightLevel(s->14); noCollision
+minecraft:waxed_chiseled_copper	t	t	t	f	0	15	none	
+minecraft:waxed_copper_block	t	t	t	f	0	15	none	
+minecraft:waxed_copper_bulb[lit=false,powered=false]	t	t	t	f	0	15	none	CopperBulbBlock; litBlockEmission(15)
+minecraft:waxed_copper_bulb[lit=true,powered=false]	t	t	t	f	15	15	none	CopperBulbBlock; litBlockEmission(15)
+minecraft:waxed_copper_door[facing=east,half=lower,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_copper_door[facing=east,half=upper,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_copper_grate[waterlogged=false]	t	t	f	f	0	0	none	WaterloggedTransparentBlock; propagatesSkylightDown=true (TransparentBlock); full collision -> legacySolid
+minecraft:waxed_cut_copper	t	t	t	f	0	15	none	
+minecraft:waxed_cut_copper_slab[type=bottom,waterlogged=false]	t	t	f	f	0	0	D:f,U:0,N:3,S:3,W:3,E:3	useShapeForLightOcclusion (type!=double)
+minecraft:waxed_cut_copper_slab[type=top,waterlogged=false]	t	t	f	f	0	0	D:0,U:f,N:c,S:c,W:c,E:c	useShapeForLightOcclusion (type!=double)
+minecraft:waxed_cut_copper_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:3,N:f,S:3,W:7,E:7	useShapeForLightOcclusion=true
+minecraft:waxed_cut_copper_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:c,N:3,S:f,W:b,E:b	useShapeForLightOcclusion=true
+minecraft:waxed_exposed_copper_bulb[lit=true,powered=false]	t	t	t	f	12	15	none	CopperBulbBlock; litBlockEmission(12)
+minecraft:waxed_oxidized_chiseled_copper	t	t	t	f	0	15	none	
+minecraft:waxed_oxidized_copper	t	t	t	f	0	15	none	
+minecraft:waxed_oxidized_copper_bulb[lit=true,powered=false]	t	t	t	f	4	15	none	CopperBulbBlock; litBlockEmission(4)
+minecraft:waxed_oxidized_copper_door[facing=north,half=lower,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_oxidized_copper_door[facing=north,half=upper,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_oxidized_copper_door[facing=west,half=lower,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_oxidized_copper_door[facing=west,half=upper,hinge=right,open=false,powered=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_oxidized_copper_grate[waterlogged=false]	t	t	f	f	0	0	none	WaterloggedTransparentBlock; propagatesSkylightDown=true (TransparentBlock); full collision -> legacySolid
+minecraft:waxed_oxidized_copper_trapdoor[facing=east,half=top,open=false,powered=false,waterlogged=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_oxidized_copper_trapdoor[facing=east,half=top,open=true,powered=false,waterlogged=false]	t	t	f	f	0	0	none	panel bounds avg=0.7291666666666666==thr -> legacySolid true
+minecraft:waxed_oxidized_cut_copper	t	t	t	f	0	15	none	
+minecraft:waxed_oxidized_cut_copper_slab[type=bottom,waterlogged=false]	t	t	f	f	0	0	D:f,U:0,N:3,S:3,W:3,E:3	useShapeForLightOcclusion (type!=double)
+minecraft:waxed_oxidized_cut_copper_slab[type=top,waterlogged=false]	t	t	f	f	0	0	D:0,U:f,N:c,S:c,W:c,E:c	useShapeForLightOcclusion (type!=double)
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=inner_left,waterlogged=true]	t	t	f	f	0	1	D:f,U:b,N:f,S:b,W:7,E:f	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:a,N:b,S:b,W:3,E:f	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:a,N:b,S:b,W:3,E:f	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_left,waterlogged=false]	t	t	f	f	0	0	D:f,U:1,N:7,S:3,W:7,E:3	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_left,waterlogged=true]	t	t	f	f	0	1	D:f,U:1,N:7,S:3,W:7,E:3	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_right,waterlogged=false]	t	t	f	f	0	0	D:f,U:2,N:b,S:3,W:3,E:7	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=outer_right,waterlogged=true]	t	t	f	f	0	1	D:f,U:2,N:b,S:3,W:3,E:7	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:3,N:f,S:3,W:7,E:7	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:3,N:f,S:3,W:7,E:7	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_left,waterlogged=false]	t	t	f	f	0	0	D:f,U:8,N:3,S:b,W:3,E:b	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_left,waterlogged=true]	t	t	f	f	0	1	D:f,U:8,N:3,S:b,W:3,E:b	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_right,waterlogged=false]	t	t	f	f	0	0	D:f,U:4,N:3,S:7,W:b,E:3	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=outer_right,waterlogged=true]	t	t	f	f	0	1	D:f,U:4,N:3,S:7,W:b,E:3	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:c,N:3,S:f,W:b,E:b	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=south,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:c,N:3,S:f,W:b,E:b	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=inner_right,waterlogged=true]	t	t	f	f	0	1	D:f,U:7,N:f,S:7,W:f,E:7	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=straight,waterlogged=false]	t	t	f	f	0	0	D:f,U:5,N:7,S:7,W:f,E:3	useShapeForLightOcclusion=true
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=straight,waterlogged=true]	t	t	f	f	0	1	D:f,U:5,N:7,S:7,W:f,E:3	FLUID=water; useShapeForLightOcclusion=true
+minecraft:waxed_weathered_copper_bulb[lit=true,powered=false]	t	t	t	f	8	15	none	CopperBulbBlock; litBlockEmission(8)
+minecraft:white_concrete	t	t	t	f	0	15	none	
+minecraft:white_stained_glass	t	t	f	f	0	0	none	TransparentBlock.propagatesSkylightDown=true; noOcclusion
+minecraft:spawner	t	t	f	f	0	1	none	REVERIFY; no lightLevel in registration -> emission 0; noOcclusion+full default shape -> lb1
+minecraft:cobweb	f	t	f	f	0	1	none	REVERIFY; forceSolidOn+noCollision; blocksMotion special-cases COBWEB->false; full outline shape -> lb1
+minecraft:rail[shape=north_south,waterlogged=false]	f	f	f	f	0	0	none	REVERIFY; noCollision; flat shape
+minecraft:trial_spawner[ominous=false,trial_spawner_state=waiting_for_players]	t	t	f	f	4	1	none	REVERIFY; TrialSpawnerState.lightLevel(); noOcclusion+full shape -> lb1

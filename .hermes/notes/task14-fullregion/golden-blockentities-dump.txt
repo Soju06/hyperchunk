@@ -1,0 +1,2172 @@
+===== c.19.1 (5 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:archaeology/ocean_ruin_warm'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 316
+  y: int 49
+  z: int 17
+  id: str 'minecraft:brushable_block'
+  LootTableSeed: int 1121690043894488901
+compound (8)
+  LootTable: str 'minecraft:archaeology/ocean_ruin_warm'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 314
+  y: int 48
+  z: int 18
+  id: str 'minecraft:brushable_block'
+  LootTableSeed: int 1044708317083911939
+compound (8)
+  LootTable: str 'minecraft:archaeology/ocean_ruin_warm'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 316
+  y: int 49
+  z: int 18
+  id: str 'minecraft:brushable_block'
+  LootTableSeed: int 7605161013151391045
+compound (8)
+  LootTable: str 'minecraft:archaeology/ocean_ruin_warm'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 315
+  y: int 48
+  z: int 19
+  id: str 'minecraft:brushable_block'
+  LootTableSeed: int -4553843821671769816
+compound (8)
+  LootTable: str 'minecraft:chests/underwater_ruin_small'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 316
+  y: int 48
+  z: int 19
+  id: str 'minecraft:chest'
+  LootTableSeed: int 2785160866899459914
+
+===== c.20.1 (1 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:archaeology/ocean_ruin_warm'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 320
+  y: int 48
+  z: int 19
+  id: str 'minecraft:brushable_block'
+  LootTableSeed: int 7345114108317198325
+
+===== c.28.1 (1 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:cave_spider'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 463
+  y: int 22
+  z: int 22
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+
+===== c.5.3 (2 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 94
+  y: int -46
+  z: int 53
+  id: str 'minecraft:chest'
+  LootTableSeed: int 4134631047932633897
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:skeleton'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 95
+  y: int -46
+  z: int 56
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+
+===== c.9.5 (2 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/shipwreck_treasure'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 150
+  y: int 62
+  z: int 92
+  id: str 'minecraft:chest'
+  LootTableSeed: int -8410730489780687695
+compound (8)
+  LootTable: str 'minecraft:chests/shipwreck_map'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 149
+  y: int 60
+  z: int 86
+  id: str 'minecraft:chest'
+  LootTableSeed: int 2618702567188990031
+
+===== c.23.5 (3 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 370
+  y: int -15
+  z: int 90
+  id: str 'minecraft:chest'
+  LootTableSeed: int 2720589236781409110
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 368
+  y: int -15
+  z: int 91
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 370
+  y: int -15
+  z: int 92
+  id: str 'minecraft:chest'
+  LootTableSeed: int -1433230711614114125
+
+===== c.30.5 (1 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:cave_spider'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 486
+  y: int 47
+  z: int 90
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+
+===== c.14.6 (2 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 228
+  y: int -1
+  z: int 104
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 227
+  y: int -1
+  z: int 107
+  id: str 'minecraft:chest'
+  LootTableSeed: int -7202760477089343657
+
+===== c.22.6 (1 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/ruined_portal'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 355
+  y: int 51
+  z: int 102
+  id: str 'minecraft:chest'
+  LootTableSeed: int -4854159678874944629
+
+===== c.24.7 (3 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 385
+  y: int -9
+  z: int 112
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 387
+  y: int -9
+  z: int 112
+  id: str 'minecraft:chest'
+  LootTableSeed: int -7593839327959885189
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 384
+  y: int -9
+  z: int 115
+  id: str 'minecraft:chest'
+  LootTableSeed: int -5093777140854639876
+
+===== c.27.8 (2 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:skeleton'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 440
+  y: int -17
+  z: int 136
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 440
+  y: int -17
+  z: int 138
+  id: str 'minecraft:chest'
+  LootTableSeed: int 503529070160162847
+
+===== c.31.8 (3 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 506
+  y: int 12
+  z: int 140
+  id: str 'minecraft:chest'
+  LootTableSeed: int -3064972602706924999
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 508
+  y: int 12
+  z: int 139
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 507
+  y: int 12
+  z: int 137
+  id: str 'minecraft:chest'
+  LootTableSeed: int -4008840345237939849
+
+===== c.10.9 (4 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 165
+  y: int -28
+  z: int 150
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:skeleton'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 173
+  y: int -15
+  z: int 153
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 166
+  y: int -28
+  z: int 152
+  id: str 'minecraft:chest'
+  LootTableSeed: int -8036800609553051288
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 174
+  y: int -15
+  z: int 155
+  id: str 'minecraft:chest'
+  LootTableSeed: int -737815474750786427
+
+===== c.17.9 (2 BEs) =====
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 277
+  y: int 7
+  z: int 153
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/small_melee/cave_spider/normal'
+  keepPacked: int 0
+  x: int 284
+  y: int 6
+  z: int 158
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/small_melee/cave_spider/ominous'
+
+===== c.17.10 (3 BEs) =====
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 287
+  y: int 6
+  Items: list (0)
+  z: int 171
+  id: str 'minecraft:hopper'
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/small_melee/cave_spider/normal'
+  keepPacked: int 0
+  x: int 279
+  y: int 6
+  z: int 163
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/small_melee/cave_spider/ominous'
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 287
+  y: int 5
+  Items: list (0)
+  z: int 171
+  id: str 'minecraft:barrel'
+
+===== c.18.10 (6 BEs) =====
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 297
+  y: int 6
+  Items: list (0)
+  z: int 160
+  id: str 'minecraft:hopper'
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 297
+  y: int 5
+  Items: list (0)
+  z: int 160
+  id: str 'minecraft:barrel'
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 297
+  y: int 1
+  Items: list (0)
+  z: int 160
+  id: str 'minecraft:hopper'
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 297
+  y: int 0
+  Items: list (0)
+  z: int 160
+  id: str 'minecraft:barrel'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 294
+  y: int 8
+  z: int 171
+  id: str 'minecraft:vault'
+  config: compound (2)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:ominous_trial_key'
+    loot_table: str 'minecraft:chests/trial_chambers/reward_ominous'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 296
+  y: int 2
+  z: int 168
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.16.11 (1 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/intersection_barrel'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 265
+  y: int -14
+  z: int 190
+  id: str 'minecraft:barrel'
+  LootTableSeed: int 9063386933222378273
+
+===== c.17.11 (12 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 286
+  y: int -26
+  z: int 184
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 8092748399575807648
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:flow_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 278
+  y: int -7
+  z: int 185
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 7779450278233914258
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 284
+  y: int -2
+  z: int 185
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 1142689951218099439
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 278
+  y: int -26
+  z: int 187
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 3222884059070873709
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 285
+  y: int -2
+  z: int 185
+  id: str 'minecraft:barrel'
+  LootTableSeed: int 3423831398461512303
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 280
+  y: int -7
+  z: int 185
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -4305057692121264746
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:flow_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 279
+  y: int -9
+  z: int 190
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 3355968854041843007
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 278
+  y: int -26
+  Items: list (0)
+  z: int 190
+  id: str 'minecraft:hopper'
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 280
+  y: int -9
+  z: int 190
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -1863429959565703496
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 278
+  y: int -27
+  Items: list (0)
+  z: int 190
+  id: str 'minecraft:barrel'
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 281
+  y: int -7
+  z: int 188
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -5070480604667015624
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 285
+  y: int -7
+  z: int 185
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -6219379733546389707
+
+===== c.18.11 (9 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 290
+  y: int -7
+  z: int 185
+  id: str 'minecraft:barrel'
+  LootTableSeed: int -2707428619513536332
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/ranged/stray/normal'
+  keepPacked: int 0
+  x: int 301
+  y: int -26
+  z: int 187
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/ranged/stray/ominous'
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:flow_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 288
+  y: int -7
+  z: int 185
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -8189299970018498022
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 289
+  y: int -7
+  z: int 185
+  id: str 'minecraft:barrel'
+  LootTableSeed: int -2010207442954053412
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 293
+  y: int -26
+  Items: list (0)
+  z: int 184
+  id: str 'minecraft:hopper'
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 295
+  y: int -7
+  z: int 185
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 7052774061073948109
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:scrape_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 296
+  y: int -7
+  z: int 188
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 6154380145996436001
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 293
+  y: int -27
+  Items: list (0)
+  z: int 184
+  id: str 'minecraft:barrel'
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/reward'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 294
+  y: int -17
+  z: int 183
+  id: str 'minecraft:chest'
+  LootTableSeed: int -2394565852944376069
+
+===== c.20.11 (2 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/reward'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 329
+  y: int -2
+  z: int 189
+  id: str 'minecraft:chest'
+  LootTableSeed: int 4438659374964530755
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/entrance'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 322
+  y: int 4
+  z: int 187
+  id: str 'minecraft:chest'
+  LootTableSeed: int 6203184499653512733
+
+===== c.25.11 (2 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 404
+  y: int -41
+  z: int 190
+  id: str 'minecraft:chest'
+  LootTableSeed: int -1687349819968541139
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:skeleton'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 406
+  y: int -41
+  z: int 190
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+
+===== c.13.12 (3 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/melee/spider/normal'
+  keepPacked: int 0
+  x: int 221
+  y: int -19
+  z: int 195
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/melee/spider/ominous'
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/ranged/stray/normal'
+  keepPacked: int 0
+  x: int 216
+  y: int -17
+  z: int 206
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/ranged/stray/ominous'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 217
+  y: int -23
+  z: int 201
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.14.12 (7 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/breeze/normal'
+  keepPacked: int 0
+  x: int 226
+  y: int -19
+  z: int 206
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/breeze/ominous'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 235
+  y: int -23
+  z: int 196
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 234
+  y: int -18
+  z: int 201
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/ranged/stray/normal'
+  keepPacked: int 0
+  x: int 236
+  y: int -17
+  z: int 206
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/ranged/stray/ominous'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 234
+  y: int -23
+  z: int 206
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 226
+  y: int -18
+  z: int 202
+  id: str 'minecraft:vault'
+  config: compound (2)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:ominous_trial_key'
+    loot_table: str 'minecraft:chests/trial_chambers/reward_ominous'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 226
+  y: int -23
+  z: int 198
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.16.12 (5 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 263
+  y: int -26
+  z: int 207
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -7573111740097213019
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:scrape_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 267
+  y: int -26
+  z: int 207
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 6189509722000598245
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 262
+  y: int -19
+  z: int 207
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -5973898756936377409
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:scrape_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 261
+  y: int -24
+  z: int 204
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -6703447909341166455
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -24
+  z: int 206
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -8976439286786716799
+
+===== c.17.12 (11 BEs) =====
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:flow_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 279
+  y: int -2
+  z: int 199
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 131723243113366459
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 280
+  y: int -2
+  z: int 199
+  id: str 'minecraft:barrel'
+  LootTableSeed: int -1334770603130241337
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 278
+  y: int -9
+  z: int 194
+  id: str 'minecraft:barrel'
+  LootTableSeed: int 6818918451060096616
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 286
+  y: int -26
+  z: int 206
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 272
+  y: int -24
+  z: int 206
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -8200818178431302487
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 272
+  y: int -24
+  z: int 205
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 8316017758109201831
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 278
+  y: int -26
+  z: int 202
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int -8329744297229988405
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 286
+  y: int -36
+  z: int 201
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 689224744857848654
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/small_melee/cave_spider/normal'
+  keepPacked: int 0
+  x: int 284
+  y: int -2
+  z: int 192
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/small_melee/cave_spider/ominous'
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/ranged/stray/normal'
+  keepPacked: int 0
+  x: int 281
+  y: int -26
+  z: int 202
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/ranged/stray/ominous'
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 280
+  y: int -2
+  z: int 195
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 4121660232294142335
+
+===== c.18.12 (12 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/breeze/normal'
+  keepPacked: int 0
+  x: int 291
+  y: int -31
+  z: int 192
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/breeze/ominous'
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 291
+  y: int -36
+  z: int 201
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 8405798805692454299
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:guster_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 290
+  y: int -7
+  z: int 199
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 7486289766341105002
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 295
+  y: int -2
+  z: int 199
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -1817802504441873840
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 288
+  y: int -26
+  z: int 205
+  id: str 'minecraft:chest'
+  LootTableSeed: int 162609452155671135
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 301
+  y: int -26
+  z: int 205
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int -7765409034115896311
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 288
+  y: int -7
+  z: int 199
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 6350271526753289592
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 289
+  y: int -32
+  Items: list (0)
+  z: int 205
+  id: str 'minecraft:barrel'
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 289
+  y: int -7
+  z: int 199
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 2732108969570724250
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 295
+  y: int -2
+  z: int 195
+  id: str 'minecraft:barrel'
+  LootTableSeed: int 313222743889115791
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 289
+  y: int -31
+  Items: list (0)
+  z: int 205
+  id: str 'minecraft:hopper'
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:flow_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 290
+  y: int -9
+  z: int 194
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -5689338558456740445
+
+===== c.19.12 (4 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 304
+  y: int -26
+  z: int 202
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int -1776476303499117288
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 316
+  y: int 3
+  z: int 192
+  id: str 'minecraft:vault'
+  config: compound (2)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:ominous_trial_key'
+    loot_table: str 'minecraft:chests/trial_chambers/reward_ominous'
+  shared_data: compound (0)
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 304
+  y: int -26
+  Items: list (0)
+  z: int 194
+  id: str 'minecraft:hopper'
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 304
+  y: int -27
+  Items: list (0)
+  z: int 194
+  id: str 'minecraft:barrel'
+
+===== c.20.12 (2 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/entrance'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 322
+  y: int 4
+  z: int 192
+  id: str 'minecraft:chest'
+  LootTableSeed: int 8898342970748749355
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 320
+  y: int 9
+  z: int 197
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.13.13 (2 BEs) =====
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 216
+  y: int -23
+  z: int 212
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 221
+  y: int -18
+  z: int 213
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.14.13 (6 BEs) =====
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 239
+  y: int -20
+  Items: list (0)
+  z: int 208
+  id: str 'minecraft:barrel'
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 224
+  y: int -24
+  Items: list (0)
+  z: int 219
+  id: str 'minecraft:hopper'
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 239
+  y: int -19
+  Items: list (0)
+  z: int 208
+  id: str 'minecraft:hopper'
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/melee/spider/normal'
+  keepPacked: int 0
+  x: int 236
+  y: int -19
+  z: int 210
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/melee/spider/ominous'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 232
+  y: int -23
+  z: int 216
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 224
+  y: int -25
+  Items: list (0)
+  z: int 219
+  id: str 'minecraft:barrel'
+
+===== c.15.13 (13 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/slow_ranged/stray/normal'
+  keepPacked: int 0
+  x: int 251
+  y: int -14
+  z: int 221
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/slow_ranged/stray/ominous'
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 254
+  y: int -14
+  z: int 216
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 8933726001913035450
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 254
+  y: int -19
+  Items: list (0)
+  z: int 218
+  id: str 'minecraft:hopper'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 246
+  y: int -2
+  z: int 213
+  id: str 'minecraft:vault'
+  config: compound (2)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:ominous_trial_key'
+    loot_table: str 'minecraft:chests/trial_chambers/reward_ominous'
+  shared_data: compound (0)
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 254
+  y: int -20
+  Items: list (0)
+  z: int 218
+  id: str 'minecraft:barrel'
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/slow_ranged/stray/normal'
+  keepPacked: int 0
+  x: int 251
+  y: int -4
+  z: int 216
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/slow_ranged/stray/ominous'
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 243
+  y: int -9
+  z: int 216
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 423590333946824726
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 251
+  y: int -4
+  z: int 213
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 5455351304530497449
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/slow_ranged/stray/normal'
+  keepPacked: int 0
+  x: int 245
+  y: int -9
+  z: int 221
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/slow_ranged/stray/ominous'
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 254
+  y: int -4
+  z: int 216
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int -1391730210648383779
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 244
+  y: int -18
+  z: int 216
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 253
+  y: int -3
+  z: int 221
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/supply'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 248
+  y: int -19
+  z: int 209
+  id: str 'minecraft:chest'
+  LootTableSeed: int -8329173697352632949
+
+===== c.16.13 (17 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -19
+  z: int 210
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 2769342050111096367
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -19
+  z: int 212
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -6860171669764575490
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -19
+  z: int 211
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -5897349209367887087
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -19
+  z: int 217
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -3162050739457674527
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -24
+  z: int 211
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -3222372176709771555
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -19
+  z: int 215
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -5208048430754574693
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -24
+  z: int 210
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -7305264170282828611
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -19
+  z: int 222
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -3722756641621098928
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 258
+  y: int -19
+  z: int 221
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -8269344875109886449
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:guster_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 258
+  y: int -19
+  z: int 220
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 3459350752839532026
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 263
+  y: int -26
+  z: int 217
+  id: str 'minecraft:barrel'
+  LootTableSeed: int -4218056589888009898
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 268
+  y: int -26
+  z: int 211
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int -5343355050888431824
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/ranged/stray/normal'
+  keepPacked: int 0
+  x: int 265
+  y: int -19
+  z: int 221
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/ranged/stray/ominous'
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 263
+  y: int -26
+  z: int 215
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -1719140833551567925
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:flow_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 267
+  y: int -26
+  z: int 217
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 3186669145945784695
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 261
+  y: int -24
+  z: int 223
+  id: str 'minecraft:barrel'
+  LootTableSeed: int 5796072479474649561
+compound (9)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  sherds: list (4)
+    [0]: str 'minecraft:scrape_pottery_sherd'
+    [1]: str 'minecraft:brick'
+    [2]: str 'minecraft:brick'
+    [3]: str 'minecraft:brick'
+  x: int 267
+  y: int -19
+  z: int 222
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -8500617761546008385
+
+===== c.17.13 (5 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 272
+  y: int -24
+  z: int 222
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 66707010704205594
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 272
+  y: int -19
+  z: int 210
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 80805153453558381
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 272
+  y: int -24
+  z: int 220
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int -3221722167409615071
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 272
+  y: int -24
+  z: int 210
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 3816483217935100491
+compound (8)
+  LootTable: str 'minecraft:pots/trial_chambers/corridor'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 272
+  y: int -24
+  z: int 212
+  id: str 'minecraft:decorated_pot'
+  LootTableSeed: int 6010895247238640956
+
+===== c.15.14 (3 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/slow_ranged/stray/normal'
+  keepPacked: int 0
+  x: int 251
+  y: int -4
+  z: int 226
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/slow_ranged/stray/ominous'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 244
+  y: int -18
+  z: int 226
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 251
+  y: int -14
+  z: int 229
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 1525354787791059323
+
+===== c.16.14 (2 BEs) =====
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 268
+  y: int -13
+  z: int 233
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (8)
+  LootTable: str 'minecraft:chests/trial_chambers/intersection'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 265
+  y: int -26
+  z: int 230
+  id: str 'minecraft:chest'
+  LootTableSeed: int 4332749827535865673
+
+===== c.20.14 (1 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 323
+  y: int -17
+  z: int 239
+  id: str 'minecraft:chest'
+  LootTableSeed: int 3941932015734918082
+
+===== c.23.14 (1 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 377
+  y: int -20
+  z: int 237
+  id: str 'minecraft:chest'
+  LootTableSeed: int -935699657525376197
+
+===== c.15.15 (1 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/melee/spider/normal'
+  keepPacked: int 0
+  x: int 254
+  y: int -21
+  z: int 247
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/melee/spider/ominous'
+
+===== c.16.15 (7 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/melee/spider/normal'
+  keepPacked: int 0
+  x: int 265
+  y: int -19
+  z: int 247
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/melee/spider/ominous'
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/melee/spider/normal'
+  keepPacked: int 0
+  x: int 270
+  y: int -21
+  z: int 253
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/melee/spider/ominous'
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 267
+  y: int -22
+  Items: list (0)
+  z: int 244
+  id: str 'minecraft:barrel'
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 267
+  y: int -21
+  Items: list (0)
+  z: int 244
+  id: str 'minecraft:hopper'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 265
+  y: int -27
+  z: int 240
+  id: str 'minecraft:vault'
+  config: compound (2)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:ominous_trial_key'
+    loot_table: str 'minecraft:chests/trial_chambers/reward_ominous'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 265
+  y: int -25
+  z: int 249
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 260
+  y: int -25
+  z: int 251
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.17.15 (1 BEs) =====
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 274
+  y: int -25
+  z: int 247
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.20.15 (1 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:skeleton'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 322
+  y: int -17
+  z: int 241
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+
+===== c.23.15 (2 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 381
+  y: int -20
+  z: int 241
+  id: str 'minecraft:chest'
+  LootTableSeed: int 2312443049647028961
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 378
+  y: int -20
+  z: int 240
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+
+===== c.15.16 (3 BEs) =====
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/melee/spider/normal'
+  keepPacked: int 0
+  x: int 255
+  y: int -19
+  z: int 257
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/melee/spider/ominous'
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 255
+  y: int -21
+  z: int 269
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int -227481147961129786
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 253
+  y: int -26
+  z: int 262
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int -2139738799533094029
+
+===== c.16.16 (8 BEs) =====
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 271
+  y: int -25
+  z: int 267
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 269
+  y: int -20
+  z: int 257
+  id: str 'minecraft:vault'
+  config: compound (2)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:ominous_trial_key'
+    loot_table: str 'minecraft:chests/trial_chambers/reward_ominous'
+  shared_data: compound (0)
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/melee/spider/normal'
+  keepPacked: int 0
+  x: int 265
+  y: int -19
+  z: int 267
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/melee/spider/ominous'
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 260
+  y: int -21
+  z: int 269
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 7497618102630366952
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 265
+  y: int -25
+  z: int 265
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 257
+  y: int -25
+  z: int 257
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+compound (8)
+  LootTable: str 'minecraft:dispensers/trial_chambers/chamber'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 260
+  y: int -26
+  z: int 269
+  id: str 'minecraft:dispenser'
+  LootTableSeed: int 4033229043166880789
+compound (8)
+  components: compound (0)
+  normal_config: str 'minecraft:trial_chamber/breeze/normal'
+  keepPacked: int 0
+  x: int 265
+  y: int -21
+  z: int 257
+  id: str 'minecraft:trial_spawner'
+  ominous_config: str 'minecraft:trial_chamber/breeze/ominous'
+
+===== c.17.16 (3 BEs) =====
+compound (8)
+  components: compound (0)
+  TransferCooldown: int 0
+  keepPacked: int 0
+  x: int 278
+  y: int -26
+  Items: list (0)
+  z: int 259
+  id: str 'minecraft:hopper'
+compound (7)
+  components: compound (0)
+  keepPacked: int 0
+  x: int 278
+  y: int -27
+  Items: list (0)
+  z: int 259
+  id: str 'minecraft:barrel'
+compound (9)
+  components: compound (0)
+  keepPacked: int 0
+  server_data: compound (0)
+  x: int 272
+  y: int -20
+  z: int 262
+  id: str 'minecraft:vault'
+  config: compound (1)
+    key_item: compound (2)
+      count: int 1
+      id: str 'minecraft:trial_key'
+  shared_data: compound (0)
+
+===== c.14.21 (2 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:spider'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 234
+  y: int -42
+  z: int 340
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 237
+  y: int -42
+  z: int 340
+  id: str 'minecraft:chest'
+  LootTableSeed: int 6205225857452403542
+
+===== c.21.21 (2 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 348
+  y: int -24
+  z: int 351
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 349
+  y: int -24
+  z: int 349
+  id: str 'minecraft:chest'
+  LootTableSeed: int -763532183800284139
+
+===== c.21.22 (1 BEs) =====
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 346
+  y: int -24
+  z: int 353
+  id: str 'minecraft:chest'
+  LootTableSeed: int 7968171988050900930
+
+===== c.15.27 (3 BEs) =====
+compound (15)
+  components: compound (0)
+  MaxNearbyEntities: int 6
+  RequiredPlayerRange: int 16
+  SpawnCount: int 4
+  SpawnData: compound (1)
+    entity: compound (1)
+      id: str 'minecraft:zombie'
+  MaxSpawnDelay: int 800
+  Delay: int 20
+  keepPacked: int 0
+  x: int 255
+  y: int 27
+  z: int 442
+  id: str 'minecraft:mob_spawner'
+  SpawnRange: int 4
+  MinSpawnDelay: int 200
+  SpawnPotentials: list (0)
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 252
+  y: int 27
+  z: int 443
+  id: str 'minecraft:chest'
+  LootTableSeed: int 4187108241344640070
+compound (8)
+  LootTable: str 'minecraft:chests/simple_dungeon'
+  components: compound (0)
+  keepPacked: int 0
+  x: int 252
+  y: int 27
+  z: int 440
+  id: str 'minecraft:chest'
+  LootTableSeed: int -4153895984902704329
+
