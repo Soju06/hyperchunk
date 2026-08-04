@@ -35,12 +35,21 @@ typedef struct {
     const hc_nbt_t *nbt;      /* BE nbt (없으면 NULL) */
 } hc_tblock_t;
 
+enum { HC_TPL_MAX_PALETTES = 8 };
+
 typedef struct {
     int32_t      size[3];
     int32_t      n_palettes;
     int32_t      n_blocks;     /* 팔레트당 블록 수 (전 팔레트 동일) */
-    hc_tblock_t *blocks;       /* [palette][n_blocks] 연접 */
+    hc_tblock_t *blocks;       /* [palette][n_blocks] 연접 — lazy 해석 */
     const char  *name;         /* "minecraft:shipwreck/..." */
+    /* lazy 팔레트 해석 (비선택 팔레트의 상태는 레지스트리에 없을 수
+     * 있다 — 미사용 우드 변형): 선택 시점에 해석. */
+    const hc_nbt_t *pal_nbt[HC_TPL_MAX_PALETTES];
+    uint8_t         pal_resolved[HC_TPL_MAX_PALETTES];
+    const int32_t (*raw_pos)[3]; /* [n_blocks] 템플릿-로컬 */
+    const int32_t  *raw_state;   /* 팔레트 인덱스 */
+    const hc_nbt_t *const *raw_nbt;
 } hc_template_t;
 
 /* reference/structure/<path>.nbt (무압축) 로드 + 버킷 정렬. 실패 NULL. */
@@ -211,15 +220,20 @@ int hc_structures_init(hc_sctx_t *sc, hc_arena_t *a, int64_t seed,
 
 /* 데코 워크 스텝 훅 — step 진입 시 (feature 들보다 먼저) 이 청크를
  * 참조하는 스타트들을 스텝 순번대로 배치. rng 회계: 구조물마다
- * setFeatureSeed(deco, step_index, step) 후 피스들 공유 스트림. */
-void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg, int32_t cx,
-                        int32_t cz, int64_t deco_seed, int32_t step);
+ * setFeatureSeed(deco, step_index, step) 후 피스들 공유 스트림.
+ * freg = updateShape 디스패치의 태그 마스크, sea = 드라운드 마커. */
+void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg,
+                        const hc_feat_reg_t *freg, int32_t sea,
+                        int32_t cx, int32_t cz, int64_t deco_seed,
+                        int32_t step);
 
 /* ---------- 배치 구현 (structures_template.c / structures_mineshaft.c) ---------- */
 
 /* 템플릿 계열 피스 하나를 chunkBB (cx,cz 청크) 에 배치. rng = 공유 피처
- * 스트림. start 는 shipwreck 높이 래치 갱신용. */
+ * 스트림. start 는 shipwreck 높이 래치 갱신용. freg/sea 는 엣지
+ * 디스패치·마커가 소비. */
 void hc_splace_template(hc_sctx_t *sc, hc_feat_region_t *rg,
+                        const hc_feat_reg_t *freg, int32_t sea,
                         hc_sstart_t *start, hc_spiece_t *p, hc_wgr_t *rng,
                         int32_t cx, int32_t cz);
 

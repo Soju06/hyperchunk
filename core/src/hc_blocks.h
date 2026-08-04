@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /* T14-GEN BEGIN count */
-#define HC_B_T14_COUNT 293
+#define HC_B_T14_COUNT 650
 /* T14-GEN END count */
 
 /* 내부 블록 id 테이블 — 내부 전용 (core/src). 공개 ABI 아님 (ADR-003 D2).

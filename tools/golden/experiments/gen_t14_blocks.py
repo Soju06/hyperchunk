@@ -108,6 +108,15 @@ def main():
         add(p[0], p, cfull)
         added.add(p[0])
 
+    # Task 14 배치 엔진 과도기 상태 (gen_t14_states3.py 산출)
+    tsv3 = NOTES / "R-blockprops3.tsv"
+    if tsv3.exists():
+        for p in parse_tsv(tsv3):
+            if p[0] in added:
+                continue
+            add(p[0], p, tf(p[-1]))
+            added.add(p[0])
+
     print(f"{len(entries)} entries ({len(skipped)} skipped: {skipped})")
 
     # 중복/등록 충돌 검사 — 생성 구간 이전 (수동 등록분) 만 본다

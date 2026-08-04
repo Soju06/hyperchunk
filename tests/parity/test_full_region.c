@@ -48,9 +48,12 @@
 static int        g_survey = 0;
 static hc_sctx_t *g_sctx = NULL;
 
-static void struct_step_cb(void *ud, hc_feat_region_t *rg, int32_t cx,
-                           int32_t cz, int64_t deco_seed, int32_t step) {
-    hc_structures_step((hc_sctx_t *)ud, rg, cx, cz, deco_seed, step);
+static void struct_step_cb(void *ud, hc_feat_region_t *rg,
+                           const struct hc_feat_reg *reg, int32_t sea_level,
+                           int32_t cx, int32_t cz, int64_t deco_seed,
+                           int32_t step) {
+    hc_structures_step((hc_sctx_t *)ud, rg, (const hc_feat_reg_t *)reg,
+                       sea_level, cx, cz, deco_seed, step);
 }
 
 static void die(const char *msg, const char *detail) {

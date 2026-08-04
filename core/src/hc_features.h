@@ -62,6 +62,8 @@ enum { HC_FEAT_REGION_N = 41 }; /* Task 14: 41x41 (r.0.0 + 생성 마진 -5..35)
                                  * 재생 월드. Task 10 게이트들은 11x11 을
                                  * 부분 사용 (n 필드가 실크기). */
 
+struct hc_feat_reg; /* 아래 정의 — struct_step 훅이 앞참조 */
+
 /* --- Task 12: 스케줄-틱 레코더 (ProtoChunkTicks 등가, R-D) ---
  *
  * 바닐라 WorldGenTickAccess.schedule → pos 소속 청크의 ProtoChunkTicks:
@@ -111,9 +113,12 @@ typedef struct hc_feat_region {
     /* Task 14: 구조물 스텝 훅 — applyBiomeDecoration 의 구조물 루프 자리
      * (step 진입 시 feature 들보다 먼저; 구조물은 setFeatureSeed 로
      * 자체 재시드하므로 feature RNG 에 무영향). NULL = 없음 (기존 게이트
-     * 불변). */
-    void (*struct_step)(void *ud, struct hc_feat_region *rg, int32_t cx,
-                        int32_t cz, int64_t deco_seed, int32_t step);
+     * 불변). reg/sea_level 은 updateShapeAtEdge 디스패치·드라운드 마커가
+     * 소비한다. */
+    void (*struct_step)(void *ud, struct hc_feat_region *rg,
+                        const struct hc_feat_reg *reg, int32_t sea_level,
+                        int32_t cx, int32_t cz, int64_t deco_seed,
+                        int32_t step);
     void *struct_ud;
 } hc_feat_region_t;
 
@@ -568,7 +573,7 @@ struct hc_pfeat {
 
 enum { HC_FEAT_STEPS = 11 };
 
-typedef struct {
+typedef struct hc_feat_reg {
     int32_t    counts[HC_FEAT_STEPS];
     hc_pfeat_t *steps[HC_FEAT_STEPS];   /* walk_max_step 초과 step 은
                                          * 파이프라인 미컴파일 (mods NULL) */

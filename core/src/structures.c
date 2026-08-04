@@ -142,10 +142,11 @@ uint16_t hc_state_rotate(uint16_t s, int rot) {
                     memcpy(kv[i].v, dv[d], sizeof kv[i].v);
     }
     for (int i = 0; i < n; i++) {
-        if (strcmp(kv[i].k, "facing") == 0)
-            snprintf(kv[i].v, sizeof kv[i].v, "%s",
-                     rot_facing(kv[i].v, steps));
-        else if (strcmp(kv[i].k, "axis") == 0 && (steps & 1)) {
+        if (strcmp(kv[i].k, "facing") == 0) {
+            const char *nv = rot_facing(kv[i].v, steps);
+            if (nv != kv[i].v) /* up/down 은 자기 자신 — 중첩 복사 금지 */
+                snprintf(kv[i].v, sizeof kv[i].v, "%s", nv);
+        } else if (strcmp(kv[i].k, "axis") == 0 && (steps & 1)) {
             if (strcmp(kv[i].v, "x") == 0)
                 snprintf(kv[i].v, sizeof kv[i].v, "z");
             else if (strcmp(kv[i].v, "z") == 0)
@@ -741,7 +742,7 @@ int hc_structures_init(hc_sctx_t *sc, hc_arena_t *a, int64_t seed,
     {
         /* tags_dir: reference/tags/worldgen_biome (has_structure/ 하위) */
         char tags_dir[512];
-        snprintf(tags_dir, sizeof tags_dir, "%s/../../tags/worldgen_biome",
+        snprintf(tags_dir, sizeof tags_dir, "%s/../tags/worldgen_biome",
                  template_dir); /* reference/structure → reference/tags */
         resolve_biome_tag(a, biomes, tags_dir, "has_structure/mineshaft",
                           &ms_biomes, 0);
@@ -987,8 +988,10 @@ const hc_nbt_t *hc_structures_starts_tag(const hc_sctx_t *sc, int32_t cx,
     return NULL;
 }
 
-void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg, int32_t cx,
-                        int32_t cz, int64_t deco_seed, int32_t step) {
+void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg,
+                        const hc_feat_reg_t *freg, int32_t sea,
+                        int32_t cx, int32_t cz, int64_t deco_seed,
+                        int32_t step) {
     /* 이 청크의 references 에 있는 스타트들만, 스텝 내 순번 순.
      * 같은 순번의 스타트 여러 개 (mineshaft) 는 references LongSet 순회
      * 순서 (hc_structures_references 산출 순서와 동일 산식). */
@@ -1040,7 +1043,8 @@ void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg, int32_t cx,
                 if (p->kind >= HC_SP_MS_ROOM)
                     hc_splace_mineshaft(sc, rg, st, p, &rng, cx, cz);
                 else
-                    hc_splace_template(sc, rg, st, p, &rng, cx, cz);
+                    hc_splace_template(sc, rg, freg, sea, st, p, &rng, cx,
+                                       cz);
             }
         }
     }

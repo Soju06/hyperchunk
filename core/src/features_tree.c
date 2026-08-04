@@ -1,6 +1,7 @@
 #include "hc_carvers.h" /* hc_mth_sin/cos (Mth 테이블 — mega jungle 가지) */
 #include "features_internal.h"
 #include "hc_jdk_trig.h" /* fancy trunk 의 Math.sin/cos (JDK 인트린식) */
+#include "hc_structures.h" /* hc_state_parse/build (T14 엣지 패밀리) */
 
 #include <assert.h>
 #include <math.h>
@@ -1067,16 +1068,36 @@ static uint16_t edge_vine_update(feat_env_t *e, uint16_t s, int32_t x,
 }
 
 /* Task 12: updateShape 가 스케줄하는 틱 기록 (즉시 상태 변경과 별개).
- * 바이트코드 근거 (task12-region/R-D):
+ * 바이트코드 근거 (task12-region/R-D + task14 디컴파일):
  *  - LeavesBlock.updateShape: waterlogged → 물 소스 틱 (@0-29); 이어
  *    i = getDistanceAt(ns)+1, (i==1 && distance==1) 이 아니면 자기 블록
  *    틱 (@34-72, delay 1 — 저장 t 는 proto 경로에서 0 고정).
- *  - LiquidBlock.updateShape: 자신 또는 이웃 유체가 소스면 getType 틱
- *    (@0-39; 우리 팔레트 유체는 전부 소스라 항상).
- * 그 외 (모래 등 FallingBlock) 는 골든 리전 전체에 월드젠 틱 0건 —
- * 미기록. */
+ *  - LiquidBlock.updateShape: 자신 또는 이웃 유체가 소스면 getType 틱;
+ *    이어 dir==DOWN 이고 자신이 물 소스이며 아래가 #enables_bubble_
+ *    column_* (magma/soul_sand) 이면 자기 블록(물) 틱 delay 20
+ *    (LiquidBlock.java:156-175, 194-198). 흐름수는 이웃 소스일 때만
+ *    (getType = flowing_water).
+ *  - FallingBlock(모래/자갈)·BrushableBlock(suspicious_*).updateShape:
+ *    무조건 자기 블록 틱 (FallingBlock.java:31-43, BrushableBlock:72-84).
+ *    ※ 기존 "리전 전체 0건" 주석은 오측 — 골든 실측 t=0 sand 358건
+ *    (구조물·나무 경계). 기존 게이트 청크에는 해당 케이스가 없어
+ *    이 추가는 게이트 불변.
+ *  - SimpleWaterloggedBlock 계열 (stairs/fence/chest/slab/trapdoor/
+ *    lichen/dripleaf 등): waterlogged=true 면 물 소스 틱 — 공통 패턴.
+ *  - seagrass/kelp 는 결과 의존 틱이라 edge_update_state 가 자체 처리. */
+static int falling_family(uint16_t s) {
+    if (s == HC_B_SAND || s == HC_B_RED_SAND || s == HC_B_GRAVEL)
+        return 1;
+    if (s >= HC_B_T14_BASE) {
+        const char *nm = hc_block_name(s);
+        if (strncmp(nm, "minecraft:suspicious_", 21) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 static void edge_schedule_ticks(feat_env_t *e, uint16_t s, int32_t x,
-                                int32_t y, int32_t z, uint16_t ns) {
+                                int32_t y, int32_t z, int dir, uint16_t ns) {
     if (!e->rg->ticks)
         return;
     if (leaf_family_base(s)) {
@@ -1089,14 +1110,345 @@ static void edge_schedule_ticks(feat_env_t *e, uint16_t s, int32_t x,
             hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_BLOCK, 0);
         return;
     }
-    if (s == HC_B_WATER || s == HC_B_LAVA)
-        hc_feat_schedule_tick(e->rg, x, y, z, s,
-                              s == HC_B_LAVA ? HC_TICK_LAVA : HC_TICK_WATER,
-                              0);
+    if (s == HC_B_WATER || s == HC_B_LAVA ||
+        (s >= HC_B_WATER_FLOW_BASE && s < HC_B_WATER_FLOW_BASE + 15)) {
+        int flow = s != HC_B_WATER && s != HC_B_LAVA;
+        int ns_src = ns == HC_B_WATER || ns == HC_B_LAVA ||
+                     hc_block_is_waterlogged(ns);
+        if (!flow || ns_src)
+            hc_feat_schedule_tick(e->rg, x, y, z, s,
+                                  s == HC_B_LAVA
+                                      ? HC_TICK_LAVA
+                                      : (flow ? HC_TICK_FLOWING_WATER
+                                              : HC_TICK_WATER),
+                                  0);
+        /* tryScheduleBubbleBlockColumn — 물 소스 && 아래가 magma (이
+         * 리전에 soul_sand 부재). 블록 틱 (i=minecraft:water). */
+        if (s == HC_B_WATER && dir == 0 && ns == HC_B_MAGMA_BLOCK)
+            hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_BLOCK, 0);
+        return;
+    }
+    if (falling_family(s)) {
+        hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_BLOCK, 0);
+        return;
+    }
+    /* seagrass/kelp 계열은 edge_update_state 가 처리 (결과 의존) */
+    if (s == HC_B_SEAGRASS ||
+        (s >= HC_B_KELP_BASE && s <= HC_B_KELP_PLANT))
+        return;
+    if (hc_block_is_waterlogged(s))
+        hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_WATER, 0);
+}
+
+/* ---------- Task 14: 템플릿 팔레트 패밀리 (T14 이름 기반) ----------
+ *
+ * 구조물 배치 경로 (structures_template.c) 가 hc_featx_edge_* 익스포트로
+ * 이 디스패치를 공유한다. 시맨틱 = 26.2 디컴파일 그대로:
+ * StairBlock/FenceBlock/DoorBlock/ChestBlock (task14-blockprops-decomp/
+ * blocks/), Seagrass/TallSeagrass/Kelp (task14-decomp/blocks/). */
+
+typedef struct {
+    char     base[128];
+    hc_skv_t kv[16];
+    int      n;
+} sview_t;
+
+static void sview_of(uint16_t s, sview_t *v) {
+    v->n = hc_state_parse(hc_block_name(s), v->base, sizeof v->base, v->kv,
+                          16);
+}
+
+static const char *sview_get(const sview_t *v, const char *k) {
+    for (int i = 0; i < v->n; i++)
+        if (strcmp(v->kv[i].k, k) == 0)
+            return v->kv[i].v;
+    return NULL;
+}
+
+static void sview_set(sview_t *v, const char *k, const char *val) {
+    for (int i = 0; i < v->n; i++)
+        if (strcmp(v->kv[i].k, k) == 0) {
+            snprintf(v->kv[i].v, sizeof v->kv[i].v, "%s", val);
+            return;
+        }
+    die("state property missing for rewrite", k);
+}
+
+enum { TF_NONE = 0, TF_STAIRS, TF_FENCE, TF_DOOR, TF_CHEST, TF_SLAB,
+       TF_TRAPDOOR };
+
+static int base_ends(const char *nm, size_t n, const char *suf) {
+    size_t sl = strlen(suf);
+    return n >= sl && strncmp(nm + n - sl, suf, sl) == 0;
+}
+
+static int t14_family(uint16_t s) {
+    if (s < HC_B_T14_BASE)
+        return TF_NONE;
+    const char *nm = hc_block_name(s);
+    const char *br = strchr(nm, '[');
+    size_t      n = br ? (size_t)(br - nm) : strlen(nm);
+    if (base_ends(nm, n, "_stairs"))
+        return TF_STAIRS;
+    if (base_ends(nm, n, "_fence"))
+        return TF_FENCE;
+    if (base_ends(nm, n, "_trapdoor"))
+        return TF_TRAPDOOR;
+    if (base_ends(nm, n, "_door"))
+        return TF_DOOR;
+    if (base_ends(nm, n, "_slab"))
+        return TF_SLAB;
+    if ((n == 15 && strncmp(nm, "minecraft:chest", 15) == 0) ||
+        (n == 23 && strncmp(nm, "minecraft:trapped_chest", 23) == 0))
+        return TF_CHEST;
+    return TF_NONE;
+}
+
+/* facing 문자열 ↔ MC 서수 (0=D,1=U,2=N,3=S,4=W,5=E) */
+static int face_ord(const char *v) {
+    if (strcmp(v, "north") == 0)
+        return 2;
+    if (strcmp(v, "south") == 0)
+        return 3;
+    if (strcmp(v, "west") == 0)
+        return 4;
+    if (strcmp(v, "east") == 0)
+        return 5;
+    return -1; /* up/down — 수평 로직 미사용 */
+}
+
+/* Direction.getClockWise / getCounterClockWise (Y축) */
+static const int ORD_CW[6] = {0, 1, 5, 4, 2, 3};  /* N→E,S→W,W→N,E→S */
+static const int ORD_CCW[6] = {0, 1, 4, 5, 3, 2}; /* N→W,S→E,W→S,E→N */
+static const char *const ORD_NAME[6] = {"down", "up",   "north",
+                                        "south", "west", "east"};
+
+/* isFaceSturdy(SupportType.FULL) — 풀큐브/azalea(기존) + T14 형상 블록.
+ * stairs: half 면 + straight/inner 의 측면 풀페이스 (26.2 셰이프 유도);
+ * slab: type 면; trapdoor: 닫힘 상태의 half 면. 그 외 부분형상 0. */
+static int t14_face_sturdy(uint16_t s, int dir) {
+    if (hc_featx_face_sturdy_full(s, dir))
+        return 1;
+    int fam = t14_family(s);
+    if (fam == TF_NONE)
+        return 0;
+    sview_t v;
+    sview_of(s, &v);
+    if (fam == TF_STAIRS) {
+        const char *half = sview_get(&v, "half");
+        if (dir == 0)
+            return strcmp(half, "bottom") == 0;
+        if (dir == 1)
+            return strcmp(half, "top") == 0;
+        const char *shape = sview_get(&v, "shape");
+        int         f = face_ord(sview_get(&v, "facing"));
+        if (strcmp(shape, "straight") == 0)
+            return dir == f;
+        if (strcmp(shape, "inner_left") == 0)
+            return dir == f || dir == ORD_CCW[f];
+        if (strcmp(shape, "inner_right") == 0)
+            return dir == f || dir == ORD_CW[f];
+        return 0; /* outer_* — 측면 풀페이스 없음 */
+    }
+    if (fam == TF_SLAB) {
+        const char *t = sview_get(&v, "type");
+        if (strcmp(t, "double") == 0)
+            return 1;
+        return dir == (strcmp(t, "top") == 0 ? 1 : 0);
+    }
+    if (fam == TF_TRAPDOOR) {
+        if (strcmp(sview_get(&v, "open"), "true") == 0)
+            return 0;
+        return dir == (strcmp(sview_get(&v, "half"), "top") == 0 ? 1 : 0);
+    }
+    return 0; /* fence/door/chest — 풀페이스 없음 */
+}
+
+/* FenceBlock.connectsTo (FenceBlock.java:61-70, Block.java:268-276) */
+static int fence_connects_to(uint16_t self, uint16_t ns, int dir_to_ns) {
+    /* isExceptionForConnection: 잎 instanceof / barrier (호박·멜론·셜커
+     * 리전 부재) */
+    const char *nsn = hc_block_name(ns);
+    const char *br = strchr(nsn, '[');
+    size_t      nl = br ? (size_t)(br - nsn) : strlen(nsn);
+    int exception = hc_block_is_leaves(ns) ||
+                    (nl == 17 && strncmp(nsn, "minecraft:barrier", 17) == 0);
+    /* 이웃의 우리쪽 면 = dir 의 반대면 */
+    static const int OPP[6] = {1, 0, 3, 2, 5, 4};
+    int face_solid = t14_face_sturdy(ns, OPP[dir_to_ns]);
+    /* isSameFence: #fences && 우드 여부 일치 (self 는 항상 우드 —
+     * nether_brick_fence 는 이 경로에 등장하지 않는다) */
+    int same_fence = 0;
+    if (base_ends(nsn, nl, "_fence")) {
+        int ns_wooden =
+            !(nl == 28 &&
+              strncmp(nsn, "minecraft:nether_brick_fence", 28) == 0);
+        const char *sn = hc_block_name(self);
+        const char *sbr = strchr(sn, '[');
+        size_t      sl = sbr ? (size_t)(sbr - sn) : strlen(sn);
+        int self_wooden =
+            !(sl == 28 && strncmp(sn, "minecraft:nether_brick_fence", 28) == 0);
+        same_fence = ns_wooden == self_wooden;
+    }
+    /* fence gate — 리전 부재 */
+    return (!exception && face_solid) || same_fence;
+}
+
+static int is_stairs_state(uint16_t s) { return t14_family(s) == TF_STAIRS; }
+
+/* StairBlock.getStairsShape (StairBlock.java:132-168) — 월드 재읽기 */
+static const char *stairs_shape_of(feat_env_t *e, const sview_t *v,
+                                   int32_t x, int32_t y, int32_t z) {
+    static const int8_t STEP[6][3] = {{0, -1, 0}, {0, 1, 0},  {0, 0, -1},
+                                      {0, 0, 1},  {-1, 0, 0}, {1, 0, 0}};
+    static const int    OPP[6] = {1, 0, 3, 2, 5, 4};
+    int         f = face_ord(sview_get(v, "facing"));
+    const char *half = sview_get(v, "half");
+#define WORLD(d)                                                              \
+    hc_feat_get_block(e->rg, x + STEP[d][0], y + STEP[d][1], z + STEP[d][2])
+    uint16_t behind = WORLD(f);
+    if (is_stairs_state(behind)) {
+        sview_t bv;
+        sview_of(behind, &bv);
+        if (strcmp(sview_get(&bv, "half"), half) == 0) {
+            int bf = face_ord(sview_get(&bv, "facing"));
+            int axis_diff = ((f == 2 || f == 3) != (bf == 2 || bf == 3));
+            if (axis_diff) {
+                /* canTakeShape(state, pos + OPP(bf)) */
+                uint16_t probe = WORLD(OPP[bf]);
+                int      blocked = 0;
+                if (is_stairs_state(probe)) {
+                    sview_t pv;
+                    sview_of(probe, &pv);
+                    blocked = face_ord(sview_get(&pv, "facing")) == f &&
+                              strcmp(sview_get(&pv, "half"), half) == 0;
+                }
+                if (!blocked)
+                    return bf == ORD_CCW[f] ? "outer_left" : "outer_right";
+            }
+        }
+    }
+    uint16_t front = WORLD(OPP[f]);
+    if (is_stairs_state(front)) {
+        sview_t fv;
+        sview_of(front, &fv);
+        if (strcmp(sview_get(&fv, "half"), half) == 0) {
+            int ff = face_ord(sview_get(&fv, "facing"));
+            int axis_diff = ((f == 2 || f == 3) != (ff == 2 || ff == 3));
+            if (axis_diff) {
+                uint16_t probe = WORLD(ff);
+                int      blocked = 0;
+                if (is_stairs_state(probe)) {
+                    sview_t pv;
+                    sview_of(probe, &pv);
+                    blocked = face_ord(sview_get(&pv, "facing")) == f &&
+                              strcmp(sview_get(&pv, "half"), half) == 0;
+                }
+                if (!blocked)
+                    return ff == ORD_CCW[f] ? "inner_left" : "inner_right";
+            }
+        }
+    }
+#undef WORLD
+    return "straight";
+}
+
+/* ChestBlock.getConnectedDirection (ChestBlock.java:168-171) */
+static int chest_connected_dir(const sview_t *v) {
+    int f = face_ord(sview_get(v, "facing"));
+    return strcmp(sview_get(v, "type"), "left") == 0 ? ORD_CW[f]
+                                                     : ORD_CCW[f];
+}
+
+/* T14 패밀리 updateShape — 즉시 상태 변경만 (틱은 edge_schedule_ticks
+ * 의 generic waterlogged 브랜치) */
+static uint16_t t14_update_state(feat_env_t *e, int fam, uint16_t s,
+                                 int32_t x, int32_t y, int32_t z, int dir,
+                                 uint16_t ns) {
+    static const int OPP[6] = {1, 0, 3, 2, 5, 4};
+    if (fam == TF_STAIRS) {
+        if (dir < 2)
+            return s;
+        sview_t v;
+        sview_of(s, &v);
+        const char *shape = stairs_shape_of(e, &v, x, y, z);
+        if (strcmp(shape, sview_get(&v, "shape")) == 0)
+            return s;
+        sview_set(&v, "shape", shape);
+        return hc_state_build(v.base, v.kv, v.n);
+    }
+    if (fam == TF_FENCE) {
+        if (dir < 2)
+            return s;
+        sview_t v;
+        sview_of(s, &v);
+        int         conn = fence_connects_to(s, ns, dir);
+        const char *cur = sview_get(&v, ORD_NAME[dir]);
+        if ((strcmp(cur, "true") == 0) == (conn != 0))
+            return s;
+        sview_set(&v, ORD_NAME[dir], conn ? "true" : "false");
+        return hc_state_build(v.base, v.kv, v.n);
+    }
+    if (fam == TF_DOOR) {
+        sview_t v;
+        sview_of(s, &v);
+        int lower = strcmp(sview_get(&v, "half"), "lower") == 0;
+        int vert = dir == 0 || dir == 1;
+        if (vert && lower == (dir == 1)) {
+            /* 반대쪽 반토막에서 온 업데이트 */
+            if (t14_family(ns) == TF_DOOR) {
+                sview_t nv;
+                sview_of(ns, &nv);
+                if ((strcmp(sview_get(&nv, "half"), "lower") == 0) !=
+                    lower) {
+                    sview_set(&nv, "half", lower ? "lower" : "upper");
+                    return hc_state_build(nv.base, nv.kv, nv.n);
+                }
+            }
+            return HC_B_AIR;
+        }
+        if (lower && dir == 0 && !t14_face_sturdy(ns, 1))
+            return HC_B_AIR;
+        return s;
+    }
+    if (fam == TF_CHEST) {
+        sview_t v;
+        sview_of(s, &v);
+        int same = t14_family(ns) == TF_CHEST;
+        if (same) {
+            /* chestCanConnectTo = 같은 블록 (chest vs trapped 구분) */
+            const char *a = hc_block_name(s), *b = hc_block_name(ns);
+            const char *abr = strchr(a, '['), *bbr = strchr(b, '[');
+            size_t      al = abr ? (size_t)(abr - a) : strlen(a);
+            size_t      bl = bbr ? (size_t)(bbr - b) : strlen(b);
+            same = al == bl && strncmp(a, b, al) == 0;
+        }
+        if (same && dir >= 2) {
+            sview_t nv;
+            sview_of(ns, &nv);
+            const char *nt = sview_get(&nv, "type");
+            if (strcmp(sview_get(&v, "type"), "single") == 0 &&
+                strcmp(nt, "single") != 0 &&
+                strcmp(sview_get(&v, "facing"),
+                       sview_get(&nv, "facing")) == 0 &&
+                chest_connected_dir(&nv) == OPP[dir]) {
+                sview_set(&v, "type",
+                          strcmp(nt, "left") == 0 ? "right" : "left");
+                return hc_state_build(v.base, v.kv, v.n);
+            }
+        } else if (chest_connected_dir(&v) == dir &&
+                   strcmp(sview_get(&v, "type"), "single") != 0) {
+            sview_set(&v, "type", "single");
+            return hc_state_build(v.base, v.kv, v.n);
+        }
+        return s;
+    }
+    return s; /* TF_SLAB / TF_TRAPDOOR — 상태 불변 (틱만) */
 }
 
 /* BlockState.updateShape 디스패치 — 즉시 상태 변경만 (tick 스케줄 =
- * edge_schedule_ticks). ns 는 전달된 이웃 상태 (재읽기 아님 — R5 §2). */
+ * edge_schedule_ticks; seagrass/kelp 는 결과 의존이라 여기서 스케줄).
+ * ns 는 전달된 이웃 상태 (재읽기 아님 — R5 §2). */
 static uint16_t edge_update_state(feat_env_t *e, uint16_t s, int32_t x,
                                   int32_t y, int32_t z, int dir, uint16_t ns) {
     if (s == HC_B_AIR)
@@ -1277,6 +1629,77 @@ static uint16_t edge_update_state(feat_env_t *e, uint16_t s, int32_t x,
                 x, y, z, hc_block_name(below));
         return s;
     }
+    /* seagrass (SeagrassBlock.java:45-72): super(VegetationBlock) 결과
+     * 비공기면 물 소스 틱 — 매 평가마다. mayPlaceOn = 아래 sturdy(UP) &&
+     * !#cannot_support_seagrass(=magma). */
+    if (s == HC_B_SEAGRASS) {
+        uint16_t r = s;
+        if (dir == 0 &&
+            (!t14_face_sturdy(ns, 1) || ns == HC_B_MAGMA_BLOCK))
+            r = HC_B_AIR;
+        if (r != HC_B_AIR)
+            hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_WATER, 0);
+        return r;
+    }
+    /* tall_seagrass (DoublePlantBlock.updateShape + TallSeagrass
+     * canSurvive; 자기 위치 유체는 항상 물 소스라 mayPlaceOn 로 축약) */
+    if (s == HC_B_TALL_SEAGRASS_LOWER || s == HC_B_TALL_SEAGRASS_UPPER) {
+        int upper = s == HC_B_TALL_SEAGRASS_UPPER;
+        int vert = dir == 0 || dir == 1;
+        int ns_same = ns == HC_B_TALL_SEAGRASS_LOWER ||
+                      ns == HC_B_TALL_SEAGRASS_UPPER;
+        int ns_upper = ns == HC_B_TALL_SEAGRASS_UPPER;
+        if (vert && (!upper) == (dir == 1) &&
+            !(ns_same && ns_upper != upper))
+            return HC_B_AIR; /* 반대 반토막 자리가 유효하지 않음 */
+        if (!upper && dir == 0 &&
+            (!t14_face_sturdy(ns, 1) || ns == HC_B_MAGMA_BLOCK))
+            return HC_B_AIR;
+        return s;
+    }
+    /* kelp 머리 (GrowingPlantHeadBlock.updateShape, scheduleFluidTicks) */
+    if (s >= HC_B_KELP_BASE && s < HC_B_KELP_BASE + 4) {
+        int ns_kelp = ns >= HC_B_KELP_BASE && ns <= HC_B_KELP_PLANT;
+        if (dir == 0) {
+            int can = (ns >= HC_B_KELP_BASE && ns <= HC_B_KELP_PLANT) ||
+                      (t14_face_sturdy(ns, 1) && ns != HC_B_MAGMA_BLOCK);
+            if (!can)
+                hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_BLOCK, 0);
+            else {
+                uint16_t above = hc_feat_get_block(e->rg, x, y + 1, z);
+                if (above >= HC_B_KELP_BASE && above <= HC_B_KELP_PLANT)
+                    return HC_B_KELP_PLANT;
+            }
+        }
+        if (dir != 1 || !ns_kelp) {
+            hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_WATER, 0);
+            return s;
+        }
+        return HC_B_KELP_PLANT;
+    }
+    /* kelp_plant (GrowingPlantBodyBlock.updateShape) — 머리 전환은
+     * 지역 랜덤 age 드로우 (재현 범위 밖) — 도달 즉사 */
+    if (s == HC_B_KELP_PLANT) {
+        if (dir == 0) {
+            int can = (ns >= HC_B_KELP_BASE && ns <= HC_B_KELP_PLANT) ||
+                      (t14_face_sturdy(ns, 1) && ns != HC_B_MAGMA_BLOCK);
+            if (!can)
+                hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_BLOCK, 0);
+        }
+        if (dir == 1 &&
+            !(ns >= HC_B_KELP_BASE && ns <= HC_B_KELP_PLANT))
+            die("edge update: kelp_plant→head conversion (region random) "
+                "reached",
+                NULL);
+        hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_WATER, 0);
+        return s;
+    }
+    /* T14 템플릿 패밀리 (stairs/fence/door/chest/slab/trapdoor) */
+    if (s >= HC_B_T14_BASE) {
+        int fam = t14_family(s);
+        if (fam != TF_NONE)
+            return t14_update_state(e, fam, s, x, y, z, dir, ns);
+    }
     /* 그 외 (잎/통나무/물/돌/흙/이끼 등): tick 스케줄만 — 불변 */
     return s;
 }
@@ -1288,14 +1711,35 @@ static void edge_face(feat_env_t *e, int32_t x, int32_t y, int32_t z,
             nz = z + DIR6[dir][2];
     uint16_t s1 = hc_feat_get_block(e->rg, x, y, z);
     uint16_t s2 = hc_feat_get_block(e->rg, nx, ny, nz);
-    edge_schedule_ticks(e, s1, x, y, z, s2);
+    edge_schedule_ticks(e, s1, x, y, z, dir, s2);
     uint16_t s3 = edge_update_state(e, s1, x, y, z, dir, s2);
     if (s3 != s1)
         hc_feat_set_block(e->rg, x, y, z, s3);
-    edge_schedule_ticks(e, s2, nx, ny, nz, s3);
+    edge_schedule_ticks(e, s2, nx, ny, nz, D_OPP6[dir], s3);
     uint16_t s4 = edge_update_state(e, s2, nx, ny, nz, D_OPP6[dir], s3);
     if (s4 != s2)
         hc_feat_set_block(e->rg, nx, ny, nz, s4);
+}
+
+/* ---------- Task 14 익스포트 (structures_template.c 가 사용) ---------- */
+
+uint16_t hc_featx_edge_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
+                             int32_t z, int dir_mc, uint16_t ns) {
+    return edge_update_state(e, s, x, y, z, dir_mc, ns);
+}
+
+void hc_featx_edge_ticks(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
+                         int32_t z, int dir_mc, uint16_t ns) {
+    edge_schedule_ticks(e, s, x, y, z, dir_mc, ns);
+}
+
+void hc_featx_edge_face(feat_env_t *e, int32_t x, int32_t y, int32_t z,
+                        int dir_mc) {
+    edge_face(e, x, y, z, dir_mc);
+}
+
+int hc_featx_face_sturdy_t14(uint16_t s, int dir_mc) {
+    return t14_face_sturdy(s, dir_mc);
 }
 
 /* forAllFaces: Z 패스 → Y 패스 → X 패스 (R5 §3) */

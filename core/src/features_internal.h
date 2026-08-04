@@ -40,6 +40,21 @@ int hc_featx_run_nested(feat_env_t *e, const hc_pfeat_t *pf, int32_t x,
 int hc_featx_tree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
 int hc_featx_ftree_place(feat_env_t *e, int32_t x, int32_t y, int32_t z);
 
+/* Task 14 — BlockState.updateShape 디스패치 공유 (features_tree.c 구현;
+ * structures_template.c 의 updateShapeAtEdge/updateFromNeighbourShapes 가
+ * 사용). dir_mc: 0=DOWN,1=UP,2=N,3=S,4=W,5=E. edge_face 는 한 면 이벤트
+ * (양측 updateShape + 조건부 flag-2 쓰기 + 틱). state/ticks 는 fold
+ * (updateFromNeighbourShapes) 용 분해 진입점 — state 는 체인된 s 를
+ * 받아 즉시 상태만 계산, ticks 는 틱 스케줄만. */
+uint16_t hc_featx_edge_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
+                             int32_t z, int dir_mc, uint16_t ns);
+void     hc_featx_edge_ticks(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
+                             int32_t z, int dir_mc, uint16_t ns);
+void     hc_featx_edge_face(feat_env_t *e, int32_t x, int32_t y, int32_t z,
+                            int dir_mc);
+/* isFaceSturdy(FULL) — 풀큐브/azalea + stairs/slab/trapdoor 형상 면 */
+int hc_featx_face_sturdy_t14(uint16_t s, int dir_mc);
+
 /* features_ring.c — Task 10 링 프리픽스 본문 */
 int hc_featx_disk_place(feat_env_t *e, const hc_disk_cfg_t *c, int32_t x,
                         int32_t y, int32_t z);

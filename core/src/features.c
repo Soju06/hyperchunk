@@ -1134,6 +1134,22 @@ static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
     if (s == HC_B_PUMPKIN)
         /* PumpkinBlock extends Block — canSurvive 무오버라이드 (javap) */
         return 1;
+    if (s >= HC_B_T14_BASE) {
+        /* FlowerBlock 계열 (flower_plain 프로바이더, Task 14) —
+         * canSurvive 무오버라이드 → VegetationBlock 디폴트:
+         * below ∈ #supports_vegetation (VegetationBlock.java:23-25,42-45) */
+        static const char *const FLOWERS[] = {
+            "minecraft:allium",       "minecraft:azure_bluet",
+            "minecraft:red_tulip",    "minecraft:orange_tulip",
+            "minecraft:white_tulip",  "minecraft:pink_tulip",
+            "minecraft:oxeye_daisy",  "minecraft:cornflower",
+        };
+        const char *nm = hc_block_name(s);
+        for (size_t i = 0; i < sizeof FLOWERS / sizeof FLOWERS[0]; i++)
+            if (strcmp(nm, FLOWERS[i]) == 0)
+                return mask_test(e->reg->tag_supports_vegetation,
+                                 hc_feat_get_block(e->rg, x, y - 1, z));
+    }
     if (hc_features_survey) { /* 서베이: 생존 실패로 강등 */
         fprintf(stderr, "hc_features SURVEY: canSurvive unmapped: %s\n",
                 hc_block_name(s));
