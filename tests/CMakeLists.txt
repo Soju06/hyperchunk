@@ -34,6 +34,15 @@ add_executable(test_nbt unit/test_nbt.c)
 target_link_libraries(test_nbt PRIVATE hyperchunk)
 add_test(NAME nbt COMMAND test_nbt)
 
+# NBT 리더 왕복 (Task 14) — 골든 starts 프래그먼트 파스→재방출 항등.
+add_executable(test_nbt_read unit/test_nbt_read.c)
+target_link_libraries(test_nbt_read PRIVATE hyperchunk)
+add_test(NAME nbt_read COMMAND test_nbt_read
+    ${CMAKE_SOURCE_DIR}/golden/structures/c.20.1.starts.nbt
+    ${CMAKE_SOURCE_DIR}/golden/structures/c.9.5.starts.nbt
+    ${CMAKE_SOURCE_DIR}/golden/structures/c.22.6.starts.nbt
+    ${CMAKE_SOURCE_DIR}/golden/structures/c.16.14.starts.nbt)
+
 # 노이즈 스택 (Task 6a). 한 바이너리, 모드별 golden 대조.
 add_executable(test_noise unit/test_noise.c)
 target_link_libraries(test_noise PRIVATE hyperchunk)
@@ -173,3 +182,20 @@ add_test(NAME region_out_residuals COMMAND python3
          ${CMAKE_SOURCE_DIR}/golden/seed1234567890_r.0.0.mca)
 set_tests_properties(region_out_residuals PROPERTIES
                      FIXTURES_REQUIRED region_mca)
+
+# 풀 리전 canonical 게이트 (Task 14). 41x41 월드 → 리전 전체 manifest
+# 재생 → postprocess 승격 드레인 → stages.log R/S 라이트 고정점 →
+# 1024청크 직렬화가 golden canonical 해시 (golden/SHA256SUMS
+# #canonical-payload) 와 byte-exact. 참조 페이로드/와이드 밴드는 로컬
+# 추출물 (extract_region_ref.py / make_biome_band_region.sh).
+add_executable(test_full_region parity/test_full_region.c)
+target_link_libraries(test_full_region PRIVATE hyperchunk pthread)
+add_test(NAME full_region COMMAND test_full_region
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_region_seed1234567890.txt
+         1234567890
+         ${CMAKE_SOURCE_DIR}/golden/region-ref
+         a59632059bab42d808a24c27091d4b8786b5615405263a84ec1ba9a193223c24
+         ${CMAKE_BINARY_DIR}/full_region_r.0.0.mca)
+set_tests_properties(full_region PROPERTIES TIMEOUT 5400)

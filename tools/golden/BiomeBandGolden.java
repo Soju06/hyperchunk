@@ -35,7 +35,11 @@ import net.minecraft.world.level.levelgen.RandomState;
  */
 public final class BiomeBandGolden {
     static final long SEED = Long.parseLong(System.getProperty("hyperchunk.seed", "1234567890"));
-    static final int QMIN = -24, QMAX = 27;      // chunks -6..6
+    // Window is parameterized for the Task-14 full-region band (chunks -6..36,
+    // quarts -24..147); defaults reproduce the original Task-10 band
+    // (chunks -6..6) byte-for-byte. Same pure-function sampling either way.
+    static final int QMIN = Integer.parseInt(System.getProperty("hyperchunk.qmin", "-24"));
+    static final int QMAX = Integer.parseInt(System.getProperty("hyperchunk.qmax", "27"));
     static final int QYMIN = -16, QYMAX = 79;    // 26.2 overworld quart y
 
     public static void main(String[] args) throws Exception {

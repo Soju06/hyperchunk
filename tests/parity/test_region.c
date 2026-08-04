@@ -813,7 +813,7 @@ int main(int argc, char **argv) {
             die("arena exhausted (payload)", NULL);
         hc_arena_init(&scratch, scratch_mem, 32u << 20);
         ptrdiff_t n = hc_chunk_to_nbt(c, &g_reg, ls, recorder.recs,
-                                      recorder.n, /*last_update=*/0,
+                                      recorder.n, /*last_update=*/0, NULL,
                                       &scratch, payload, 256u << 10);
         if (n < 0)
             die("chunk serialization failed", NULL);

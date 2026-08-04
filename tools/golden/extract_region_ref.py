@@ -24,17 +24,16 @@ ROOT = Path(__file__).resolve().parents[2]
 REGION = ROOT / "golden" / "seed1234567890_r.0.0.mca"
 OUT = ROOT / "golden" / "region-ref"
 
-# r.0.0 ∩ replayable 3x3 grid (Task-11 handoff)
-CHUNKS = [(0, 0), (1, 0), (0, 1), (1, 1)]
-
-
+# Task 12 shipped the replayable 3x3-grid subset; Task 14 (full-region
+# gate) extracts every present chunk. The 4 original files are byte-stable
+# under this extension (same masking), so existing SHA256SUMS lines hold.
 def main() -> int:
     chunks = read_region(str(REGION))
     OUT.mkdir(parents=True, exist_ok=True)
-    for cx, cz in CHUNKS:
-        idx = (cx & 31) + (cz & 31) * 32
-        payload = mask_last_update(chunks[idx].payload)
-        path = OUT / f"c.{cx}.{cz}.nbt"
+    for idx in sorted(chunks):
+        e = chunks[idx]
+        payload = mask_last_update(e.payload)
+        path = OUT / f"c.{e.x}.{e.z}.nbt"
         path.write_bytes(payload)
         sha = hashlib.sha256(payload).hexdigest()
         print(f"{sha}  region-ref/{path.name}")
