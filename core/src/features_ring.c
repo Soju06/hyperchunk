@@ -33,9 +33,15 @@ int hc_featx_disk_place(feat_env_t *e, const hc_disk_cfg_t *c, int32_t x,
             if (dx * dx + dz * dz > r * r)
                 continue;
             int32_t px = x + dx, pz = z + dz;
+            /* DiskFeature.placeColumn (Task 13): 연속 배치 런의 최상단
+             * 블록에서만 markAbove — placedAboveFlag (@70-92): target
+             * 불일치가 플래그를 리셋, 배치 직전 플래그 0 이면 mark. */
+            int placed_above = 0;
             for (int32_t py = top; py > bottom; py--) {
-                if (!hc_featx_bpred_eval(e, &c->target, px, py, pz))
+                if (!hc_featx_bpred_eval(e, &c->target, px, py, pz)) {
+                    placed_above = 0;
                     continue;
+                }
                 const hc_sprov_t *sp = &c->fallback;
                 for (int32_t i = 0; i < c->n_rules; i++)
                     if (hc_featx_bpred_eval(e, &c->rules[i].if_true, px, py,
@@ -45,6 +51,9 @@ int hc_featx_disk_place(feat_env_t *e, const hc_disk_cfg_t *c, int32_t x,
                     }
                 uint16_t st = hc_featx_sprov_sample(e->rng, sp);
                 hc_feat_set_block(e->rg, px, py, pz, st);
+                if (!placed_above)
+                    hc_feat_mark_above(e->rg, px, py, pz);
+                placed_above = 1;
                 placed = 1;
             }
         }
@@ -179,11 +188,12 @@ int hc_featx_lake_place(feat_env_t *e, const hc_lake_cfg_t *c, int32_t ox,
                 hc_feat_set_block(e->rg, wx, wy, wz,
                                   y >= 4 ? HC_B_CAVE_AIR : c->fluid);
                 /* y>=4: scheduleTick(CAVE_AIR,0) + markAboveForPostProcessing
-                 * — block_ticks/PostProcessing NBT 만, 월드 바이트 없음
                  * (@828-847, R5b §5) */
-                if (y >= 4)
+                if (y >= 4) {
                     hc_feat_schedule_tick(e->rg, wx, wy, wz, HC_B_CAVE_AIR,
                                           HC_TICK_BLOCK, 0);
+                    hc_feat_mark_above(e->rg, wx, wy, wz);
+                }
             }
     /* PASS 3: 배리어 셸 (@868-1229) — barrier=stone 은 isAir 아님 */
     if (!hc_block_is_air(c->barrier)) {
@@ -202,7 +212,8 @@ int hc_featx_lake_place(feat_env_t *e, const hc_lake_cfg_t *c, int32_t ox,
                         hc_featx_bpred_eval(e, &c->can_replace_barrier, wx,
                                             wy, wz)) {
                         hc_feat_set_block(e->rg, wx, wy, wz, c->barrier);
-                        /* markAboveForPostProcessing — NBT 만 (@1207-1211) */
+                        /* markAboveForPostProcessing 무조건 (@1207-1211) */
+                        hc_feat_mark_above(e->rg, wx, wy, wz);
                     }
                 }
     }

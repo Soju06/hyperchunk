@@ -108,10 +108,15 @@ void hc_gen_noise_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc) {
                                     (uint16_t)b;
                                 hc_hm_update_both(chunk, local_x, block_y,
                                                   local_z, (uint16_t)b);
-                                /* aquifer.shouldScheduleFluidUpdate +
-                                 * 유체 postprocess 마킹은 블록 팔레트에
-                                 * 영향 없음 (ProtoChunk 메타데이터) —
-                                 * 문서화만 하고 생략 */
+                                /* doFill 마킹 (Task 13):
+                                 * aquifer.shouldScheduleFluidUpdate()
+                                 * && !state.getFluidState().isEmpty()
+                                 * (NoiseBasedChunkGenerator.doFill
+                                 * @455-492) — 자기 청크, 쓴 좌표 그대로 */
+                                if (nc->aq.should_schedule_fluid_update &&
+                                    hc_block_fluid_nonempty((uint16_t)b))
+                                    hc_ppg_mark(chunk->ppg, block_x, block_y,
+                                                block_z);
                             }
                         }
                     }

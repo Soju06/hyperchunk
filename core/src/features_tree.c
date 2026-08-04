@@ -79,7 +79,7 @@ typedef struct {
 static void t_set(tree_ctx_t *t, jset_t *set, int32_t x, int32_t y, int32_t z,
                   uint16_t state) {
     jset_add(set, x, y, z);
-    hc_feat_set_block(t->e->rg, x, y, z, state);
+    hc_feat_set_block_ks(t->e->rg, x, y, z, state); /* flag 19 */
 }
 
 /* placeLog: validTreePos → trunk state 쓰기(logs 셋), true */
@@ -467,8 +467,8 @@ static void ctx_place_vine(tree_ctx_t *t, jset_t *deco, int32_t x, int32_t y,
                     face_off);
     }
     jset_add(deco, x, y, z);
-    hc_feat_set_block(t->e->rg, x, y, z,
-                      (uint16_t)(HC_B_VINE_BASE + face_off));
+    hc_feat_set_block_ks(t->e->rg, x, y, z, /* flag 19 */
+                         (uint16_t)(HC_B_VINE_BASE + face_off));
 }
 
 /* HORIZONTAL = [N, E, S, W]; step (dx,dz) + opposite face 오프셋 */
@@ -549,7 +549,7 @@ static void dec_cocoa(tree_ctx_t *t, jset_t *deco, const cpos_t *logs,
             /* facing = dir (N,E,S,W = 팔레트 오프셋 그대로) */
             uint16_t st = (uint16_t)(HC_B_COCOA_BASE + age * 4 + d);
             jset_add(deco, px, logs[i].y, pz);
-            hc_feat_set_block(e->rg, px, logs[i].y, pz, st);
+            hc_feat_set_block_ks(e->rg, px, logs[i].y, pz, st); /* flag 19 */
         }
     }
 }
@@ -629,7 +629,7 @@ static void dec_attached_to_logs(tree_ctx_t *t, jset_t *deco,
         if (f <= dec->prob && ctx_is_air(e, px, py, pz)) {
             uint16_t st = sprov_sample(e->rng, &dec->provider);
             jset_add(deco, px, py, pz);
-            hc_feat_set_block(e->rg, px, py, pz, st);
+            hc_feat_set_block_ks(e->rg, px, py, pz, st); /* flag 19 */
         }
     }
 }
@@ -809,7 +809,8 @@ static shape_t *update_leaves(tree_ctx_t *t) {
              * 상태는 항상 잎이다 (enqueue 게이트) */
             if (!leaf_family_base(cur))
                 die("updateLeaves rewrite on non-leaf", hc_block_name(cur));
-            hc_feat_set_block(e->rg, x, y, z, leaf_with_distance(cur, i));
+            hc_feat_set_block_ks(e->rg, x, y, z, /* flag 19 */
+                                 leaf_with_distance(cur, i));
         }
         shape_fill(box, x, y, z);
         for (int d = 0; d < 6; d++) {
@@ -1262,8 +1263,11 @@ int hc_featx_ftree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
     jset_init(&t->deco);
     jset_init(&t->roots);
 
-    /* placeStump: 무조건 쓰기 (flag 3) + stump 데코레이터 */
+    /* placeStump: 무조건 쓰기 (flag 3) + stump 데코레이터.
+     * placeLogBlock @31-35: 로그마다 무조건 markAboveForPostProcessing
+     * (열린 하늘 아래선 위가 공기라 no-mark — Task 13). */
     hc_feat_set_block(e->rg, ox, oy, oz, cfg->trunk_state);
+    hc_feat_mark_above(e->rg, ox, oy, oz);
     jset_add(&t->logs, ox, oy, oz);
     run_decorators(t, cfg->stump_dec, cfg->n_stump_dec, &t->logs, &t->leaves,
                    &t->deco);
@@ -1312,6 +1316,7 @@ int hc_featx_ftree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
         for (int32_t i = 0; i < len; i++) {
             hc_feat_set_block(e->rg, cx, cy, cz,
                               log_with_axis(cfg->trunk_state, axis));
+            hc_feat_mark_above(e->rg, cx, cy, cz); /* placeLogBlock @31-35 */
             jset_add(flogs, cx, cy, cz);
             cx += HORIZ[d].dx;
             cz += HORIZ[d].dz;

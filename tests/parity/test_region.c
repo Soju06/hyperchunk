@@ -1,23 +1,18 @@
-/* 리전 출력 게이트 (Task 12, ctest region_out).
+/* 리전 출력 게이트 (Task 12 도입, Task 13-close 에서 4/4 strict 승격).
  *
- * 04..06 체인 → primary 번들 order.manifest 전체(81 엔트리) 재생 (틱
- * 레코더 켬) → 라이트 최종 고정점 → r.0.0 ∩ 그리드 4청크
- * ((0,0),(1,0),(0,1),(1,1)) 를 26.2 청크 NBT 로 직렬화, golden
- * .mca 에서 추출한 canonical 참조 페이로드(LastUpdate 마스킹,
- * tools/golden/extract_region_ref.py)와 바이트 대조한다.
+ * 04..06 체인 → primary 번들 order.manifest 재생 (리전 전체 manifest,
+ * |c|<=WR-1 창 적용; 틱 레코더 켬) → postProcessGeneration 승격 드레인
+ * (golden postprocess.manifest 순서; 유도 마킹 교차검증 fail-loud) →
+ * 라이트 최종 고정점 → r.0.0 ∩ 그리드 4청크 ((0,0),(1,0),(0,1),(1,1))
+ * 를 26.2 청크 NBT 로 직렬화, golden .mca 에서 추출한 canonical 참조
+ * 페이로드(LastUpdate 마스킹, tools/golden/extract_region_ref.py)와
+ * 바이트 대조한다. 4/4 바이트 일치가 무조건 게이트다.
  *
- * 스펙/근거: .hermes/notes/task12-region/R-A..R-E.
- *
- * 게이트 규율 (A-task12 핸드오프 §stale-mca): golden .mca 는 07-28 캡처
- * (SHA256SUMS git 이력), 스테이지 번들은 07-31 재기록 — 서로 다른 서버
- * 런이고 .mca 런의 데코 순서는 미기록이다. 그리드 데코 프리픽스의
- * 순서-고착성(NOTES.md) 덕에 (0,0) 은 풀 바이트 일치가 성립하고 이를
- * 엄격 게이트로 삼는다. 나머지 3청크는 .mca 런 링-순서 발산 + 그 런의
- * postProcessGeneration(게임타임 8, R-D §3) 산물이 섞여 바이트 일치가
- * 원리적으로 불가 — 문서화된 잔차 봉투는 ctest region_out_residuals
- * (tools/golden/check_region_residuals.py) 가 강제한다. 골든 재캡처
- * (단일 세션 mca+manifest) 후 HC_REGION_STRICT=1 로 4/4 바이트 게이트를
- * 강제할 수 있다.
+ * 스펙/근거: .hermes/notes/task12-region/R-A..R-E, task13-close 완료
+ * 노트. 골든 = Task-13 unified 단일-세션 재캡처 (mca+manifest+dumps
+ * 코히런트, noSave — 교차검증 tools/golden/logs/coherence-primary3.log).
+ * 구 stale-mca 잔차 규율 (07-28 mca vs 07-31 번들) 은 재캡처로 소멸 —
+ * git 이력 ec7e23d 의 헤더 참조.
  *
  * 마지막에 4청크 .mca 이미지를 hc_region_write 로 조립해 argv 경로에
  * 쓴다 — ctest region_out_roundtrip/residuals 가 소비. */
@@ -28,6 +23,7 @@
 #include "../../core/src/hc_chunk_nbt.h"
 #include "../../core/src/hc_features.h"
 #include "../../core/src/hc_light.h"
+#include "../../core/src/hc_postprocess.h"
 #include "../../core/src/hc_region.h"
 #include "../../core/src/hc_sha256.h" /* hc_biome_obfuscate_seed */
 
@@ -528,11 +524,15 @@ int main(int argc, char **argv) {
     view.ids = &g_grid[0][0][0];
     view.zoom_seed = hc_biome_obfuscate_seed(seed);
 
+    static hc_ppg_recorder_t ppg;
+    if (hc_ppg_recorder_init(&ppg, &g_arena, 1 << 16) != 0)
+        die("arena exhausted (ppg recorder)", NULL);
     for (int32_t cz = -WR; cz <= WR; cz++)
         for (int32_t cx = -WR; cx <= WR; cx++) {
             hc_chunk_t *c = &g_world.chunks[widx(cx, cz)];
             if (hc_chunk_init(c, &g_arena, cx, cz) != 0)
                 die("arena exhausted (chunk)", NULL);
+            c->ppg = &ppg; /* Task 13: postProcess 마킹 수집 */
             char bpath[1024];
             if (is_grid(cx, cz)) {
                 snprintf(bpath, sizeof bpath,
@@ -607,10 +607,160 @@ int main(int argc, char **argv) {
                               &view, &g_reg, (int32_t)sea->num, 10,
                               &g_guard_sink);
     }
-    printf("replayed %d manifest entries; recorded %d scheduled ticks\n",
-           n_man, recorder.n);
+    printf("replayed %d manifest entries; recorded %d scheduled ticks, "
+           "%d postprocess marks\n",
+           n_man, recorder.n, ppg.n);
 
-    /* --- 라이트 최종 고정점 --- */
+    /* --- Task 13: postProcessGeneration (승격 드레인) ---
+     * golden postprocess.manifest 의 승격 순서를 |c|<=3 창으로 재생.
+     * 게이트 4청크의 바이트에 닿을 수 있는 드레인은 (-1..2)^2 뿐이지만
+     * (쓰기 ±1 / 스케줄 ±2), 마킹이 완전한 (라이터 |c|<=4 전부 재생됨)
+     * |c|<=3 전체를 드레인해 커버리지를 넓힌다. 드레인 전에 우리가
+     * 유도한 마킹을 기록된 마킹 (postprocess.manifest 'p' 라인) 과
+     * 좌표·순서·중복까지 교차검증한다 — 마킹 생산자 버그 fail-loud. */
+    ppg.frozen = 1; /* 라이브 단계: LevelChunk.markPos = no-op */
+    enum { MAX_PPM = 2048, PP_WIN = 3 };
+    static int32_t ppm_cx[MAX_PPM], ppm_cz[MAX_PPM];
+    int32_t        n_ppm = 0;
+    {
+        char ppath[1024];
+        snprintf(ppath, sizeof ppath, "%s/postprocess.manifest", stages_dir);
+        size_t len = 0;
+        char  *buf = read_file(ppath, &len);
+        char  *p = buf;
+        /* seq → 창 내 여부 (p 라인 매칭용) */
+        static int8_t seq_in_win[MAX_PPM * 4];
+        memset(seq_in_win, 0, sizeof seq_in_win);
+        /* 기록 마킹 (창 내): 청크별 검증용 평면 리스트 */
+        enum { MAX_PPP = 1 << 16 };
+        static struct {
+            int32_t seq, x, y, z;
+        } rec_pos[MAX_PPP];
+        int32_t n_rec = 0;
+        static int32_t seq_cx[MAX_PPM * 4], seq_cz[MAX_PPM * 4];
+        while (*p) {
+            char *nl = strchr(p, '\n');
+            if (!nl)
+                break;
+            *nl = '\0';
+            if (p[0] == 'p' && p[1] == ' ') {
+                long long seq, k, secy;
+                int32_t   x, y, z;
+                if (sscanf(p + 2, "%lld %lld %lld %d %d %d", &seq, &k, &secy,
+                           &x, &y, &z) != 6)
+                    die("bad postprocess position line", p);
+                if (seq_in_win[seq]) {
+                    if (n_rec >= MAX_PPP)
+                        die("too many recorded marks", ppath);
+                    rec_pos[n_rec].seq = (int32_t)seq;
+                    rec_pos[n_rec].x = x;
+                    rec_pos[n_rec].y = y;
+                    rec_pos[n_rec].z = z;
+                    n_rec++;
+                }
+            } else if (p[0] != '#' && p[0] != '\0') {
+                long long seq, gt, nm;
+                int32_t   cx, cz;
+                char      thread[64];
+                long long nanos;
+                if (sscanf(p, "%lld %d %d %lld %lld %63s %lld", &seq, &cx,
+                           &cz, &gt, &nm, thread, &nanos) != 7)
+                    die("bad postprocess chunk line", p);
+                if (seq >= MAX_PPM * 4)
+                    die("postprocess manifest too long", ppath);
+                seq_cx[seq] = cx;
+                seq_cz[seq] = cz;
+                if (cx >= -PP_WIN && cx <= PP_WIN && cz >= -PP_WIN &&
+                    cz <= PP_WIN) {
+                    seq_in_win[seq] = 1;
+                    if (n_ppm >= MAX_PPM)
+                        die("too many in-window promotions", ppath);
+                    ppm_cx[n_ppm] = cx;
+                    ppm_cz[n_ppm] = cz;
+                    n_ppm++;
+                }
+            }
+            p = nl + 1;
+        }
+        /* 교차검증: 청크별 (섹션 오름차순 × append 순) 유도 마킹 ==
+         * 기록 마킹 (기록 순서 = 드레인 순서 그 자체) */
+        int64_t bad = 0;
+        for (int32_t m = 0; m < n_ppm; m++) {
+            int32_t cx = ppm_cx[m], cz = ppm_cz[m];
+            /* 기록측: rec_pos 에서 이 청크의 seq 를 파일 순서로 */
+            int32_t ri = 0;
+            static int32_t ours_x[8192], ours_y[8192], ours_z[8192];
+            int32_t n_ours = 0;
+            for (int sec = 0; sec < HC_HEIGHT / 16; sec++)
+                for (int32_t i = 0; i < ppg.n; i++) {
+                    const hc_ppg_rec_t *r = &ppg.recs[i];
+                    if ((r->x >> 4) != cx || (r->z >> 4) != cz)
+                        continue;
+                    if ((r->y - HC_MIN_Y) >> 4 != sec)
+                        continue;
+                    if (n_ours < 8192) {
+                        ours_x[n_ours] = r->x;
+                        ours_y[n_ours] = r->y;
+                        ours_z[n_ours] = r->z;
+                    }
+                    n_ours++;
+                }
+            int32_t n_theirs = 0;
+            for (int32_t i = 0; i < n_rec; i++) {
+                if (seq_cx[rec_pos[i].seq] != cx ||
+                    seq_cz[rec_pos[i].seq] != cz)
+                    continue;
+                if (n_theirs < n_ours &&
+                    (rec_pos[i].x != ours_x[n_theirs] ||
+                     rec_pos[i].y != ours_y[n_theirs] ||
+                     rec_pos[i].z != ours_z[n_theirs])) {
+                    if (bad < 12)
+                        fprintf(stderr,
+                                "PPG MARK c.%d.%d[%d]: ours (%d,%d,%d) "
+                                "golden (%d,%d,%d)\n",
+                                cx, cz, n_theirs, ours_x[n_theirs],
+                                ours_y[n_theirs], ours_z[n_theirs],
+                                rec_pos[i].x, rec_pos[i].y, rec_pos[i].z);
+                    bad++;
+                }
+                n_theirs++;
+                (void)ri;
+            }
+            if (n_theirs != n_ours) {
+                fprintf(stderr,
+                        "PPG MARK c.%d.%d: count ours %d golden %d\n", cx, cz,
+                        n_ours, n_theirs);
+                /* die 경로 진단 — 앞쪽 일부만 (마킹 생산자 지목에 충분) */
+                for (int32_t i = 0; i < n_ours && i < 40; i++)
+                    fprintf(stderr, "  ours[%d] (%d,%d,%d) %s\n", i,
+                            ours_x[i], ours_y[i], ours_z[i],
+                            hc_block_name(g_world.chunks[widx(cx, cz)].states
+                                              [hc_idx(ours_x[i] & 15,
+                                                      ours_y[i],
+                                                      ours_z[i] & 15)]));
+                int32_t ti = 0;
+                for (int32_t i = 0; i < n_rec && ti < 40; i++)
+                    if (seq_cx[rec_pos[i].seq] == cx &&
+                        seq_cz[rec_pos[i].seq] == cz)
+                        fprintf(stderr, "  gold[%d] (%d,%d,%d)\n", ti++,
+                                rec_pos[i].x, rec_pos[i].y, rec_pos[i].z);
+                bad++;
+            }
+        }
+        if (bad)
+            die("derived postprocess marks diverge from recording", NULL);
+        printf("postprocess marks verified for |c|<=%d (%d chunks, %d "
+               "recorded positions); draining\n",
+               PP_WIN, n_ppm, n_rec);
+    }
+    for (int32_t m = 0; m < n_ppm; m++)
+        hc_postprocess_chunk(&rg, ppm_cx[m], ppm_cz[m], &ppg);
+    printf("postprocess drained %d chunks (unmodeled-veg updateShape "
+           "evals: %" PRId64 " — coverage diag, see hc_postprocess.h)\n",
+           n_ppm, hc_postprocess_unmodeled_veg_evals());
+
+    /* --- 라이트 최종 고정점 (postProcess 변이 포함 상태의 lfp — 바닐라
+     * 증분 relight 의 수렴값과 동일, R2 §10) --- */
     hc_light_world_t lw;
     if (hc_light_world_init(&lw, &g_arena, -WR, -WR, WN) != 0)
         die("arena exhausted (light world)", NULL);
@@ -696,17 +846,12 @@ int main(int argc, char **argv) {
             size_t off = 0;
             while (off < common && payload[off] == (uint8_t)ref[off])
                 off++;
-            /* (0,0) 은 순서-고착 프리픽스 내부 — 무조건 바이트 일치.
-             * 나머지는 stale-mca 잔차 (파일 헤더 주석) — residuals
-             * 게이트가 봉투를 강제하고, 여기서는 STRICT 에서만 FAIL. */
-            int strict = (cx == 0 && cz == 0) ||
-                         (getenv("HC_REGION_STRICT") != NULL);
+            /* Task 13-close: 코히런트 재캡처 + postProcess 드레인으로
+             * 4/4 바이트 일치가 기본 게이트 (HC_REGION_STRICT 불필요). */
             fprintf(stderr,
-                    "PAYLOAD c.%d.%d: %s ours=%td golden=%zu first diff "
-                    "@%zu\n",
-                    cx, cz,
-                    strict ? "MISMATCH" : "stale-mca residual (documented)",
-                    n, ref_len, off);
+                    "PAYLOAD c.%d.%d: MISMATCH ours=%td golden=%zu first "
+                    "diff @%zu\n",
+                    cx, cz, n, ref_len, off);
             size_t ctx0 = off >= 24 ? off - 24 : 0;
             fprintf(stderr, "  ours  @%zu:", ctx0);
             for (size_t i = ctx0; i < ctx0 + 48 && i < (size_t)n; i++)
@@ -715,8 +860,7 @@ int main(int argc, char **argv) {
             for (size_t i = ctx0; i < ctx0 + 48 && i < ref_len; i++)
                 fprintf(stderr, " %02x", (uint8_t)ref[i]);
             fprintf(stderr, "\n");
-            if (strict)
-                g_fails++;
+            g_fails++;
         } else {
             printf("PAYLOAD c.%d.%d: OK (%td bytes)\n", cx, cz, n);
         }
@@ -738,11 +882,10 @@ int main(int argc, char **argv) {
     }
 
     if (g_fails) {
-        fprintf(stderr, "test_region: FAIL (%d strict payload mismatches)\n",
+        fprintf(stderr, "test_region: FAIL (%d payload mismatches)\n",
                 g_fails);
         return 1;
     }
-    printf("test_region: PASS (strict chunks byte-exact; stale-mca "
-           "residuals -> region_out_residuals gate)\n");
+    printf("test_region: PASS (4/4 grid chunks byte-exact)\n");
     return 0;
 }

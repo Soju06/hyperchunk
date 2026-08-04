@@ -73,14 +73,16 @@ static uint16_t col_get(const hc_chunk_t *c, int x, int32_t y, int z) {
 
 /* setBlock: isInsideBuildHeight 가드 + setBlockState(pos,state,3).
  * 하이트맵 갱신은 ProtoChunk.setBlockState 가 하는 일 — badlands 패스의
- * h2 재읽기와 steep 이 이 갱신을 관측한다. 유체 postprocess 마킹은
- * 스테이지 산출물(blocks/heightmaps)에 무영향이라 생략 (Task 8+ 에서
- * 재검토). */
+ * h2 재읽기와 steep 이 이 갱신을 관측한다. 유체 마킹 (Task 13):
+ * SurfaceSystem$1.setBlock @35-53 — 유체 상태를 놓으면 자기 청크에
+ * markPosForPostProcessing. */
 static void col_set(hc_chunk_t *c, int x, int32_t y, int z, uint16_t state) {
     if (y < HC_MIN_Y || y > HC_MAX_Y)
         return;
     c->states[hc_idx(x, y, z)] = state;
     hc_hm_update_both(c, x, y, z, state);
+    if (hc_block_fluid_nonempty(state))
+        hc_ppg_mark(c->ppg, (c->cx << 4) + x, y, (c->cz << 4) + z);
 }
 
 /* SurfaceSystem.isStone: !isAir && fluidState.isEmpty() */

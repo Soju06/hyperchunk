@@ -144,7 +144,62 @@ int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
             hm_prime_one(c, t);
     for (int t = 0; t < HC_HMF_COUNT; t++)
         hm_update(c, t, lx, y, lz, id);
+    /* WorldGenRegion.setBlock 일반 마킹 (Task 13; @189-215): (flags&16)==0
+     * && getPostProcessPos != null. 26.2 등록 4종 (Blocks.<clinit> 전수):
+     * brown/red mushroom → 자기 pos, soul_sand/magma_block → pos.above().
+     * flags&16 (setBlockKnownShape 19 = 트리 트렁크/잎/데코레이터 쓰기)
+     * 는 hc_feat_set_block_ks 로 우회 — attached_to_logs 버섯이 실측
+     * 반례였다 (기록 마킹에 없음). soul_sand 는 팔레트에 없다. */
+    if (id == HC_B_BROWN_MUSHROOM || id == HC_B_RED_MUSHROOM)
+        hc_ppg_mark(c->ppg, x, y, z);
+    else if (id == HC_B_MAGMA_BLOCK)
+        hc_ppg_mark(c->ppg, x, y + 1, z); /* 같은 컬럼 = 같은 청크 */
     return 1;
+}
+
+/* setBlockKnownShape (flags 19, bit16 set) 등가 — 일반 postProcess 마킹
+ * 억제. 트리 배치/데코레이터/updateLeaves DISTANCE 재기록 경로 전용. */
+int hc_feat_set_block_ks(hc_feat_region_t *rg, int32_t x, int32_t y,
+                         int32_t z, uint16_t id) {
+    int32_t cx = floor_div16(x), cz = floor_div16(z);
+    if (cx < rg->center_cx - 1 || cx > rg->center_cx + 1 ||
+        cz < rg->center_cz - 1 || cz > rg->center_cz + 1)
+        return 0;
+    if (y < HC_MIN_Y || y > HC_MAX_Y)
+        return 0;
+    hc_chunk_t *c = hc_feat_region_chunk(rg, cx, cz);
+    int lx = x & 15, lz = z & 15;
+    c->states[hc_idx(lx, y, lz)] = id;
+    for (int t = 0; t < HC_HMF_COUNT; t++)
+        if (!(c->hm_final_primed & (1u << t)))
+            hm_prime_one(c, t);
+    for (int t = 0; t < HC_HMF_COUNT; t++)
+        hm_update(c, t, lx, y, lz, id);
+    return 1;
+}
+
+/* Feature.markAboveForPostProcessing (Task 13; @0-53): 위로 최대 2칸,
+ * 이동 먼저 — pos 자신은 절대 마킹 안 됨; 공기에서 정지; 수신자는 각
+ * 좌표를 포함하는 청크 (level.getChunk(m)). 월드젠 중 FULL 이웃은
+ * 존재하지 않는다 (승격 순서 논증 — R-D §1.9 드롭은 미발동). */
+void hc_feat_mark_above(hc_feat_region_t *rg, int32_t x, int32_t y,
+                        int32_t z) {
+    for (int i = 0; i < 2; i++) {
+        y += 1;
+        if (hc_block_is_air(hc_feat_get_block(rg, x, y, z)))
+            return;
+        hc_chunk_t *c =
+            hc_feat_region_chunk(rg, floor_div16(x), floor_div16(z));
+        if (c)
+            hc_ppg_mark(c->ppg, x, y, z);
+    }
+}
+
+/* MultifaceSpreader/MultifaceGrowthFeature 마킹: 좌표 포함 청크로 라우팅 */
+void hc_feat_mark_pos(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z) {
+    hc_chunk_t *c = hc_feat_region_chunk(rg, floor_div16(x), floor_div16(z));
+    if (c)
+        hc_ppg_mark(c->ppg, x, y, z);
 }
 
 /* --- Task 12: 스케줄-틱 레코더 (hc_features.h 주석 참조) --- */

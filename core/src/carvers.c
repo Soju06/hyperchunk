@@ -162,15 +162,23 @@ static int carve_block(hc_carve_env_t *e, int lx, int32_t y, int lz, int32_t wx,
     if (carve_state < 0)
         return 0; /* aquifer null — 블록 보존 */
     col_set(e->chunk, lx, y, lz, (uint16_t)carve_state);
-    /* markPosForPostProcessing(pos): no-op (A5 §6, A6 §8 — 06 산출물
-     * blocks/heightmaps 에 무영향; Task 9 인계 항목) */
+    /* 마킹 A (Task 13, carveBlock @82-106): aquifer 플래그 && 유체 —
+     * y<=lava_level 경로는 aquifer 우회라 플래그가 직전 호출 값으로
+     * 남는다 (바닐라도 동일 — 필드 staleness 재현) */
+    if (e->nc->aq.should_schedule_fluid_update &&
+        hc_block_fluid_nonempty((uint16_t)carve_state))
+        hc_ppg_mark(e->chunk->ppg, wx, y, wz);
     if (*reached_surface && col_get(e->chunk, lx, y - 1, lz) == HC_B_DIRT) {
         /* grass 복구: 정확히 minecraft:dirt 위에서만, topMaterial 결과로 */
         int32_t top = hc_surface_top_material(
             e->surf, e->chunk, e->nc, e->view, wx, y - 1, wz,
             hc_block_is_fluid((uint16_t)carve_state));
-        if (top >= 0)
+        if (top >= 0) {
             col_set(e->chunk, lx, y - 1, lz, (uint16_t)top);
+            /* 마킹 B (lambda$carveBlock$0 @7-19): top 이 유체를 지닐 때 */
+            if (hc_block_fluid_nonempty((uint16_t)top))
+                hc_ppg_mark(e->chunk->ppg, wx, y - 1, wz);
+        }
     }
     return 1;
 }

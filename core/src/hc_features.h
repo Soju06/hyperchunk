@@ -117,11 +117,17 @@ uint16_t    hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
  * 무갱신 — 광석은 불투명→불투명 치환이라 순수함수 등가). 성공 1. */
 int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
                       uint16_t id);
+/* setBlockKnownShape (flags 19) — 일반 postProcess 마킹 억제 (Task 13) */
+int hc_feat_set_block_ks(hc_feat_region_t *rg, int32_t x, int32_t y,
+                         int32_t z, uint16_t id);
 /* ScheduledTickAccess.scheduleTick 등가 — rg->ticks 없으면 no-op.
  * t 는 저장 t 값 (월드젠 경로 = 0). */
 void hc_feat_schedule_tick(hc_feat_region_t *rg, int32_t x, int32_t y,
                            int32_t z, uint16_t block_state, int kind,
                            int32_t t);
+/* Task 13 postProcess 마킹 (features.c 주석 참조) */
+void hc_feat_mark_above(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z);
+void hc_feat_mark_pos(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z);
 /* ctx.getHeight(type,x,z) = getFirstAvailable (top blocking y + 1).
  * *_WG: wg_dropped 전엔 frozen 저장값, 후엔 청크·타입별 첫-읽기 재프라임
  * (아래 wg_dropped 주석); FINAL 4종은 지연 프라임 (읽기 = 단일 타입

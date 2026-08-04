@@ -131,6 +131,9 @@ static void mf_spread(feat_env_t *e, uint16_t state, int32_t x, int32_t y,
             uint16_t placed = mf_state_for_placement(e, s, px, py, pz, pface);
             if (placed == MF_NULL)
                 continue;
+            /* SpreadConfig.placeBlock @23-42: markForPostprocessing=true
+             * (feature 스프레드) — setBlock 보다 마킹이 먼저다 */
+            hc_feat_mark_pos(e->rg, px, py, pz);
             hc_feat_set_block(e->rg, px, py, pz, placed); /* flag 2 */
             return; /* findFirst — 첫 성공에서 전체 정지 */
         }
@@ -151,6 +154,8 @@ static int mf_place_growth(feat_env_t *e, const hc_mface_cfg_t *c, int32_t x,
         if (placed == MF_NULL)
             return 0; /* null → 헬퍼 전체 중단 (남은 방향 시도 없음) */
         hc_feat_set_block(e->rg, x, y, z, placed); /* flag 3 */
+        /* placeGrowthIfPossible @95-103: setBlock 뒤 무조건 markPos */
+        hc_feat_mark_pos(e->rg, x, y, z);
         /* 성공 시에만 드로우 — setBlock 뒤 */
         if (hc_wgr_next_float(e->rng) < c->chance_of_spreading)
             mf_spread(e, placed, x, y, z, d);

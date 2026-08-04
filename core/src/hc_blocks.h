@@ -155,6 +155,16 @@ enum {
     HC_B_FIREFLY_BUSH,  /* 발광 2 (R4 §4 lambda$static$410) */
     HC_B_KELP_BASE,     /* [age=20..23] — KelpFeature nextInt(4)+20 */
     HC_B_KELP_PLANT = HC_B_KELP_BASE + 4,
+    /* Task 13 postProcessGeneration 산물 — 월드젠 스테이지는 절대 쓰지
+     * 않는다 (worldgen 물은 전부 level=0 소스). FlowingFluid 스프레드가
+     * 만든다: level=1..7 흐름 (FluidState amount = 8-level), 8..15 낙하
+     * (amount 8, FALLING; LiquidBlock.getFluidState 는 LEVEL 8..15 를
+     * 전부 falling-8 로 매핑 — R-D 후속 핀 §12). */
+    HC_B_WATER_FLOW_BASE, /* +N-1 = water[level=N], N=1..15 */
+    /* BubbleColumnBlock.updateColumn 산물 (postProcess LiquidBlock.tick).
+     * getFluidState = 물 소스 (R-D 후속 핀 §13). */
+    HC_B_BUBBLE_COLUMN_DRAG = HC_B_WATER_FLOW_BASE + 15, /* drag_down=true */
+    HC_B_BUBBLE_COLUMN_PUSH,                             /* drag_down=false */
     HC_B_COUNT
 };
 

@@ -33,6 +33,25 @@ enum {
     HC_HMF_COUNT = 4,
 };
 
+/* Task 13 — postProcessGeneration 마킹 레코더 (ProtoChunk.postProcessing
+ * ShortList[] 등가). 지역 전체 시간순 로그 하나를 모든 청크가 공유한다:
+ * 청크별 ShortList 순서는 "섹션 오름차순, 섹션 내 append 순" 드레인
+ * (LevelChunk.postProcessGeneration @5-177) 이므로, (청크 필터 → 섹션
+ * stable sort) 로 복원된다. 중복 유지, dedup 없음, 빌드고도 밖 드롭
+ * (ProtoChunk.markPosForPostProcessing @0-33). frozen 은 드레인 단계
+ * 진입 후 마킹 차단용 (라이브 LevelChunk.markPos = 경고 no-op). */
+typedef struct {
+    int32_t x, y, z;
+} hc_ppg_rec_t;
+typedef struct hc_ppg_recorder_s {
+    hc_ppg_rec_t *recs;
+    int32_t       n, cap;
+    int           frozen;
+} hc_ppg_recorder_t;
+
+int  hc_ppg_recorder_init(hc_ppg_recorder_t *r, hc_arena_t *a, int32_t cap);
+void hc_ppg_mark(hc_ppg_recorder_t *r, int32_t x, int32_t y, int32_t z);
+
 typedef struct {
     int32_t   cx, cz;
     uint16_t *states;                     /* HC_BLOCKS 개 팔레트 인덱스 */
@@ -57,6 +76,11 @@ typedef struct {
      * 전환: FINAL 4종만 생존, *_WG 는 이후 존재하지 않는다 —
      * gen_spawn_full_stages.c). */
     uint8_t   promoted;
+    /* Task 13: postProcess 마킹 싱크 (NULL = 기록 끔 — 기존 게이트 불변).
+     * noise/surface/carvers 스테이지의 자기-청크 마킹이 쓴다; features 는
+     * 대상 청크의 이 포인터로 마킹한다 (WorldGenRegion.markPos = 포함
+     * 청크 라우팅). 테스트가 청크 init 후에 연결한다. */
+    hc_ppg_recorder_t *ppg;
 } hc_chunk_t;
 
 /* states 를 arena 에서 할당하고 전체를 zero-fill 한다. arena 재사용 시

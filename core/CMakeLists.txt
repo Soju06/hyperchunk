@@ -35,6 +35,7 @@ add_library(hyperchunk STATIC
   src/light_engine.c
   src/gen_light_stages.c
   src/gen_spawn_full_stages.c
+  src/postprocess.c
   src/nbt.c
   src/chunk_nbt.c
   src/region.c

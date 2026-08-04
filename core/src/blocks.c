@@ -457,6 +457,24 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:kelp[age=22]",
     "minecraft:kelp[age=23]",
     "minecraft:kelp_plant",
+    /* Task 13 postProcess 산물 (hc_blocks.h 주석 참조) */
+    "minecraft:water[level=1]",
+    "minecraft:water[level=2]",
+    "minecraft:water[level=3]",
+    "minecraft:water[level=4]",
+    "minecraft:water[level=5]",
+    "minecraft:water[level=6]",
+    "minecraft:water[level=7]",
+    "minecraft:water[level=8]",
+    "minecraft:water[level=9]",
+    "minecraft:water[level=10]",
+    "minecraft:water[level=11]",
+    "minecraft:water[level=12]",
+    "minecraft:water[level=13]",
+    "minecraft:water[level=14]",
+    "minecraft:water[level=15]",
+    "minecraft:bubble_column[drag_down=true]",
+    "minecraft:bubble_column[drag_down=false]",
 };
 
 const char *hc_block_name(uint16_t id) {
@@ -657,6 +675,14 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     F_WLOG,                      /* kelp[age=22] */
     F_WLOG,                      /* kelp[age=23] */
     F_WLOG,                      /* kelp_plant */
+    /* water[level=1..15]: 흐르는 물 — replaceable, 유체는 물이지만 소스
+     * 아님 (F_WLOG 는 '소스 물' 시맨틱이라 주지 않는다; fluid_nonempty 는
+     * 아래 술어에서 레인지로 처리) */
+    F_REPL, F_REPL, F_REPL, F_REPL, F_REPL, F_REPL, F_REPL, F_REPL,
+    F_REPL, F_REPL, F_REPL, F_REPL, F_REPL, F_REPL, F_REPL,
+    /* bubble_column: 유체 = 물 소스 (F_WLOG 시맨틱과 일치), replaceable */
+    F_REPL | F_WLOG,             /* bubble_column[drag_down=true] */
+    F_REPL | F_WLOG,             /* bubble_column[drag_down=false] */
 };
 
 int hc_block_is_air(uint16_t id) {
@@ -681,7 +707,8 @@ int hc_block_is_full_cube(uint16_t id) {
 }
 
 int hc_block_fluid_nonempty(uint16_t id) {
-    return id == HC_B_WATER || id == HC_B_LAVA || (FLAGS[id] & F_WLOG) != 0;
+    return id == HC_B_WATER || id == HC_B_LAVA || (FLAGS[id] & F_WLOG) != 0 ||
+           (id >= HC_B_WATER_FLOW_BASE && id < HC_B_WATER_FLOW_BASE + 15);
 }
 
 int hc_block_fluid_is_water(uint16_t id) {
