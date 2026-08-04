@@ -1,0 +1,14 @@
+mca: 1024 chunks present
+LastUpdate uniform: 34 (1024 chunks)
+postprocess: 1165 promotions, gameTime histogram {34: 1165}
+block_ticks t histogram: {0: 91808, 2: 3071, 5: 82, 1: 2}
+fluid_ticks t histogram: {5: 10387, 0: 1206}
+PostProcessing: empty in all chunks
+replay window: |c|<=4 filter exact for gate influence set (1461 manifest entries)
+c.0.0: 11_full vs mca: 0 diff cells, 0 not postProcess-class, 0 post-snapshot feature writers
+c.1.0: 11_full vs mca: 1 diff cells, 0 not postProcess-class, 0 post-snapshot feature writers
+    (26, -21, 12): dump=minecraft:air mca=minecraft:water[level=1]
+c.0.1: 11_full vs mca: 0 diff cells, 0 not postProcess-class, 0 post-snapshot feature writers
+c.1.1: 11_full vs mca: 0 diff cells, 0 not postProcess-class, 0 post-snapshot feature writers
+
+coherence: PASS (0 warnings)

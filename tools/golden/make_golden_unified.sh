@@ -307,12 +307,16 @@ SLOG="$DUMP_DIR/stages.log"
 # dump replay consumes ring+grid light completion order from this file)
 for CX in $(seq "-$RADIUS" "$RADIUS"); do
     for CZ in $(seq "-$RADIUS" "$RADIUS"); do
-        N=$(awk -v x="$CX" -v z="$CZ" '!/^#/ && $2=="light" && $3==x && $4==z {n++} END{print n+0}' "$SLOG")
-        [ "$N" -eq 1 ] || { echo "FATAL: grid chunk ($CX,$CZ) has $N 'light' stage-log lines (want 1)" >&2; exit 1; }
+        # v2: 완료 라인만 (제출 라인은 $1=="s" — 명시 제외)
+        N=$(awk -v x="$CX" -v z="$CZ" '!/^#/ && $1 != "s" && $2=="light" && $3==x && $4==z {n++} END{print n+0}' "$SLOG")
+        [ "$N" -eq 1 ] || { echo "FATAL: grid chunk ($CX,$CZ) has $N 'light' completion lines (want 1)" >&2; exit 1; }
+        NS=$(awk -v x="$CX" -v z="$CZ" '$1 == "s" && $3=="light" && $4==x && $5==z {n++} END{print n+0}' "$SLOG")
+        [ "$NS" -eq 1 ] || { echo "FATAL: grid chunk ($CX,$CZ) has $NS 'light' submission lines (want 1, v2)" >&2; exit 1; }
     done
 done
-SLOG_LINES=$(grep -vc '^#' "$SLOG")
-echo "   stages.log OK: $SLOG_LINES stage completions"
+SLOG_COMP=$(awk '!/^#/ && $1 != "s"' "$SLOG" | wc -l)
+SLOG_SUB=$(awk '$1 == "s"' "$SLOG" | wc -l)
+echo "   stages.log OK: $SLOG_COMP completions + $SLOG_SUB submissions (v2)"
 
 echo "== verifying postprocess.manifest"
 PPM="$DUMP_DIR/postprocess.manifest"
@@ -332,3 +336,6 @@ echo "== unified capture complete (NOT installed into golden/ — run cross-vali
 echo "   bundle:   $DUMP_DIR"
 [ "$CAPTURE_MCA" = "1" ] && echo "   mca:      $MCA_OUT"
 echo "   manifest: $MANIFEST_LINES applications; snapshots: $SNAP_LINES; postprocess: $PP_CHUNKS"
+echo "   cross-validation (install gate — durable log, exit code must gate the install):"
+echo "     python3 tools/golden/check_capture_coherence.py <mca> <bundle> 2>&1 \\"
+echo "       | tee tools/golden/logs/coherence-<name>.log; test \${PIPESTATUS[0]} -eq 0"

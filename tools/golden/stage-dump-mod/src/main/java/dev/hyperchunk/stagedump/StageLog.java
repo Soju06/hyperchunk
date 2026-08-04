@@ -35,16 +35,36 @@ public final class StageLog {
 
     private StageLog() {}
 
+    /** Stage COMPLETION (future continuation) — "II name cx cz seq nanos". */
     public static void record(int stageIndex, String stageName, ChunkPos pos) {
-        long seq = OrderManifest.currentSeq();
-        long nanos = System.nanoTime();
+        write(String.format(Locale.ROOT, "%02d %s %d %d %d %d",
+                stageIndex, stageName, pos.x(), pos.z(),
+                OrderManifest.currentSeq(), System.nanoTime()));
+    }
+
+    /**
+     * Stage SUBMISSION (ChunkStep.apply RETURN, worldgen lane) — line
+     * "s II name cx cz seq nanos". For the async light stages this is the
+     * instant the PRE/POST pair entered the light dispatcher; the engine
+     * batch (ThreadedLevelLightEngine.runUpdate) runs ALL queued PREs
+     * before any POST, so a 09 dump's enabled set is exactly the chunks
+     * whose light submit precedes the dump's completion line (single
+     * worker thread: submissions never interleave a running batch).
+     */
+    public static void recordSubmit(int stageIndex, String stageName,
+            ChunkPos pos) {
+        write(String.format(Locale.ROOT, "s %02d %s %d %d %d %d",
+                stageIndex, stageName, pos.x(), pos.z(),
+                OrderManifest.currentSeq(), System.nanoTime()));
+    }
+
+    private static void write(String line) {
         synchronized (LOCK) {
             try {
                 if (out == null) {
                     open();
                 }
-                out.write(String.format(Locale.ROOT, "%02d %s %d %d %d %d",
-                        stageIndex, stageName, pos.x(), pos.z(), seq, nanos));
+                out.write(line);
                 out.newLine();
                 out.flush();
             } catch (IOException e) {
@@ -60,13 +80,15 @@ public final class StageLog {
         Files.createDirectories(file.getParent());
         out = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        out.write("# hyperchunk stage completion log v1");
+        out.write("# hyperchunk stage completion log v2");
         out.newLine();
-        out.write("# every generation-step completion in the dump dimension, all chunks,");
+        out.write("# every generation-step submission + completion in the dump dimension,");
         out.newLine();
-        out.write("#   in completion order (ChunkStep.apply future continuation)");
+        out.write("#   all chunks, in wall-clock order (one lock; single worker thread)");
         out.newLine();
-        out.write("# columns stageIndex stageName chunkX chunkZ featuresSeq nanos");
+        out.write("# completion: stageIndex stageName chunkX chunkZ featuresSeq nanos");
+        out.newLine();
+        out.write("# submission: s stageIndex stageName chunkX chunkZ featuresSeq nanos");
         out.newLine();
         System.out.println("[hyperchunk-stagedump] stage log: " + file);
     }

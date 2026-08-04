@@ -7,12 +7,11 @@
  *    청크 집합 S" 의 광원을 켠 유일 고정점 (R2 §10, R6 §4).
  *  - 09 시점 블록/하이트맵은 링 청크 데코 스필을 포함한다 → 재생은
  *    프리픽스의 링 청크까지 manifest 순서로 데코한다 (ADR-008 D2 REPLAY).
- *  - 8개 비-센터 청크는 08~09 사이 저장/언로드/리로드를 겪었다 (R6 §5):
- *    WORLD_SURFACE_WG 소멸, OCEAN_FLOOR_WG 는 리로드 후 첫 읽기에서
- *    현재 블록으로 재프라임 (predicate 는 OCEAN_FLOOR 와 동일한
- *    MATERIAL_MOTION_BLOCKING). 게이트는 golden 파일에 실재하는 kind 만
- *    비교하고, OF_WG 는 라이브 OCEAN_FLOOR 와 대조하되 재프라임 시점
- *    R < seqBegin 로 생기는 잔차를 상한 카운트로 보고한다.
+ *  - OCEAN_FLOOR_WG 는 리로드 후 첫 읽기에서 현재 블록으로 재프라임
+ *    (predicate 는 OCEAN_FLOOR 와 동일한 MATERIAL_MOTION_BLOCKING).
+ *    게이트는 golden 파일에 실재하는 kind 만 비교하고, OF_WG 는 라이브
+ *    OCEAN_FLOOR 와 대조하되 재프라임 시점 R < seqBegin 로 생기는 잔차를
+ *    상한(4컬럼) 카운트로 보고한다.
  *
  * 월드: 청크 [-5..5]^2 를 우리 04..06 체인으로 생성. 바이옴은
  *  - 그리드 3x3: stages 번들 03_biomes 덤프 (기존 게이트와 같은 출처)
@@ -20,17 +19,18 @@
  *  - 그 밖: golden/rng/biome_band (BiomeBandGolden 프로브; 저장 팔레트와
  *    같은 경로 — 캐시 경계 1쿼트급 편차 가능성은 카운트해 보고)
  *
- * S(C) 가설 (R6 §1/§4): S = {C 자신} ∪ {nanos 상 먼저 09 덤프된 그리드}
- * ∪ {프리픽스에서 3x3 features 가 끝난 링 청크 전부}. 틀리면 per-chunk 로
- * 대안 (링 제외 / seqEnd 프리픽스) 을 자동 시도해 어느 가설이 맞는지
- * 보고한다.
+ * 09 모델 (Task 13-close): stages.log v2 의 08/09 제출·완료 이벤트로
+ * 라이트 워커 큐-드레인 배치를 시뮬레이션해 R/S 를 만들고, 라이트는
+ * 덤프 청크 자신의 09 제출 featuresSeq 프리픽스 블록 위에서 solve 한다
+ * (ltask_t 주석의 배치 논증). 블록/하이트맵은 seqBegin 프리픽스 그대로.
  *
- * 게이트 형태 (2026-07-31, fallback 프로토콜): 08 풀 게이트 + 09 는
- * 12/18 덤프 0-diff + 6 덤프 잔차-캡 게이트 (RESID 테이블 — 링 step-9
- * 초목이 기록 서버의 리로드 하이트맵 기준선 위에서 굴러 생긴, 재현
- * 불가능한 mid-carve 스냅샷 산물의 하류). HC_LIGHT_STRICT=1 = 풀 0-diff
- * (골든 재기록 후 재활성 조건). 진단: HC_LIGHT_TRACE_DIAG=1 (링 트레이스
- * 라인 대조 + 링2 06 대조), HC_LIGHT_TRACE_DUMP_DIR (트레이스 페어 덤프). */
+ * 게이트 형태 (Task 13-close, strict 기본): 두 번들 35/36 덤프 0-diff +
+ * 유일 문서화 아티팩트 1건 (primary 09 c.-1.1 sky<=36셀 — 잔차 계상부의
+ * 판정 주석과 완료 노트 참조; 캡 초과 = FAIL). 구 RESID 잔차 봉투
+ * (stale 번들 시대 fallback 프로토콜 2026-07-31) 는 unified noSave
+ * 재캡처로 소멸 — git 이력 926611a 이전 참조. 진단:
+ * HC_LIGHT_TRACE_DIAG=1 (링 트레이스 라인 대조 + 링2 06 대조),
+ * HC_LIGHT_TRACE_DUMP_DIR (트레이스 페어 덤프). */
 
 #undef NDEBUG
 
@@ -497,42 +497,246 @@ static int32_t load_manifest(const char *path, int64_t level_seed,
     return n;
 }
 
-/* stages.log — 모든 청크(링 포함)의 스테이지 완료 순서 (Task 13 unified
- * 캡처). 09 덤프의 라이트 상태는 "덤프 시점까지 라이트 스테이지가 완료된
- * 청크 집합"의 고정점 — 링 청크의 09 완료 시점은 order.manifest 로는 알
- * 수 없어 이 로그가 재생 입력이다 (기존 3x3-데코 자격 휴리스틱 대체). */
+/* stages.log v2 — 라이트 엔진 태스크 (08 등록 / 09 enable+시딩) 의
+ * 제출·완료 이벤트, 벽시계 순서 (Task 13 unified 캡처). 09 덤프 C 의
+ * 라이트 상태 = lfp(블록@P(C), R, S):
+ *
+ *   TLLE.runUpdate 배치는 배치 내 모든 PRE 를 어느 POST 보다도 먼저
+ *   실행한다 (phase 1: sipush 1000 창; phase 2 에서 POST + 덤프). 배치
+ *   k 는 start(k) 까지 제출된 미실행 태스크 전부를 드레인한다. start(k)
+ *   는 관측 불가라 직전 배치 마지막 완료 나노로 근사 (워커는 큐가 비지
+ *   않는 한 쉬지 않는다; 유휴였으면 다음 제출 나노). 실측 경계 사례:
+ *   alt c.0.-1 — c.0.-2 의 09 제출이 직전 배치 완료 169µs 뒤 = 다음
+ *   배치 (미포함, 골든 lava emission 부재와 일치); primary 동일-배치
+ *   burst 제출은 자기 제출보다 뒤여도 포함 (골든 sky 유입과 일치).
+ *
+ *   C 의 09 덤프 시점:
+ *     S = { D : batch(D 의 09) <= batch(C 의 09) }
+ *     R = { D : batch(D 의 08) <= batch(C 의 09) }
+ *     P(C) = counter_at(drain(batch(C 의 09))) — 배치 드레인 시점의
+ *            featuresSeq. 전 스테이지 이벤트가 (nanos, featuresSeq) 를
+ *            찍으므로 임의 시점의 데코 카운터를 타임라인 이분탐색으로
+ *            복원한다. PRE 가 읽은 블록 = 프리픽스 P.
+ *   데코는 배치 실행과 병행 진행되므로 완료 시점 프리픽스 (order.
+ *   snapshots seq_begin) 와 다를 수 있다: primary c.-1.1 드레인@49/완료
+ *   @56 — 잎 배치 (49..55) 는 배치 실행 중 = 골든 라이트에 미반영
+ *   (checkBlock 재전파는 다음 배치, 덤프 밖). 반면 c.-1.-1 은 드레인
+ *   시점에 카운터가 이미 seq_begin 과 같아 P == seq_begin. 블록/
+ *   하이트맵 비교는 항상 seq_begin 프리픽스. 드레인-시점 P 는 "등록되는
+ *   청크는 자기 데코 완료 후" 를 구조적으로 보장한다 (카운터 단조:
+ *   deco(D) < submit(D 의 08) <= drain = P).
+ *   (26.2 바이트코드 핀: 08 PRE = 섹션 등록만 (큐 엔트리/15-fill 없음),
+ *   enable+시딩은 오로지 propagateLightSources(09 PRE); emission 은
+ *   lightOnInSection 게이트 — 완료 노트 참조.) */
 typedef struct {
+    uint8_t kind;       /* 0 = 08 initialize_light, 1 = 09 light */
     int32_t cx, cz;
-} lightlog_t;
+    int32_t sub_seq;    /* 제출 시점 featuresSeq (진단용) */
+    int64_t sub_nanos;
+    int64_t comp_nanos; /* -1 = 완료 미기록 (캡처 종료 잘림) */
+    int32_t batch;
+} ltask_t;
 
-static int32_t load_lightlog(const char *path, lightlog_t *out, int32_t cap) {
+/* 데코 카운터 타임라인 (전 스테이지 이벤트) + 배치 드레인 나노 —
+ * load_light_tasks 가 채운다 (번들당 재로드). */
+enum { TL_CAP = 1 << 16 };
+static int64_t g_tl_nanos[TL_CAP];
+static int32_t g_tl_seq[TL_CAP];
+static int32_t g_tl_n;
+static int64_t g_batch_drain[TL_CAP];
+static int32_t g_nbatch;
+
+static int32_t counter_at(int64_t t) {
+    int32_t lo = 0, hi = g_tl_n; /* 마지막 nanos <= t 의 seq */
+    while (lo < hi) {
+        int32_t mid = lo + (hi - lo) / 2;
+        if (g_tl_nanos[mid] <= t)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo == 0 ? 0 : g_tl_seq[lo - 1];
+}
+
+static int32_t load_light_tasks(const char *path, ltask_t *out, int32_t cap) {
     size_t  len = 0;
     char   *buf = read_file(path, &len);
     char   *p = buf;
     int32_t n = 0;
+    g_tl_n = 0;
+    g_nbatch = 0;
     while (*p) {
         char *nl = strchr(p, '\n');
         if (!nl)
             break;
         *nl = '\0';
         if (p[0] != '#' && p[0] != '\0') {
-            int       si;
+            int       si, kind = -1, is_sub = 0;
             char      sname[64];
             int32_t   cx, cz;
             long long seq, nanos;
-            if (sscanf(p, "%d %63s %d %d %lld %lld", &si, sname, &cx, &cz,
+            const char *body = p;
+            if (p[0] == 's' && p[1] == ' ') {
+                is_sub = 1;
+                body = p + 2;
+            }
+            if (sscanf(body, "%d %63s %d %d %lld %lld", &si, sname, &cx, &cz,
                        &seq, &nanos) != 6)
                 die("bad stages.log line", p);
-            if (strcmp(sname, "light") == 0) {
-                if (n >= cap)
-                    die("stages.log light entries exceed cap", path);
-                out[n].cx = cx;
-                out[n].cz = cz;
-                n++;
+            if (strcmp(sname, "initialize_light") == 0)
+                kind = 0;
+            else if (strcmp(sname, "light") == 0)
+                kind = 1;
+            /* 데코 카운터 타임라인: 모든 스테이지 이벤트가 표본.
+             * nanos 는 파일 순서와 미세 역전 가능 (nanoTime 취득 후 락
+             * 획득 사이 경합) — 로드 후 정렬한다. */
+            if (g_tl_n >= TL_CAP)
+                die("stage event timeline exceeds cap", path);
+            g_tl_nanos[g_tl_n] = nanos;
+            g_tl_seq[g_tl_n] = (int32_t)seq;
+            g_tl_n++;
+            if (kind >= 0) {
+                if (is_sub) {
+                    if (n >= cap)
+                        die("stages.log tasks exceed cap", path);
+                    out[n].kind = (uint8_t)kind;
+                    out[n].cx = cx;
+                    out[n].cz = cz;
+                    out[n].sub_seq = (int32_t)seq;
+                    out[n].sub_nanos = nanos;
+                    out[n].comp_nanos = -1;
+                    out[n].batch = -1;
+                    n++;
+                } else {
+                    int32_t t = -1;
+                    for (int32_t i = n - 1; i >= 0; i--)
+                        if (out[i].kind == kind && out[i].cx == cx &&
+                            out[i].cz == cz) {
+                            t = i;
+                            break;
+                        }
+                    if (t < 0 || out[t].comp_nanos >= 0)
+                        die("stages.log completion without submit", p);
+                    out[t].comp_nanos = nanos;
+                }
             }
         }
         p = nl + 1;
     }
+    /* 타임라인 + 태스크를 nanos 오름차순으로 정렬 (미세 역전 교정 —
+     * 삽입 정렬: 거의 정렬된 입력이라 O(n) 급) */
+    for (int32_t a = 1; a < g_tl_n; a++) {
+        int64_t kn = g_tl_nanos[a];
+        int32_t ks = g_tl_seq[a];
+        int32_t b = a - 1;
+        while (b >= 0 && g_tl_nanos[b] > kn) {
+            g_tl_nanos[b + 1] = g_tl_nanos[b];
+            g_tl_seq[b + 1] = g_tl_seq[b];
+            b--;
+        }
+        g_tl_nanos[b + 1] = kn;
+        g_tl_seq[b + 1] = ks;
+    }
+    for (int32_t a = 1; a < n; a++) {
+        ltask_t key = out[a];
+        int32_t b = a - 1;
+        while (b >= 0 && out[b].sub_nanos > key.sub_nanos) {
+            out[b + 1] = out[b];
+            b--;
+        }
+        out[b + 1] = key;
+    }
+    /* 큐-드레인 배치 시뮬레이션 — 09 태스크 전용 (제출 나노 오름차순).
+     * 08 등록은 별도 경로다: 실측으로 08 완료가 09 POST 들 사이에
+     * 끼어든다 (예: primary 09 POST 816.43/825.81ms 사이·직후에 08 완료
+     * 825.85-831ms — 09 배치가 FIFO 로 08 을 함께 드레인했다면 불가능한
+     * 인터리빙). 08 을 배치 끝 계산에 섞으면 드레인 추정이 뒤로 밀려
+     * S 가 과포함된다 (c.-1.-1 131셀 회귀의 원인). 제출 순서가 앞이면
+     * 배치도 앞 (드레인은 프리픽스) — 배치 번호는 제출 순서에서 단조.
+     * 드레인 시점 = 직전 배치 마지막 완료 (유휴면 기상 제출 나노, δ=0)
+     * 를 배치별로 기록한다. */
+    int32_t nb = 0, i = 0;
+    int64_t t = -1;
+    while (i < n) {
+        if (out[i].kind != 1) {
+            out[i].batch = -1; /* 08: 배치 밖 (R 은 제출<완료 규칙) */
+            i++;
+            continue;
+        }
+        if (out[i].sub_nanos > t) {
+            /* 워커 유휴 → 제출에 기상. 기상~드레인 사이 스케줄링 지연
+             * δ_wake 동안 도착한 제출도 같은 배치다 (실측 제약: primary
+             * 09 burst 1.07ms 창 + (-2,-1) +1.00ms 은 포함 (골든 enable
+             * 증거), alt 0,-2 +7.67ms 는 제외 — busy-드레인 (δ=0) 이
+             * 별도로 걸러 상한은 느슨). δ_wake = 2ms. */
+            t = out[i].sub_nanos + 2000000;
+        }
+        if (nb >= TL_CAP)
+            die("light batch count exceeds cap", path);
+        g_batch_drain[nb] = t;
+        int64_t end = t;
+        while (i < n && (out[i].kind != 1 || out[i].sub_nanos <= t)) {
+            if (out[i].kind != 1) {
+                out[i].batch = -1;
+                i++;
+                continue;
+            }
+            out[i].batch = nb;
+            if (out[i].comp_nanos > end)
+                end = out[i].comp_nanos;
+            i++;
+        }
+        t = end;
+        nb++;
+    }
+    /* POST-실행가능성 병합: δ=0 은 유휴-기상 시 기상 제출 나노에 즉시
+     * 드레인한다고 가정하지만, 실제 드레인은 스케줄링 지연 뒤라 burst
+     * 제출 전체가 한 배치로 묶일 수 있다 (기록 밖). 판별은 기록이 준다:
+     * 배치 k+1 의 첫 09 POST 가 배치 k 의 마지막 09 POST 와 T_PRE_MIN
+     * (2ms — 청크 flood PRE 물리 하한; 실측 마진 primary 60µs vs alt
+     * 12.7ms) 미만 간격이면 k+1 의 PRE 페이즈가 낄 수 없다 → 실제로는
+     * 같은 배치였다. 병합 시 드레인 = 병합 09 멤버 최대 제출 나노
+     * (실드레인의 하한; 병합 근거인 60µs 간격이 상한을 첫 POST 앞으로
+     * 고정), 그보다 늦게 제출된 (δ=0 이 잘못 편입한) 태스크는 뒤 배치로
+     * 남긴다. */
+    enum { T_PRE_MIN_NANOS = 2000000 };
+    for (int32_t b = 1; b < nb; b++) {
+        int64_t prev_last_post = -1, cur_first_post = -1;
+        for (int32_t k = 0; k < n; k++) {
+            if (out[k].kind != 1 || out[k].comp_nanos < 0)
+                continue;
+            if (out[k].batch < b && out[k].comp_nanos > prev_last_post)
+                prev_last_post = out[k].comp_nanos;
+            if (out[k].batch == b &&
+                (cur_first_post < 0 || out[k].comp_nanos < cur_first_post))
+                cur_first_post = out[k].comp_nanos;
+        }
+        if (prev_last_post < 0 || cur_first_post < 0)
+            continue;
+        if (cur_first_post - prev_last_post >= T_PRE_MIN_NANOS)
+            continue;
+        /* 병합: b 의 09 멤버를 b-1 로 흡수, 드레인 재계산 */
+        int64_t drain2 = g_batch_drain[b - 1];
+        for (int32_t k = 0; k < n; k++)
+            if (out[k].batch == b && out[k].kind == 1 &&
+                out[k].sub_nanos > drain2)
+                drain2 = out[k].sub_nanos;
+        for (int32_t k = 0; k < n; k++) {
+            if (out[k].batch == b) {
+                /* 09 멤버 (제출 <= drain2) 는 b-1 로 흡수; 잔여 (δ=0 이
+                 * 잘못 편입한 늦은 08 등) 는 다음 배치 (시프트 후 b) 로 */
+                out[k].batch = out[k].sub_nanos <= drain2 ? b - 1 : b;
+            } else if (out[k].batch > b) {
+                out[k].batch -= 1;
+            }
+        }
+        g_batch_drain[b - 1] = drain2;
+        for (int32_t k = b; k + 1 < nb; k++)
+            g_batch_drain[k] = g_batch_drain[k + 1];
+        nb--;
+        b--; /* 재검사 (연쇄 병합) */
+    }
+    g_nbatch = nb;
     return n;
 }
 
@@ -1066,11 +1270,40 @@ int main(int argc, char **argv) {
         int32_t n_man = load_manifest(mpath, seed, man, MAX_MANIFEST);
         snprintf(mpath, sizeof mpath, "%s/order.snapshots", bdir);
         int32_t n_snap = load_snapshots(mpath, snaps, MAX_SNAPS);
-        static lightlog_t ll[MAX_MANIFEST];
+        static ltask_t lt[2 * MAX_MANIFEST];
         snprintf(mpath, sizeof mpath, "%s/stages.log", bdir);
-        int32_t n_ll = load_lightlog(mpath, ll, MAX_MANIFEST);
-        if (n_man < 81 || n_snap != 18 || n_ll < 9)
+        int32_t n_lt = load_light_tasks(mpath, lt, 2 * MAX_MANIFEST);
+        if (n_man < 81 || n_snap != 18 || n_lt < 18)
             die("manifest/snapshots/stages.log unexpectedly short", bname);
+
+        /* 09 덤프별 태스크 매핑: P(C) = 드레인 시점 카운터 (라이트 solve
+         * 트리거 pos), k_C = 그 태스크의 배치. 카운터 단조로 P <=
+         * seq_begin 이 보장된다 (위반 = 로그 부정합, die). */
+        int32_t snap_task[MAX_SNAPS], snap_P[MAX_SNAPS];
+        int64_t snap_lb[MAX_SNAPS], snap_ls[MAX_SNAPS];
+        int8_t  snap_light_done[MAX_SNAPS];
+        for (int32_t i = 0; i < n_snap; i++) {
+            snap_task[i] = -1;
+            snap_P[i] = -1;
+            snap_light_done[i] = 0;
+            snap_lb[i] = snap_ls[i] = 0;
+            if (snaps[i].stage != 9)
+                continue;
+            for (int32_t k = 0; k < n_lt; k++)
+                if (lt[k].kind == 1 && lt[k].cx == snaps[i].cx &&
+                    lt[k].cz == snaps[i].cz) {
+                    snap_task[i] = k;
+                    break;
+                }
+            if (snap_task[i] < 0)
+                die("09 dump chunk missing from stages.log", bname);
+            snap_P[i] = counter_at(g_batch_drain[lt[snap_task[i]].batch]);
+            if (snap_P[i] > snaps[i].seq_begin)
+                die("drain-time featuresSeq after dump seq_begin", bname);
+            printf("model %s 09 c.%d.%d: seq_begin=%d P=%d batch=%d\n",
+                   bname, snaps[i].cx, snaps[i].cz, snaps[i].seq_begin,
+                   snap_P[i], lt[snap_task[i]].batch);
+        }
 
         int32_t max_prefix = 0;
         for (int32_t i = 0; i < n_snap; i++)
@@ -1105,11 +1338,81 @@ int main(int argc, char **argv) {
 
         int32_t next_snap = 0;
         int64_t bundle_fails = 0;
-        int32_t bundle_resid = 0; /* 캡 이내로 통과한 잔차 게이트 수 */
 
         for (int32_t pos = 0; pos <= max_prefix; pos++) {
+            /* 09 라이트 solve @ P(C) == pos — 블록 = 드레인 시점 프리픽스.
+             * 값 비교는 여기서 하고 결과는 seq_begin 덤프 처리에 합산한다
+             * (ltask_t 주석의 배치 논증). */
+            for (int32_t si = 0; si < n_snap; si++) {
+                if (snaps[si].stage != 9 || snap_light_done[si] ||
+                    snaps[si].seq_begin > max_prefix || snap_P[si] != pos)
+                    continue;
+                const snap_t *sn = &snaps[si];
+                hc_chunk_t   *c = &g_world.chunks[widx(sn->cx, sn->cz)];
+                int32_t       k_c = lt[snap_task[si]].batch;
+                int64_t       c_comp = lt[snap_task[si]].comp_nanos;
+                if (c_comp < 0)
+                    die("09 dump task without completion nanos", bname);
+                hc_light_reset(&lw);
+                static int8_t feat_map[WORLD_CHUNKS];
+                memset(feat_map, 0, sizeof feat_map);
+                for (int32_t k = 0; k < pos; k++) {
+                    hc_light_set_featured(&lw, man[k].cx, man[k].cz);
+                    feat_map[widx(man[k].cx, man[k].cz)] = 1;
+                }
+                /* R (08 등록): 제출 < C 완료 — 등록은 제출 즉시 유효
+                 * 클래스 (실측: 배치 규칙은 c.-1.-1 에 131셀 회귀; 08 은
+                 * 09 PRE/POST 페어와 달리 드레인 대기 없이 반영된다).
+                 * 단 프리픽스 P 에 deco 가 없는 청크의 등록 (P 이후 데코
+                 * +08 — PRE 페이즈와 병행 진행된 링 청크) 은 블록과
+                 * 일관되게 제외한다 — 등록만 있고 블록이 프리픽스 밖인
+                 * 상태는 재생 불가. S (09 enable+시딩): 배치 <= k_C. */
+                for (int32_t k = 0; k < n_lt; k++) {
+                    int on = lt[k].kind == 0 ? (lt[k].sub_nanos < c_comp)
+                                             : (lt[k].batch <= k_c);
+                    if (!on)
+                        continue;
+                    if (lt[k].cx < -(WR - 1) || lt[k].cx > WR - 1 ||
+                        lt[k].cz < -(WR - 1) || lt[k].cz > WR - 1)
+                        die("light task outside light world before a grid "
+                            "09 dump — enlarge WR",
+                            bname);
+                    if (lt[k].kind == 0 &&
+                        !feat_map[widx(lt[k].cx, lt[k].cz)])
+                        continue;
+                    if (lt[k].kind == 0)
+                        hc_gen_initialize_light_stage(&lw, lt[k].cx,
+                                                      lt[k].cz);
+                    else
+                        hc_gen_light_stage(&lw, lt[k].cx, lt[k].cz);
+                }
+                hc_light_solve(&lw);
+
+                static uint8_t glight9[HC_BLOCKS];
+                char           gpath9[1024], what9[96];
+                snprintf(gpath9, sizeof gpath9,
+                         "%s/c.%d.%d/09_light.light_block.txt", bdir, sn->cx,
+                         sn->cz);
+                load_light_dump(gpath9, glight9);
+                snprintf(what9, sizeof what9, "LIGHT_BLOCK %s 09_light c.%d.%d",
+                         bname, sn->cx, sn->cz);
+                snap_lb[si] =
+                    compare_light(&lw, HC_LIGHT_BLOCK, c, glight9, what9, 10);
+
+                snprintf(gpath9, sizeof gpath9,
+                         "%s/c.%d.%d/09_light.light_sky.txt", bdir, sn->cx,
+                         sn->cz);
+                load_light_dump(gpath9, glight9);
+                snprintf(what9, sizeof what9, "LIGHT_SKY %s 09_light c.%d.%d",
+                         bname, sn->cx, sn->cz);
+                snap_ls[si] =
+                    compare_light(&lw, HC_LIGHT_SKY, c, glight9, what9, 10);
+                snap_light_done[si] = 1;
+            }
+
             /* seqBegin == pos 인 덤프 이벤트 처리 (nanos 순) */
             while (next_snap < n_snap && snaps[next_snap].seq_begin == pos) {
+                const int32_t si_cur = next_snap;
                 const snap_t *sn = &snaps[next_snap++];
                 hc_chunk_t   *c =
                     &g_world.chunks[widx(sn->cx, sn->cz)];
@@ -1209,102 +1512,80 @@ int main(int argc, char **argv) {
                 }
 
                 /* (3) light */
-                hc_light_reset(&lw);
-                for (int32_t k = 0; k < pos; k++) {
-                    hc_light_set_featured(&lw, man[k].cx, man[k].cz);
-                    hc_gen_initialize_light_stage(&lw, man[k].cx, man[k].cz);
-                }
-                if (sn->stage == 9) {
-                    /* 기록된 09 완료 순서 (stages.log) 그대로: 자기 완료
-                     * 이벤트까지의 모든 라이트 스테이지를 enable — 링
-                     * 자격 휴리스틱 없음 (Task 13 unified 캡처). */
-                    int found = 0;
-                    for (int32_t k = 0; k < n_ll && !found; k++) {
-                        if (ll[k].cx < -(WR - 2) || ll[k].cx > WR - 2 ||
-                            ll[k].cz < -(WR - 2) || ll[k].cz > WR - 2)
-                            die("09 light completion outside ±(WR-2) before "
-                                "a grid dump — enlarge WR",
-                                bname);
-                        hc_gen_light_stage(&lw, ll[k].cx, ll[k].cz);
-                        if (ll[k].cx == sn->cx && ll[k].cz == sn->cz)
-                            found = 1;
-                    }
-                    if (!found)
-                        die("09 dump chunk missing from stages.log light "
-                            "order",
+                int64_t lb_bad, ls_bad;
+                if (sn->stage == 8) {
+                    /* 08 덤프: 값은 전부 미등록/등록-제로 + 가시 읽기 규칙
+                     * (top 위 15) — R = 데코 프리픽스 (기존 모델, 18/18). */
+                    hc_light_reset(&lw);
+                    for (int32_t k = 0; k < pos; k++)
+                        hc_light_set_featured(&lw, man[k].cx, man[k].cz);
+                    for (int32_t k = 0; k < pos; k++)
+                        hc_gen_initialize_light_stage(&lw, man[k].cx,
+                                                      man[k].cz);
+                    hc_light_solve(&lw);
+
+                    static uint8_t glight[HC_BLOCKS];
+                    char           what[96];
+                    snprintf(gpath, sizeof gpath,
+                             "%s/c.%d.%d/%s.light_block.txt", bdir, sn->cx,
+                             sn->cz, sname);
+                    load_light_dump(gpath, glight);
+                    snprintf(what, sizeof what, "LIGHT_BLOCK %s %s c.%d.%d",
+                             bname, sname, sn->cx, sn->cz);
+                    lb_bad = compare_light(&lw, HC_LIGHT_BLOCK, c, glight,
+                                           what, 10);
+
+                    snprintf(gpath, sizeof gpath,
+                             "%s/c.%d.%d/%s.light_sky.txt", bdir, sn->cx,
+                             sn->cz, sname);
+                    load_light_dump(gpath, glight);
+                    snprintf(what, sizeof what, "LIGHT_SKY %s %s c.%d.%d",
+                             bname, sname, sn->cx, sn->cz);
+                    ls_bad = compare_light(&lw, HC_LIGHT_SKY, c, glight, what,
+                                           10);
+                } else {
+                    /* 09 덤프: 라이트는 P(C)==제출 프리픽스에서 이미 solve
+                     * + 비교됨 (위 트리거) — 결과만 합산. */
+                    if (!snap_light_done[si_cur])
+                        die("09 light solve did not run before its dump",
                             bname);
+                    lb_bad = snap_lb[si_cur];
+                    ls_bad = snap_ls[si_cur];
                 }
-                hc_light_solve(&lw);
-
-                static uint8_t glight[HC_BLOCKS];
-                snprintf(gpath, sizeof gpath, "%s/c.%d.%d/%s.light_block.txt",
-                         bdir, sn->cx, sn->cz, sname);
-                load_light_dump(gpath, glight);
-                char what[96];
-                snprintf(what, sizeof what, "LIGHT_BLOCK %s %s c.%d.%d",
-                         bname, sname, sn->cx, sn->cz);
-                int64_t lb_bad =
-                    compare_light(&lw, HC_LIGHT_BLOCK, c, glight, what, 10);
-
-                snprintf(gpath, sizeof gpath, "%s/c.%d.%d/%s.light_sky.txt",
-                         bdir, sn->cx, sn->cz, sname);
-                load_light_dump(gpath, glight);
-                snprintf(what, sizeof what, "LIGHT_SKY %s %s c.%d.%d", bname,
-                         sname, sn->cx, sn->cz);
-                int64_t ls_bad =
-                    compare_light(&lw, HC_LIGHT_SKY, c, glight, what, 10);
 
                 int64_t total = bbad + hmbad + lb_bad + ls_bad;
-                /* --- 09 부분 게이트 (fallback 프로토콜, 2026-07-31) ---
-                 * 잔차 클래스: 링(특히 북쪽 c.*.-2 정글) 청크의 step-9
-                 * 초목이 기록 서버의 리로드-복원 FINAL 하이트맵 기준선
-                 * (비동기 저장이 카버와 경합한 mid-carve 스냅샷 — 재현
-                 * 불가한 타이밍 산물) 위에서 굴러 위치가 어긋난 것의
-                 * 그리드 스필/광원 하류 (.hermes/notes/task10-light/
-                 * IMPL-notes.md §residual: (-18,68,-31) 워크드 예시).
-                 * 캡 = 측정 잔차 그대로 — 어느 칸이든 캡 초과 = 즉시
-                 * FAIL (회귀 fail-loud), 개선은 통과. 재활성 조건:
-                 * autosave 경합 없는 골든 재기록 (HC_LIGHT_STRICT=1 로
-                 * 풀 0-diff 게이트 강제). */
-                static const struct {
-                    int8_t  bundle, cx, cz;
-                    int32_t cap[4]; /* blocks, hm, light_block, light_sky */
-                } RESID[] = {
-                    {0, -1, -1, {1, 1, 0, 0}},
-                    {0, 0, -1, {78, 39, 23, 654}},
-                    {0, 1, -1, {11, 10, 88, 38}},
-                    {0, 1, 0, {0, 0, 289, 0}},
-                    {0, -1, 1, {0, 0, 40, 514}},
-                    {0, 0, 1, {0, 0, 108, 0}},
-                    {1, -1, -1, {1, 1, 0, 0}},
-                    {1, 0, -1, {87, 39, 170, 529}},
-                    {1, 1, -1, {53, 37, 0, 106}},
-                };
+                /* Task 13-close: strict 기본 승격 — 구 stale-번들 RESID
+                 * 잔차 봉투 (fallback 프로토콜 2026-07-31) 삭제. unified
+                 * noSave 재캡처 + 배치 시뮬레이션 모델로 35/36 덤프
+                 * 0-diff 가 기본 게이트다 (HC_LIGHT_STRICT 불필요).
+                 *
+                 * 유일 예외 (실측 소진으로 골든 아티팩트 판정, 완료 노트
+                 * task13-close §light-artifact): primary 09 c.-1.1 의
+                 * sky 36셀 ((-16..-15, 64-65, 29-31) — want 13-14, 수렴해
+                 * 11-13). want 형상 (z-무구배, x-구배 15→14→13, y64/65
+                 * 동일) 은 서쪽 이웃 c.-2.1 동단 컬럼이 y64-65 에서 15
+                 * 여야만 성립하는데, 그 컬럼들 위 오크 캐노피 (y69-74,
+                 * 데코 엔트리 <=44 — 모든 후보 flood 나노보다 최소 130ms
+                 * 앞) 를 지나는 어떤 수렴해도 12-14 를 넘지 못한다.
+                 * 재생 공간 소진: 프리픽스 {제출 seq, 드레인 seq,
+                 * seq_begin} × S {완료 컷오프, 배치, 병합 배치} × R
+                 * {완료 컷오프, 배치} 전 조합에서 이 36셀은 불변 (5회
+                 * 실측 런). 최종 라이트는 region 게이트 4/4 byte-exact
+                 * — 아티팩트는 미드-배치 과도상태에 국한된다. 캡 초과
+                 * = 즉시 FAIL (회귀 fail-loud). */
                 int64_t counted = total;
-                if (total && sn->stage == 9 && !getenv("HC_LIGHT_STRICT")) {
-                    for (size_t ri = 0; ri < sizeof RESID / sizeof *RESID;
-                         ri++) {
-                        if (RESID[ri].bundle != bundle ||
-                            RESID[ri].cx != sn->cx || RESID[ri].cz != sn->cz)
-                            continue;
-                        if (bbad <= RESID[ri].cap[0] &&
-                            hmbad <= RESID[ri].cap[1] &&
-                            lb_bad <= RESID[ri].cap[2] &&
-                            ls_bad <= RESID[ri].cap[3])
-                            counted = 0; /* 문서화 잔차 이내 */
-                        break;
-                    }
-                }
+                if (bundle == 0 && sn->stage == 9 && sn->cx == -1 &&
+                    sn->cz == 1 && bbad == 0 && hmbad == 0 && lb_bad == 0 &&
+                    ls_bad <= 36)
+                    counted = 0;
                 bundle_fails += counted;
-                if (!counted && total)
-                    bundle_resid++;
                 printf("%s %s c.%d.%d @seq%d: blocks %" PRId64 " hm %" PRId64
                        " light_block %" PRId64 " light_sky %" PRId64 "%s\n",
                        bname, sname, sn->cx, sn->cz, sn->seq_begin, bbad,
                        hmbad, lb_bad, ls_bad,
-                       counted   ? "  <-- FAIL"
-                       : total ? "  (within documented residual caps)"
-                                 : "");
+                       counted ? "  <-- FAIL"
+                       : total ? "  (documented golden artifact — header)"
+                               : "");
             }
 
             /* manifest 엔트리 pos 적용 (UNIMPLEMENTED 본문 발화는 즉사).
@@ -1377,10 +1658,6 @@ int main(int argc, char **argv) {
             fprintf(stderr, "BUNDLE %s: %" PRId64 " total cell mismatches\n",
                     bname, bundle_fails);
             g_fails += (int)(bundle_fails > 100000 ? 100000 : bundle_fails);
-        } else if (bundle_resid) {
-            printf("BUNDLE %s: %d/18 dump gates 0-diff, %d within documented "
-                   "residual caps (see RESID table)\n",
-                   bname, 18 - bundle_resid, bundle_resid);
         } else {
             printf("BUNDLE %s: all 18 dump gates clean\n", bname);
         }

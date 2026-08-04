@@ -1,0 +1,24 @@
+already fetched: /home/ubuntu/projects/hyperchunk/tools/golden/libs/server-26.2.jar (sha1 ok)
+already fetched: /home/ubuntu/projects/hyperchunk/tools/golden/libs/server-26.2.jar (sha1 ok)
+fabric toolchain ready in /home/ubuntu/projects/hyperchunk/tools/golden/libs/fabric
+== building stage-dump mod
+== installing fabric server (loader 0.19.3) into /home/ubuntu/projects/hyperchunk/tools/golden/work/unified-run-alt
+== booting fabric server (seed 1234567890, bg.threads 4, capture_mca 0)
+[03:54:36] [Server thread/INFO]: [STDOUT]: [hyperchunk-stagedump] enabled: dir=/home/ubuntu/projects/hyperchunk/tools/golden/work/unified-bundle-alt center=(0,0) radius=1 stages=all dimension=minecraft:overworld nosave=true
+[03:54:36] [Server thread/INFO]: [STDOUT]: [hyperchunk-stagedump] noSave forced for minecraft:overworld (autosave+unload suppressed)
+== quieting the server (26.2 gamerule names)
+== waiting for 9 grid chunks to dump their final (full) stage
+   full-stage dumps: 1/9 (total files: 227, t+0s)
+   full-stage dumps: 9/9 (total files: 315, t+5s)
+== stopping server
+== verifying order.manifest
+   order.manifest OK: 81 features applications
+== verifying order.snapshots
+   order.snapshots OK: 99 snapshots, 2 torn (async stages only)
+== verifying stages.log
+   stages.log OK: 3702 stage completions
+== verifying postprocess.manifest
+   postprocess.manifest OK: 25 promotions (each chunk once), 2726 marked positions
+== unified capture complete (NOT installed into golden/ — run cross-validation first)
+   bundle:   /home/ubuntu/projects/hyperchunk/tools/golden/work/unified-bundle-alt
+   manifest: 81 applications; snapshots: 99; postprocess: 25

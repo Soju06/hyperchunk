@@ -44,9 +44,11 @@ public abstract class ChunkStepMixin {
                         .equals(StageDumper.dimension())) {
             return;
         }
-        // stages.log records EVERY chunk's stage completions (ring light
-        // timing is replay input — see StageLog); the full dump additionally
-        // runs for grid chunks only.
+        // stages.log records EVERY chunk's stage submissions + completions
+        // (ring light timing is replay input — see StageLog); the full dump
+        // additionally runs for grid chunks only.
+        StageLog.recordSubmit(status.getIndex(), StageDumper.stageName(status),
+                chunk.getPos());
         boolean wantsDump = StageDumper.wants(ctx, chunk.getPos(), status);
         cir.setReturnValue(cir.getReturnValue().thenApply(result -> {
             StageLog.record(status.getIndex(), StageDumper.stageName(status),

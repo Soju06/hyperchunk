@@ -1,0 +1,39 @@
+already fetched: /home/ubuntu/projects/hyperchunk/tools/golden/libs/server-26.2.jar (sha1 ok)
+already fetched: /home/ubuntu/projects/hyperchunk/tools/golden/libs/server-26.2.jar (sha1 ok)
+fabric toolchain ready in /home/ubuntu/projects/hyperchunk/tools/golden/libs/fabric
+== building stage-dump mod
+== installing fabric server (loader 0.19.3) into /home/ubuntu/projects/hyperchunk/tools/golden/work/unified-run
+== booting fabric server (seed 1234567890, bg.threads 1, capture_mca 1)
+[03:52:39] [Server thread/INFO]: [STDOUT]: [hyperchunk-stagedump] enabled: dir=/home/ubuntu/projects/hyperchunk/tools/golden/work/unified-bundle center=(0,0) radius=1 stages=all dimension=minecraft:overworld nosave=true
+[03:52:39] [Server thread/INFO]: [STDOUT]: [hyperchunk-stagedump] noSave forced for minecraft:overworld (autosave+unload suppressed)
+== quieting the server (26.2 gamerule names)
+== waiting for 9 grid chunks to dump their final (full) stage
+   full-stage dumps: 1/9 (total files: 227, t+0s)
+   full-stage dumps: 9/9 (total files: 315, t+5s)
+== forceloading all 1024 chunks of region (0,0) (4 x 256-chunk commands)
+== waiting for all 1024 region chunks to be promoted to ticking (postProcess)
+   region chunks postProcessed: 9/1024 (all-dim promotions: 25, t+0s)
+   region chunks postProcessed: 223/1024 (all-dim promotions: 264, t+10s)
+   region chunks postProcessed: 550/1024 (all-dim promotions: 630, t+20s)
+   region chunks postProcessed: 918/1024 (all-dim promotions: 1035, t+30s)
+   region chunks postProcessed: 1024/1024 (all-dim promotions: 1165, t+40s)
+== single save-all flush (force=true bypasses noSave)
+   present 1024
+   status minecraft:full 1024
+   compression 2 1024
+== stopping server
+== captured mca: /home/ubuntu/projects/hyperchunk/tools/golden/work/unified-run/r.0.0.captured.mca
+   raw sha256:       a877f8f84dcf6a401409e79063dc23081de302c75877b361b0b536d205a18f4b
+   canonical sha256: a59632059bab42d808a24c27091d4b8786b5615405263a84ec1ba9a193223c24
+== verifying order.manifest
+   order.manifest OK: 1461 features applications
+== verifying order.snapshots
+   order.snapshots OK: 99 snapshots, 0 torn (async stages only)
+== verifying stages.log
+   stages.log OK: 37422 stage completions
+== verifying postprocess.manifest
+   postprocess.manifest OK: 1165 promotions (each chunk once), 105748 marked positions
+== unified capture complete (NOT installed into golden/ — run cross-validation first)
+   bundle:   /home/ubuntu/projects/hyperchunk/tools/golden/work/unified-bundle
+   mca:      /home/ubuntu/projects/hyperchunk/tools/golden/work/unified-run/r.0.0.captured.mca
+   manifest: 1461 applications; snapshots: 99; postprocess: 1165
