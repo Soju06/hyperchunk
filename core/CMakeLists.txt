@@ -39,6 +39,9 @@ add_library(hyperchunk STATIC
   src/nbt.c
   src/chunk_nbt.c
   src/region.c
+  src/structures.c
+  src/structures_template.c
+  src/structures_mineshaft.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc
