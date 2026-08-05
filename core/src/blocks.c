@@ -1131,6 +1131,28 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:stone_button[face=wall,facing=west,powered=false]",
     "minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=inner_right,waterlogged=true]",
     "minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=inner_left,waterlogged=true]",
+    "minecraft:stone_button[face=wall,facing=east,powered=false]",
+    "minecraft:chest[facing=east,type=single,waterlogged=true]",
+    "minecraft:chest[facing=south,type=single,waterlogged=true]",
+    "minecraft:dark_oak_door[facing=east,half=upper,hinge=right,open=false,powered=false]",
+    "minecraft:dark_oak_door[facing=south,half=lower,hinge=right,open=false,powered=false]",
+    "minecraft:dark_oak_fence[east=false,north=false,south=false,waterlogged=false,west=false]",
+    "minecraft:dark_oak_log[axis=x]",
+    "minecraft:dark_oak_log[axis=y]",
+    "minecraft:dark_oak_planks",
+    "minecraft:dark_oak_slab[type=bottom,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=east,half=bottom,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=east,half=top,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=north,half=bottom,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=north,half=top,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=south,half=bottom,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=south,half=top,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=west,half=bottom,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_stairs[facing=west,half=top,shape=outer_right,waterlogged=false]",
+    "minecraft:dark_oak_trapdoor[facing=east,half=bottom,open=false,powered=false,waterlogged=false]",
+    "minecraft:dark_oak_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]",
+    "minecraft:dark_oak_trapdoor[facing=south,half=bottom,open=false,powered=false,waterlogged=false]",
+    "minecraft:dark_oak_trapdoor[facing=west,half=bottom,open=false,powered=false,waterlogged=false]",
 /* T14-GEN END names */
 };
 
@@ -1994,6 +2016,28 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     0,
     F_MOTION|F_SOLID|F_WLOG,
     F_MOTION|F_SOLID|F_WLOG,
+    0,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_FULL,
+    F_MOTION|F_SOLID|F_FULL,
+    F_MOTION|F_SOLID|F_FULL,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
 /* T14-GEN END flags */
 };
 
@@ -2097,7 +2141,9 @@ static const uint8_t T14_DAMP[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 1, 1,
+    0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 15,
+    15, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0,
 /* T14-GEN END damp */
 };
 static const uint8_t T14_EMIT[HC_B_T14_COUNT] = {
@@ -2156,7 +2202,9 @@ static const uint8_t T14_EMIT[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0,
 /* T14-GEN END emit */
 };
 static const uint32_t T14_OCC[HC_B_T14_COUNT] = {
@@ -2269,7 +2317,11 @@ static const uint32_t T14_OCC[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0xfbfbef, 0xbff7df,
+    0, 0, 0, 0xfbfbef, 0xbff7df, 0,
+    0, 0, 0, 0, 0, 0,
+    0, 0, 0x33330f, 0xb3b38f, 0xececf8, 0x733b2f,
+    0xdccef2, 0x3b734f, 0xcedcf4, 0x37371f, 0xcdcdf1, 0,
+    0, 0, 0,
 /* T14-GEN END occ */
 };
 static const uint8_t T14_CFULL[HC_B_T14_COUNT] = {
@@ -2301,7 +2353,8 @@ static const uint8_t T14_CFULL[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0,
 /* T14-GEN END cfull */
 };
 

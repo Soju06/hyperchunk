@@ -241,13 +241,17 @@ static int ceil_log2_i(int32_t n) {
 
 static void overlay_biomes_from_ref(int32_t cx, int32_t cz,
                                     const uint8_t *payload, size_t len,
-                                    hc_arena_t *scratch) {
+                                    hc_arena_t *scratch,
+                                    int tolerate_missing) {
     hc_nbt_t *root = hc_nbt_parse(scratch, payload, len);
     if (!root)
         die("region-ref payload parse failed", NULL);
     const hc_nbt_t *sections = hc_nbt_get(root, "sections");
-    if (!sections)
+    if (!sections) {
+        if (tolerate_missing)
+            return;
         die("region-ref payload missing sections", NULL);
+    }
     for (int32_t i = 0; i < hc_nbt_list_count(sections); i++) {
         const hc_nbt_t *sec = hc_nbt_list_at(sections, i);
         const hc_nbt_t *bio = hc_nbt_get(sec, "biomes");
@@ -658,7 +662,22 @@ int main(int argc, char **argv) {
                 g_ref_len[cz * 32 + cx] = len;
                 hc_arena_init(&scratch, smem, 64u << 20);
                 overlay_biomes_from_ref(cx, cz, g_ref[cz * 32 + cx], len,
-                                        &scratch);
+                                        &scratch, 0);
+            }
+        /* 마진 링 — 이웃 리전 캡처의 기록 바이옴 (test_full_region.c
+         * 와 동일; extract_margin_biomes.py 산출) */
+        for (int32_t cz = WC0; cz < WC0 + WN; cz++)
+            for (int32_t cx = WC0; cx < WC0 + WN; cx++) {
+                if (cx >= 0 && cx < 32 && cz >= 0 && cz < 32)
+                    continue;
+                char rp[1024];
+                snprintf(rp, sizeof rp, "%s-margin/c.%d.%d.nbt",
+                         region_ref_dir, cx, cz);
+                size_t len = 0;
+                char  *buf = read_file(rp, &len);
+                hc_arena_init(&scratch, smem, 64u << 20);
+                overlay_biomes_from_ref(cx, cz, (const uint8_t *)buf, len,
+                                        &scratch, 1);
             }
     }
     load_climate(ref_dir);

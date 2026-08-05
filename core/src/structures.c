@@ -833,33 +833,42 @@ int hc_structures_init(hc_sctx_t *sc, hc_arena_t *a, int64_t seed,
                     "window (-12..43)\n",
             ms_found);
 
-    /* --- trial_chambers (13,35) — 리전 밖 직소 스타트, 같은 캡처 런의
-     * r.0.1.mca 에서 추출한 골든 starts 프래그먼트 (tools/golden/
+    /* --- 리전 밖 이웃 스타트 — 같은 캡처 런의 이웃 리전 .mca 에서
+     * 추출한 골든 starts 프래그먼트 (tools/golden/
      * extract_neighbor_start.py — coherence 가드가 r.0.0 해시 대조).
-     * 피스 union z=512..612 라 r.0.0 블록 배치는 없고 (실측), 소비처는
-     * (a) cz=31 행 beardifier 밀도 기여, (b) 마진 청크 (cz>=32) 데코
-     * 재생의 피스 배치 (라이트/엣지 전파가 r.0.0 에 도달), (c)
-     * References 멤버십 (실 bbox 가 골든 c.7..14.31 을 재현 — 아래
-     * 교차검증이 fail-loud 로 보증). --- */
+     * 포함 기준 (실측, 완료 노트 참조): 데코 창 (-4..34) 청크에 피스가
+     * 닿거나 r.0.0 에 beard/references 가 도달하는 비-mineshaft 스타트.
+     *  - trial_chambers (13,35): 피스 union z=512..612 — r.0.0 블록
+     *    배치는 없고, (a) cz=31 행 beardifier, (b) 마진 청크 (cz>=32)
+     *    데코 배치 (라이트/엣지 전파가 r.0.0 도달), (c) References
+     *    멤버십 c.7..14.31 (아래 교차검증 fail-loud).
+     *  - shipwreck_beached (32,17): 피스 BB x=512.. — 마진 청크
+     *    c.32.17/18 배치가 x=511 로 엣지 틱/스카이라이트 전파 (실측).
+     *  - 제외 실측: trial (40,4) 피스 x>=560 (데코 창 밖, 지하 밀도만
+     *    — 관측 불가), jungle_pyramid (5,42)/원거리 보물·난파선 등
+     *    (데코 창 밖). --- */
     {
-        char path[512];
-        snprintf(path, sizeof path, "%s/c.13.35.starts.nbt",
-                 structures_dir);
-        size_t len = 0;
-        char  *buf = read_whole(a, path, &len);
-        if (!buf) {
-            *err = "neighbor starts fragment missing (run "
-                   "tools/golden/extract_neighbor_start.py)";
-            return -1;
+        static const int32_t NS[][2] = {{13, 35}, {32, 17}};
+        for (size_t i = 0; i < sizeof NS / sizeof NS[0]; i++) {
+            char path[512];
+            snprintf(path, sizeof path, "%s/c.%d.%d.starts.nbt",
+                     structures_dir, NS[i][0], NS[i][1]);
+            size_t len = 0;
+            char  *buf = read_whole(a, path, &len);
+            if (!buf) {
+                *err = "neighbor starts fragment missing (run "
+                       "tools/golden/extract_neighbor_start.py)";
+                return -1;
+            }
+            hc_nbt_t *root = hc_nbt_parse(a, (const uint8_t *)buf, len);
+            if (!root) {
+                *err = "neighbor starts fragment parse failed";
+                return -1;
+            }
+            hc_sstart_t *st = &sc->starts[sc->n_starts++];
+            parse_start_tag(sc, st, root, NS[i][0], NS[i][1]);
+            st->tag = NULL; /* r.0.0 직렬화 재방출 대상 아님 (리전 밖) */
         }
-        hc_nbt_t *root = hc_nbt_parse(a, (const uint8_t *)buf, len);
-        if (!root) {
-            *err = "neighbor starts fragment parse failed";
-            return -1;
-        }
-        hc_sstart_t *st = &sc->starts[sc->n_starts++];
-        parse_start_tag(sc, st, root, 13, 35);
-        st->tag = NULL; /* r.0.0 직렬화 재방출 대상 아님 (리전 밖) */
     }
 
     /* --- References 교차검증 (골든 references.txt 전수) --- */

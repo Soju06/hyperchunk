@@ -266,16 +266,21 @@ static int ceil_log2_i(int32_t n) {
 }
 
 /* 참조 페이로드의 sections[].biomes 를 g_grid 에 오버레이. 파스 트리는
- * scratch — 호출자가 되감는다. */
+ * scratch — 호출자가 되감는다. tolerate_missing: 마진 청크 (이웃 리전
+ * 캡처) 는 지위가 낮아 sections 가 없을 수 있다 — 밴드 유지. */
 static void overlay_biomes_from_ref(int32_t cx, int32_t cz,
                                     const uint8_t *payload, size_t len,
-                                    hc_arena_t *scratch) {
+                                    hc_arena_t *scratch,
+                                    int tolerate_missing) {
     hc_nbt_t *root = hc_nbt_parse(scratch, payload, len);
     if (!root)
         die("region-ref payload parse failed", NULL);
     const hc_nbt_t *sections = hc_nbt_get(root, "sections");
-    if (!sections)
+    if (!sections) {
+        if (tolerate_missing)
+            return;
         die("region-ref payload missing sections", NULL);
+    }
     for (int32_t i = 0; i < hc_nbt_list_count(sections); i++) {
         const hc_nbt_t *sec = hc_nbt_list_at(sections, i);
         const hc_nbt_t *bio = hc_nbt_get(sec, "biomes");
@@ -777,8 +782,30 @@ int main(int argc, char **argv) {
                 g_ref_len[cz * 32 + cx] = len;
                 hc_arena_init(&scratch, smem, 64u << 20);
                 overlay_biomes_from_ref(cx, cz, g_ref[cz * 32 + cx], len,
-                                        &scratch);
+                                        &scratch, 0);
             }
+        /* 마진 링 (-5..35 \ r.0.0) — 이웃 리전 캡처의 기록 바이옴
+         * (extract_margin_biomes.py; 밴드 tie-resolution 어긋남을 기록
+         * 값으로 교정 — 마진 데코의 스필/엣지 틱/라이트가 r.0.0 에
+         * 도달하므로 밴드 근사로는 부족하다, 실측 2026-08-05). */
+        {
+            int n_margin = 0;
+            for (int32_t cz = WC0; cz < WC0 + WN; cz++)
+                for (int32_t cx = WC0; cx < WC0 + WN; cx++) {
+                    if (cx >= 0 && cx < 32 && cz >= 0 && cz < 32)
+                        continue;
+                    char rp[1024];
+                    snprintf(rp, sizeof rp, "%s-margin/c.%d.%d.nbt",
+                             region_ref_dir, cx, cz);
+                    size_t len = 0;
+                    char  *buf = read_file(rp, &len);
+                    hc_arena_init(&scratch, smem, 64u << 20);
+                    overlay_biomes_from_ref(cx, cz, (const uint8_t *)buf,
+                                            len, &scratch, 1);
+                    n_margin++;
+                }
+            printf("margin biome overlay: %d chunks\n", n_margin);
+        }
     }
     load_climate(ref_dir);
     printf("[%6.1fs] setup done (%d biomes interned)\n", now_s() - t0,

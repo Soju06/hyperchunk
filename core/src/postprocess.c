@@ -447,6 +447,53 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
         }
         return s;
     }
+    {
+        /* 수생 식물/워터로그 일반 — updateShape 물 틱 (26.2 디컴파일 핀,
+         * task14-decomp/blocks2). fluid_of 가 물인 비유체 블록:
+         *  - tall_seagrass: TallSeagrassBlock 은 물 틱을 걸지 않는다.
+         *  - seagrass: super(Vegetation) 폴드 생존 시 (결과 비-air) 틱.
+         *  - kelp/kelp_plant (GrowingPlant head/body, scheduleFluidTicks
+         *    =true): head↔body 변환·지지 상실 경로는 이 리전 골든에
+         *    부재 — 발생하면 die (커버리지 경계). 그 외 무조건 틱.
+         *  - 기타 (big_dripleaf(_stem) 포함 SimpleWaterlogged 공통):
+         *    waterlogged=true 무조건 틱. */
+        fl_t sf = fluid_of(s);
+        if (sf.type == FL_WATER) {
+            const char *nm = hc_block_name(s);
+            if (strncmp(nm, "minecraft:tall_seagrass", 23) == 0)
+                return s;
+            fl_t wf = {FL_WATER, 8, 1, 0};
+            if (s == HC_B_SEAGRASS) {
+                uint16_t below = ppget(pp, x, y - 1, z);
+                if (hc_block_is_air(below) ||
+                    fluid_of(below).type != FL_NONE)
+                    return HC_B_AIR; /* canSurvive 실패 → AIR, 틱 없음 */
+                sched_fluid(pp, x, y, z, wf, 5);
+                return s;
+            }
+            int is_kelp_head = strncmp(nm, "minecraft:kelp[", 15) == 0;
+            int is_kelp_body = strcmp(nm, "minecraft:kelp_plant") == 0;
+            if (is_kelp_head || is_kelp_body) {
+                const char *nn = hc_block_name(ns);
+                int ns_fam = strncmp(nn, "minecraft:kelp[", 15) == 0 ||
+                             strcmp(nn, "minecraft:kelp_plant") == 0;
+                if (dir == 1 && is_kelp_body && !ns_fam)
+                    pp_die("kelp body->head conversion unmodeled", x, y, z);
+                if (dir == 1 && is_kelp_head && ns_fam)
+                    pp_die("kelp head->body conversion unmodeled", x, y, z);
+                if (dir == 0) {
+                    uint16_t below = ppget(pp, x, y - 1, z);
+                    if (hc_block_is_air(below) ||
+                        is_liquid_block(below))
+                        pp_die("kelp support loss unmodeled", x, y, z);
+                }
+                sched_fluid(pp, x, y, z, wf, 5);
+                return s;
+            }
+            sched_fluid(pp, x, y, z, wf, 5);
+            return s;
+        }
+    }
     if (is_plantish(s)) {
         /* 지지 상실 근사 (완료 노트 참조): 아래가 공기/유체가 되면 파괴
          * (스프레드 유발 지지 제거를 정확히 커버); 그 외엔 생존 no-op.
