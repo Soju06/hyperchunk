@@ -16,9 +16,9 @@
  *    (y 내림차순, x, z — NoiseChunk.fillAllDirectly 순서). 이 경로의
  *    interpolated 는 Mth.lerp3 (x→y→z 중첩) 이고, 블록 루프의
  *    updateForY→X→Z (y→x→z) 와 FP 순서가 다르다.
- *  - beardifier: 구조물 참조 없는 청크는 Beardifier.EMPTY 로 정확히 0.0.
- *    Ap2 ADD 의 fillArray 는 원소별 `+ 0.0` — density_cell 에 그대로
- *    반영한다 (-0.0 → +0.0 정규화까지 동일). */
+ *  - beardifier: cacheAllInCell(final_density + beardifier) 의 원소별
+ *    덧셈 (beard.c). 구조물 참조 없는 청크 (nc->beard == NULL) 는
+ *    Beardifier.EMPTY 로 정확히 `+ 0.0` (-0.0 → +0.0 정규화까지 동일). */
 
 static const hc_df_cellctx_t *nc_cc(hc_noise_chunk_t *nc, hc_df_mode_t mode) {
     nc->cc.mode = mode;
@@ -162,13 +162,16 @@ void hc_nc_select_cell_yz(hc_noise_chunk_t *nc, int32_t cell_y,
                 nc->cc.in_cell_x = ix;
                 nc->cc.in_cell_y = iy;
                 nc->cc.in_cell_z = iz;
-                double d = nc_eval(nc, nc->roots.final_density,
-                                   (double)(nc->cell_start_x + ix),
-                                   (double)(nc->cell_start_y + iy),
-                                   (double)(nc->cell_start_z + iz),
-                                   HC_DF_MODE_CELL);
-                /* + beardifier(0.0): Ap2 ADD fillArray 의 원소별 덧셈 */
-                nc->density_cell[ai++] = d + 0.0;
+                int32_t bx = nc->cell_start_x + ix;
+                int32_t by = nc->cell_start_y + iy;
+                int32_t bz = nc->cell_start_z + iz;
+                double  d = nc_eval(nc, nc->roots.final_density, (double)bx,
+                                    (double)by, (double)bz,
+                                    HC_DF_MODE_CELL);
+                /* Ap2 ADD fillArray 의 원소별 덧셈 — beardifier 부재/
+                 * EMPTY/affectedBox 밖은 정확히 +0.0 (-0.0 정규화 동일) */
+                nc->density_cell[ai++] =
+                    d + hc_beard_compute(nc->beard, bx, by, bz);
             }
 }
 

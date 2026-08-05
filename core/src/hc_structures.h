@@ -1,6 +1,7 @@
 #ifndef HC_STRUCTURES_H
 #define HC_STRUCTURES_H
 
+#include "hc_beard.h"
 #include "hc_biome.h"
 #include "hc_features.h"
 #include "hc_nbt.h"
@@ -145,6 +146,11 @@ typedef struct hc_spiece {
     uint8_t liquid_ignore;     /* jigsaw: ignore_waterlogging */
     uint8_t known_shape;       /* jigsaw: flag 18 경로 */
     uint8_t procs;             /* HC_PROCS_* (아래) */
+    /* jigsaw — beardifier 입력 (R: Beardifier.forStructuresInChunk) */
+    uint8_t proj_rigid;        /* pool_element.projection == rigid */
+    int32_t gld;               /* ground_level_delta */
+    int32_t n_junctions;
+    const hc_beard_junction_t *junctions;
     float   integrity;         /* ocean ruin BlockRot */
     /* shipwreck */
     uint8_t is_beached, height_adjusted;
@@ -217,6 +223,14 @@ int hc_structures_init(hc_sctx_t *sc, hc_arena_t *a, int64_t seed,
                        const hc_df_source_t *tags, int32_t n_tags,
                        const hc_biome_view_t *view,
                        const hc_biome_reg_t *biomes, const char **err);
+
+/* Beardifier.forStructuresInChunk — (cx,cz) 의 references 스타트 중
+ * terrainAdaptation != NONE (이 리전에선 trial_chambers=encapsulate 뿐;
+ * 나머지 4종은 26.2 worldgen/structure JSON 에 terrain_adaptation 부재
+ * = none, 실측 핀) 을 beard 입력으로 수집. rigids/junctions 는 arena
+ * 할당. 반환 = out->has_any (EMPTY 면 0). */
+int hc_structures_beard(const hc_sctx_t *sc, hc_arena_t *arena, int32_t cx,
+                        int32_t cz, hc_beard_t *out);
 
 /* 데코 워크 스텝 훅 — step 진입 시 (feature 들보다 먼저) 이 청크를
  * 참조하는 스타트들을 스텝 순번대로 배치. rng 회계: 구조물마다

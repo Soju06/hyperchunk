@@ -70,6 +70,13 @@ add_test(NAME surface_unit COMMAND test_surface_unit
          ${CMAKE_SOURCE_DIR}/reference
          ${CMAKE_SOURCE_DIR}/golden/rng/surface_seed1234567890.txt)
 
+# Beardifier compute 패리티 (Task 14). BeardProbe.java 실서버 그리드
+# 덤프와 비트 단위 대조 (커널/fastInvSqrt/adjustment 4경로/합산 순서).
+add_executable(test_beard_math unit/test_beard_math.c)
+target_link_libraries(test_beard_math PRIVATE hyperchunk)
+add_test(NAME beard_math COMMAND test_beard_math
+         ${CMAKE_SOURCE_DIR}/golden/rng/beard_compute.txt)
+
 # 라우터 슬롯 패리티 (Task 6b). reference JSON → IR 컴파일 → golden 대조.
 add_executable(test_router_slots parity/test_router_slots.c)
 target_link_libraries(test_router_slots PRIVATE hyperchunk)

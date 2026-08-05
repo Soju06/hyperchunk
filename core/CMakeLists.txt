@@ -12,6 +12,7 @@ add_library(hyperchunk STATIC
   src/df_eval.c
   src/df_compile.c
   src/noise_chunk.c
+  src/beard.c
   src/aquifer.c
   src/ore_veins.c
   src/gen_noise_stage.c

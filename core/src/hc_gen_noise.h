@@ -4,6 +4,7 @@
 #include "../include/hc_chunk.h"
 #include "../include/hc_df.h"
 #include "../include/hc_rng.h"
+#include "hc_beard.h"
 #include "hc_blocks.h"
 
 /* 04_noise 스테이지 — 내부 전용 (core/src). 공개 ABI 는 리전 단위 표면만
@@ -83,8 +84,12 @@ typedef struct hc_noise_chunk_s {
     /* 진행 상태 (doFill 의 커서) */
     int32_t cell_start_x, cell_start_y, cell_start_z;
 
-    /* fullNoiseDensity == cacheAllInCell(final_density + beardifier(0.0)).
-     * selectCellYZ 가 채우고 블록 루프가 in-cell 좌표로 읽는다. */
+    /* fullNoiseDensity == cacheAllInCell(final_density + beardifier).
+     * selectCellYZ 가 채우고 블록 루프가 in-cell 좌표로 읽는다.
+     * beard == NULL 은 Beardifier.EMPTY (+0.0) — init 후 호출자가
+     * hc_structures_beard 결과를 붙인다 (구조물 references 없는 게이트는
+     * 그대로 NULL). */
+    const hc_beard_t *beard;
     double density_cell[4 * 4 * 8];
 
     /* preliminarySurfaceLevel 컬럼 메모 (Long2IntMap 대응, 값-중립 memo) */

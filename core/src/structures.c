@@ -561,6 +561,25 @@ static void parse_start_tag(hc_sctx_t *sc, hc_sstart_t *st,
             p->rot = parse_rot(tag_str(c, "rotation"));
             p->mir = HC_MIR_NONE;
             p->known_shape = 1;
+            /* beardifier 입력 (Beardifier.forStructuresInChunk) */
+            p->gld = tag_i32(c, "ground_level_delta");
+            const hc_nbt_t *jl = hc_nbt_get(c, "junctions");
+            p->n_junctions = jl ? hc_nbt_list_count(jl) : 0;
+            if (p->n_junctions) {
+                hc_beard_junction_t *js = hc_arena_alloc(
+                    sc->arena,
+                    sizeof(hc_beard_junction_t) * (size_t)p->n_junctions,
+                    _Alignof(hc_beard_junction_t));
+                if (!js)
+                    die("arena exhausted (junctions)", NULL);
+                for (int32_t j = 0; j < p->n_junctions; j++) {
+                    const hc_nbt_t *jc = hc_nbt_list_at(jl, j);
+                    js[j].sx = tag_i32(jc, "source_x");
+                    js[j].sgy = tag_i32(jc, "source_ground_y");
+                    js[j].sz = tag_i32(jc, "source_z");
+                }
+                p->junctions = js;
+            }
             const hc_nbt_t *ls = hc_nbt_get(c, "liquid_settings");
             p->liquid_ignore =
                 ls && strcmp(hc_nbt_str(ls), "ignore_waterlogging") == 0;
@@ -568,6 +587,11 @@ static void parse_start_tag(hc_sctx_t *sc, hc_sstart_t *st,
             const hc_nbt_t *et = hc_nbt_get(pe, "element_type");
             if (strcmp(hc_nbt_str(et), "minecraft:single_pool_element") != 0)
                 die("non-single pool element", NULL);
+            const char *proj = tag_str(pe, "projection");
+            if (strcmp(proj, "rigid") == 0)
+                p->proj_rigid = 1;
+            else if (strcmp(proj, "terrain_matching") != 0)
+                die("unknown pool projection", proj);
             const hc_nbt_t *procs = hc_nbt_get(pe, "processors");
             if (hc_nbt_tag(procs) == HC_NBT_STRING) {
                 if (strcmp(hc_nbt_str(procs),
@@ -802,24 +826,33 @@ int hc_structures_init(hc_sctx_t *sc, hc_arena_t *a, int64_t seed,
                     "window (-12..43)\n",
             ms_found);
 
-    /* --- trial_chambers (13,35) — References 전용 합성 bbox (헤더 주석:
-     * 골든 실측 멤버십 c.7..14.31 을 정확히 재현하는 최소 상자; 피스
-     * 리스트는 조립 제외라 없음 → 배치 no-op). --- */
+    /* --- trial_chambers (13,35) — 리전 밖 직소 스타트, 같은 캡처 런의
+     * r.0.1.mca 에서 추출한 골든 starts 프래그먼트 (tools/golden/
+     * extract_neighbor_start.py — coherence 가드가 r.0.0 해시 대조).
+     * 피스 union z=512..612 라 r.0.0 블록 배치는 없고 (실측), 소비처는
+     * (a) cz=31 행 beardifier 밀도 기여, (b) 마진 청크 (cz>=32) 데코
+     * 재생의 피스 배치 (라이트/엣지 전파가 r.0.0 에 도달), (c)
+     * References 멤버십 (실 bbox 가 골든 c.7..14.31 을 재현 — 아래
+     * 교차검증이 fail-loud 로 보증). --- */
     {
+        char path[512];
+        snprintf(path, sizeof path, "%s/c.13.35.starts.nbt",
+                 structures_dir);
+        size_t len = 0;
+        char  *buf = read_whole(a, path, &len);
+        if (!buf) {
+            *err = "neighbor starts fragment missing (run "
+                   "tools/golden/extract_neighbor_start.py)";
+            return -1;
+        }
+        hc_nbt_t *root = hc_nbt_parse(a, (const uint8_t *)buf, len);
+        if (!root) {
+            *err = "neighbor starts fragment parse failed";
+            return -1;
+        }
         hc_sstart_t *st = &sc->starts[sc->n_starts++];
-        memset(st, 0, sizeof *st);
-        st->name = "minecraft:trial_chambers";
-        st->scx = 13;
-        st->scz = 35;
-        st->step = 3;
-        st->step_index = 4;
-        st->bb[0] = 7 * 16;       /* 112 — c.7 부터 */
-        st->bb[1] = -41 - 12;
-        st->bb[2] = 31 * 16;      /* 496 — z=31 행만 */
-        st->bb[3] = 14 * 16 + 15; /* 239 — c.14 까지 */
-        st->bb[4] = 0;
-        st->bb[5] = 9999; /* z-max 는 리전 밖 (교차검사에 무영향) */
-        st->n_pieces = 0;
+        parse_start_tag(sc, st, root, 13, 35);
+        st->tag = NULL; /* r.0.0 직렬화 재방출 대상 아님 (리전 밖) */
     }
 
     /* --- References 교차검증 (골든 references.txt 전수) --- */
@@ -975,6 +1008,157 @@ int32_t hc_structures_references(const hc_sctx_t *sc, hc_arena_t *scratch,
         lens[out] = m;
     }
     return out;
+}
+
+/* ================= Beardifier 입력 수집 ================= */
+
+/* terrain_adaptation — 26.2 data/minecraft/worldgen/structure JSON 실측:
+ * trial_chambers 만 "encapsulate", mineshaft/shipwreck_beached/
+ * ocean_ruin_warm/ruined_portal_ocean 은 필드 부재 (코덱 기본 none). */
+static uint8_t terrain_adaptation_of(const char *name) {
+    if (strcmp(name, "minecraft:trial_chambers") == 0)
+        return HC_TA_ENCAPSULATE;
+    return HC_TA_NONE;
+}
+
+/* StructurePiece.isCloseToChunk(chunk, 12) — XZ 교차 (12 인플레이트) */
+static int piece_close_to_chunk(const int32_t bb[6], int32_t bx0,
+                                int32_t bz0) {
+    return bb[0] <= bx0 + 15 + 12 && bb[3] >= bx0 - 12 &&
+           bb[2] <= bz0 + 15 + 12 && bb[5] >= bz0 - 12;
+}
+
+int hc_structures_beard(const hc_sctx_t *sc, hc_arena_t *arena, int32_t cx,
+                        int32_t cz, hc_beard_t *out) {
+    memset(out, 0, sizeof *out);
+    int32_t bx0 = cx * 16, bz0 = cz * 16;
+    /* startsForStructure(chunk, ta != NONE): References 멤버십과 동일한
+     * 스캔 + LongOpenHashSet 순회 순서 (hc_structures_step 과 같은 산식).
+     * 이 리전은 청크당 trial 스타트가 최대 1개지만 순서 규약은 유지. */
+    hc_sstart_t *hits[24];
+    int64_t      added[24];
+    int32_t      n_hits = 0;
+    for (int32_t sx = cx - 8; sx <= cx + 8; sx++)
+        for (int32_t sz = cz - 8; sz <= cz + 8; sz++)
+            for (int32_t i = 0; i < sc->n_starts; i++) {
+                const hc_sstart_t *st = &sc->starts[i];
+                if (st->scx != sx || st->scz != sz)
+                    continue;
+                if (terrain_adaptation_of(st->name) == HC_TA_NONE)
+                    continue;
+                if (st->bb[3] < bx0 || st->bb[0] > bx0 + 15 ||
+                    st->bb[5] < bz0 || st->bb[2] > bz0 + 15)
+                    continue;
+                assert(n_hits < 24);
+                hits[n_hits] = (hc_sstart_t *)st;
+                added[n_hits] = (int64_t)((uint64_t)(uint32_t)sx |
+                                          ((uint64_t)(uint32_t)sz << 32));
+                n_hits++;
+            }
+    if (n_hits == 0)
+        return 0;
+    int64_t ordered[24];
+    int32_t m = hc_longset_to_array(added, n_hits, ordered);
+
+    /* 1패스: 개수 (rigid = 피스 필터 통과, junction = 창 필터 통과) */
+    enum { R_CAP = 512, J_CAP = 2048 };
+    static _Thread_local hc_beard_rigid_t    rig[R_CAP];
+    static _Thread_local hc_beard_junction_t jun[J_CAP];
+    int32_t n_r = 0, n_j = 0;
+    int32_t u[6];   /* anyPieceBoundingBox (encapsulating union) */
+    int     has_u = 0;
+    for (int32_t k = 0; k < m; k++) {
+        hc_sstart_t *st = NULL;
+        for (int32_t i = 0; i < n_hits; i++)
+            if (added[i] == ordered[k])
+                st = hits[i];
+        assert(st);
+        uint8_t ta = terrain_adaptation_of(st->name);
+        for (int32_t i = 0; i < st->n_pieces; i++) {
+            const hc_spiece_t *p = &st->pieces[i];
+            if (!piece_close_to_chunk(p->bb, bx0, bz0))
+                continue;
+            if (p->kind == HC_SP_JIGSAW) {
+                if (p->proj_rigid) {
+                    if (n_r >= R_CAP)
+                        die("beard rigid overflow", NULL);
+                    memcpy(rig[n_r].bb, p->bb, sizeof p->bb);
+                    rig[n_r].gld = p->gld;
+                    rig[n_r].adj = ta;
+                    n_r++;
+                    for (int c3 = 0; c3 < 3; c3++) {
+                        if (!has_u || p->bb[c3] < u[c3])
+                            u[c3] = p->bb[c3];
+                        if (!has_u || p->bb[c3 + 3] > u[c3 + 3])
+                            u[c3 + 3] = p->bb[c3 + 3];
+                    }
+                    has_u = 1;
+                }
+                for (int32_t j = 0; j < p->n_junctions; j++) {
+                    const hc_beard_junction_t *jj = &p->junctions[j];
+                    if (jj->sx > bx0 - 12 && jj->sz > bz0 - 12 &&
+                        jj->sx < bx0 + 15 + 12 && jj->sz < bz0 + 15 + 12) {
+                        if (n_j >= J_CAP)
+                            die("beard junction overflow", NULL);
+                        jun[n_j++] = *jj;
+                        int32_t jb[6] = {jj->sx, jj->sgy, jj->sz,
+                                         jj->sx, jj->sgy, jj->sz};
+                        for (int c3 = 0; c3 < 3; c3++) {
+                            if (!has_u || jb[c3] < u[c3])
+                                u[c3] = jb[c3];
+                            if (!has_u || jb[c3 + 3] > u[c3 + 3])
+                                u[c3 + 3] = jb[c3 + 3];
+                        }
+                        has_u = 1;
+                    }
+                }
+            } else {
+                /* 비-풀 피스 (이 리전의 trial 은 전부 jigsaw — 도달 시
+                 * 규약대로 rigid(gld=0) 처리) */
+                if (n_r >= R_CAP)
+                    die("beard rigid overflow", NULL);
+                memcpy(rig[n_r].bb, p->bb, sizeof p->bb);
+                rig[n_r].gld = 0;
+                rig[n_r].adj = ta;
+                n_r++;
+                for (int c3 = 0; c3 < 3; c3++) {
+                    if (!has_u || p->bb[c3] < u[c3])
+                        u[c3] = p->bb[c3];
+                    if (!has_u || p->bb[c3 + 3] > u[c3 + 3])
+                        u[c3 + 3] = p->bb[c3 + 3];
+                }
+                has_u = 1;
+            }
+        }
+    }
+    if (!has_u)
+        return 0; /* Beardifier.EMPTY */
+    out->has_any = 1;
+    for (int c3 = 0; c3 < 3; c3++) { /* inflatedBy(24) */
+        out->affected[c3] = u[c3] - 24;
+        out->affected[c3 + 3] = u[c3 + 3] + 24;
+    }
+    out->n_rigids = n_r;
+    out->n_junctions = n_j;
+    if (n_r) {
+        hc_beard_rigid_t *pr = hc_arena_alloc(
+            arena, sizeof(hc_beard_rigid_t) * (size_t)n_r,
+            _Alignof(hc_beard_rigid_t));
+        if (!pr)
+            die("arena exhausted (beard rigids)", NULL);
+        memcpy(pr, rig, sizeof(hc_beard_rigid_t) * (size_t)n_r);
+        out->rigids = pr;
+    }
+    if (n_j) {
+        hc_beard_junction_t *pj = hc_arena_alloc(
+            arena, sizeof(hc_beard_junction_t) * (size_t)n_j,
+            _Alignof(hc_beard_junction_t));
+        if (!pj)
+            die("arena exhausted (beard junctions)", NULL);
+        memcpy(pj, jun, sizeof(hc_beard_junction_t) * (size_t)n_j);
+        out->junctions = pj;
+    }
+    return 1;
 }
 
 /* ================= 스텝 디스패치 ================= */

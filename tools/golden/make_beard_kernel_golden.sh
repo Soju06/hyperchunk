@@ -14,8 +14,9 @@ CP="$(cat "$CP_FILE")"
 
 BUILD="$HERE/work/beard-classes"
 mkdir -p "$BUILD"
-javac -cp "$CP" -d "$BUILD" "$HERE/KernelProbe.java"
+javac -cp "$CP" -d "$BUILD" "$HERE/KernelProbe.java" "$HERE/BeardProbe.java"
 java -cp "$BUILD:$CP" KernelProbe "$ROOT/golden/rng"
+java -cp "$BUILD:$CP" BeardProbe "$ROOT/golden/rng"
 
 python3 - "$ROOT/golden/rng/beard_kernel_bits.txt" \
     "$ROOT/core/src/beard_kernel.h" <<'EOF'

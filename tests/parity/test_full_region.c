@@ -541,6 +541,12 @@ static void *chain_worker(void *ud) {
         if (!nc || hc_nc_init(nc, &job->arena, job->graph, job->roots,
                               job->seed, c->cx, c->cz, job->sea) != 0)
             die("thread arena exhausted (noise chunk)", NULL);
+        /* Beardifier.forStructuresInChunk — trial_chambers encapsulate
+         * (references 기반, sctx 는 읽기 전용이라 스레드 안전) */
+        hc_beard_t beard;
+        if (g_sctx &&
+            hc_structures_beard(g_sctx, &job->arena, c->cx, c->cz, &beard))
+            nc->beard = &beard;
         hc_gen_noise_stage(c, nc);
         diag_dump_stage(c, "04_noise");
         diag_dump_psl(c, nc);
