@@ -71,7 +71,8 @@ def main():
         else:
             rows2.append((sec, parts))
 
-    missing = [l.strip() for l in open("/tmp/missing_states.txt") if l.strip()]
+    missing = [l.strip() for l in open(NOTES / "missing_states.txt")
+               if l.strip()]
     missing_set = set(missing)
 
     # main TSV 를 상태명으로 인덱스
@@ -112,6 +113,15 @@ def main():
     tsv3 = NOTES / "R-blockprops3.tsv"
     if tsv3.exists():
         for p in parse_tsv(tsv3):
+            if p[0] in added:
+                continue
+            add(p[0], p, tf(p[-1]))
+            added.add(p[0])
+
+    # trial_chambers (13,35) 마진 배치 회전 산물 (StatePropsProbe 실측)
+    tsv4 = NOTES / "R-blockprops4.tsv"
+    if tsv4.exists():
+        for p in parse_tsv(tsv4):
             if p[0] in added:
                 continue
             add(p[0], p, tf(p[-1]))

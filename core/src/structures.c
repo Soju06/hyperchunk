@@ -86,8 +86,15 @@ uint16_t hc_state_build(const char *base, hc_skv_t *kv, int n) {
         off += snprintf(buf + off, sizeof buf - (size_t)off, "]");
     }
     int32_t id = hc_block_by_name(buf, (int32_t)strlen(buf));
-    if (id < 0)
+    if (id < 0) {
+        if (hc_features_survey) {
+            /* 서베이: 미등재 상태 열거 (게이트 실행은 항상 die) —
+             * 자리 채움은 air (마진 청크 서베이 전용, 직렬화 무관) */
+            fprintf(stderr, "hc_structures SURVEY MISSING_STATE %s\n", buf);
+            return 0;
+        }
         die("rotated/mirrored state not registered", buf);
+    }
     return (uint16_t)id;
 }
 

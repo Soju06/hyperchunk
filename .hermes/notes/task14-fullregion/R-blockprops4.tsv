@@ -1,0 +1,6 @@
+# R-blockprops4.tsv — trial_chambers (13,35) 마진 청크 배치가 요구하는
+# 회전 산물 상태 3종. 값 = tools/golden/StatePropsProbe.java 실서버
+# 실측 (기존 TSV stairs/slab 8행 교차검증 0 diff). 스키마 = tsv2/3.
+minecraft:stone_button[face=wall,facing=west,powered=false]	f	f	f	f	0	0	none	probe	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=inner_right,waterlogged=true]	t	t	f	f	0	1	D:f,U:e,N:b,S:f,W:b,E:f	probe	f
+minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=inner_left,waterlogged=true]	t	t	f	f	0	1	D:f,U:d,N:7,S:f,W:f,E:b	probe	f

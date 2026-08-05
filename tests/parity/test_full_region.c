@@ -995,6 +995,10 @@ int main(int argc, char **argv) {
                     die("derived postprocess marks diverge from recording",
                         NULL);
                 }
+                fprintf(stderr, "SURVEY PPG MARK MISMATCH c.%d.%d: ours %d "
+                                "golden %d\n",
+                        pm_cx[m], pm_cz[m],
+                        n_ours <= 4096 ? n_ours : -1, rec_n[m]);
                 skipped_drain++;
                 continue;
             }
@@ -1137,7 +1141,7 @@ int main(int argc, char **argv) {
     if (g_survey) {
         enum { MAX_CLASSES = 4096 };
         static struct {
-            char    ours[96], ref[96];
+            char    ours[160], ref[160];
             int64_t cells;
         } cls[MAX_CLASSES];
         int32_t n_cls = 0;
@@ -1166,8 +1170,9 @@ int main(int argc, char **argv) {
                 int32_t sy = (int32_t)hc_nbt_i64(hc_nbt_get(sec, "Y"));
                 const hc_nbt_t *palette = hc_nbt_get(bs, "palette");
                 int32_t         npal = hc_nbt_list_count(palette);
-                /* 팔레트 엔트리 → 캐노니컬 문자열 */
-                static char pal_names[512][96];
+                /* 팔레트 엔트리 → 캐노니컬 문자열 (160B — glow_lichen
+                 * 7프로퍼티 캐노니컬 105자; 96B 는 오버플로였다) */
+                static char pal_names[512][160];
                 for (int32_t pi = 0; pi < npal; pi++) {
                     const hc_nbt_t *ent = hc_nbt_list_at(palette, pi);
                     const char *nm = hc_nbt_str(hc_nbt_get(ent, "Name"));
@@ -1243,8 +1248,8 @@ int main(int argc, char **argv) {
                             strcmp(cls[k].ref, pal_names[pi]) == 0)
                             break;
                     if (k == n_cls && n_cls < MAX_CLASSES) {
-                        snprintf(cls[k].ours, 96, "%s", ours_nm);
-                        snprintf(cls[k].ref, 96, "%s", pal_names[pi]);
+                        snprintf(cls[k].ours, 160, "%s", ours_nm);
+                        snprintf(cls[k].ref, 160, "%s", pal_names[pi]);
                         cls[k].cells = 0;
                         n_cls++;
                     }
@@ -1257,16 +1262,16 @@ int main(int argc, char **argv) {
         for (int32_t a = 0; a < n_cls; a++)
             for (int32_t b = a + 1; b < n_cls; b++)
                 if (cls[b].cells > cls[a].cells) {
-                    char    to[96], tr[96];
+                    char    to[160], tr[160];
                     int64_t tc;
-                    memcpy(to, cls[a].ours, 96);
-                    memcpy(tr, cls[a].ref, 96);
+                    memcpy(to, cls[a].ours, 160);
+                    memcpy(tr, cls[a].ref, 160);
                     tc = cls[a].cells;
-                    memcpy(cls[a].ours, cls[b].ours, 96);
-                    memcpy(cls[a].ref, cls[b].ref, 96);
+                    memcpy(cls[a].ours, cls[b].ours, 160);
+                    memcpy(cls[a].ref, cls[b].ref, 160);
                     cls[a].cells = cls[b].cells;
-                    memcpy(cls[b].ours, to, 96);
-                    memcpy(cls[b].ref, tr, 96);
+                    memcpy(cls[b].ours, to, 160);
+                    memcpy(cls[b].ref, tr, 160);
                     cls[b].cells = tc;
                 }
         printf("== SURVEY: block diffs vs golden: %" PRId64

@@ -1128,6 +1128,9 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:stone_brick_stairs[facing=west,half=top,shape=straight,waterlogged=true]",
     "minecraft:stone_slab[type=bottom,waterlogged=false]",
     "minecraft:stone_slab[type=bottom,waterlogged=true]",
+    "minecraft:stone_button[face=wall,facing=west,powered=false]",
+    "minecraft:waxed_oxidized_cut_copper_stairs[facing=east,half=bottom,shape=inner_right,waterlogged=true]",
+    "minecraft:waxed_oxidized_cut_copper_stairs[facing=west,half=bottom,shape=inner_left,waterlogged=true]",
 /* T14-GEN END names */
 };
 
@@ -1988,6 +1991,9 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     F_MOTION|F_SOLID|F_WLOG,
     F_MOTION|F_SOLID,
     F_MOTION|F_SOLID|F_WLOG,
+    0,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
 /* T14-GEN END flags */
 };
 
@@ -2091,7 +2097,7 @@ static const uint8_t T14_DAMP[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 0, 0, 1, 1,
 /* T14-GEN END damp */
 };
 static const uint8_t T14_EMIT[HC_B_T14_COUNT] = {
@@ -2150,7 +2156,7 @@ static const uint8_t T14_EMIT[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 0, 0, 0, 0,
 /* T14-GEN END emit */
 };
 static const uint32_t T14_OCC[HC_B_T14_COUNT] = {
@@ -2263,7 +2269,7 @@ static const uint32_t T14_OCC[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 0, 0, 0xfbfbef, 0xbff7df,
 /* T14-GEN END occ */
 };
 static const uint8_t T14_CFULL[HC_B_T14_COUNT] = {
@@ -2295,7 +2301,7 @@ static const uint8_t T14_CFULL[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 0, 0, 0, 0,
 /* T14-GEN END cfull */
 };
 
