@@ -566,44 +566,191 @@ static void *chain_worker(void *ud) {
     }
 }
 
-/* --- stages.log v2 제출 라인 (라이트 R/S 실측 집합) --- */
+/* --- 09 라이트 배치 모델 (test_light_stages.c 의 ltask_t 기계 이식;
+ * 배치 논증·δ_wake·POST-실행가능성 병합 전부 그쪽 주석이 소스 오브
+ * 트루스). 풀 리전 확장 (Task 14): 바닐라 저장 라이트 = 각 청크 09
+ * 배치 시점의 lfp (이후 데코 미재조명 — c.2.26 실측: 나중 배치된 정글
+ * 캐노피 y95-97 아래가 골든 sky 15). 재현: P(C) 오름차순 단일 전진
+ * 리플레이 + 청크별 3×3 로컬 lfp — 광원 도달 <=15 블록이라 C 의 lfp 는
+ * C±1 window 로 정확 (±2 소스의 경로 길이 >=16). --- */
 
-static uint8_t g_stage_r[WORLD_CHUNKS]; /* initialize_light 제출 */
-static uint8_t g_stage_s[WORLD_CHUNKS]; /* light 제출 */
+typedef struct {
+    uint8_t kind; /* 0 = 08 initialize_light, 1 = 09 light */
+    int32_t cx, cz;
+    int32_t sub_seq;
+    int64_t sub_nanos;
+    int64_t comp_nanos;
+    int32_t batch;
+} ltask_t;
 
-static void load_stage_sets(const char *stages_dir) {
-    char path[1024];
-    snprintf(path, sizeof path, "%s/stages.log", stages_dir);
-    size_t len = 0;
-    char  *buf = read_file(path, &len);
-    char  *p = buf;
-    int32_t n_r = 0, n_s = 0;
+enum { TL_CAP = 1 << 16 };
+static int64_t g_tl_nanos[TL_CAP];
+static int32_t g_tl_seq[TL_CAP];
+static int32_t g_tl_n;
+static int64_t g_batch_drain[TL_CAP];
+static int32_t g_nbatch;
+
+static int32_t counter_at(int64_t t) {
+    int32_t lo = 0, hi = g_tl_n;
+    while (lo < hi) {
+        int32_t mid = lo + (hi - lo) / 2;
+        if (g_tl_nanos[mid] <= t)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo == 0 ? 0 : g_tl_seq[lo - 1];
+}
+
+static int32_t load_light_tasks(const char *path, ltask_t *out, int32_t cap) {
+    size_t  len = 0;
+    char   *buf = read_file(path, &len);
+    char   *p = buf;
+    int32_t n = 0;
+    g_tl_n = 0;
+    g_nbatch = 0;
     while (*p) {
         char *nl = strchr(p, '\n');
         if (!nl)
             break;
         *nl = '\0';
-        if (p[0] == 's' && p[1] == ' ') {
-            long long ii, fseq, nanos;
-            char      name[64];
+        if (p[0] != '#' && p[0] != '\0') {
+            int       si, kind = -1, is_sub = 0;
+            char      sname[64];
             int32_t   cx, cz;
-            if (sscanf(p + 2, "%lld %63s %d %d %lld %lld", &ii, name, &cx,
-                       &cz, &fseq, &nanos) != 6)
-                die("bad stages.log submission line", p);
-            if (strcmp(name, "initialize_light") == 0) {
-                g_stage_r[widx(cx, cz)] = 1;
-                n_r++;
-            } else if (strcmp(name, "light") == 0) {
-                g_stage_s[widx(cx, cz)] = 1;
-                n_s++;
+            long long seq, nanos;
+            const char *body = p;
+            if (p[0] == 's' && p[1] == ' ') {
+                is_sub = 1;
+                body = p + 2;
+            }
+            if (sscanf(body, "%d %63s %d %d %lld %lld", &si, sname, &cx, &cz,
+                       &seq, &nanos) != 6)
+                die("bad stages.log line", p);
+            if (strcmp(sname, "initialize_light") == 0)
+                kind = 0;
+            else if (strcmp(sname, "light") == 0)
+                kind = 1;
+            if (g_tl_n >= TL_CAP)
+                die("stage event timeline exceeds cap", path);
+            g_tl_nanos[g_tl_n] = nanos;
+            g_tl_seq[g_tl_n] = (int32_t)seq;
+            g_tl_n++;
+            if (kind >= 0) {
+                if (is_sub) {
+                    if (n >= cap)
+                        die("stages.log tasks exceed cap", path);
+                    out[n].kind = (uint8_t)kind;
+                    out[n].cx = cx;
+                    out[n].cz = cz;
+                    out[n].sub_seq = (int32_t)seq;
+                    out[n].sub_nanos = nanos;
+                    out[n].comp_nanos = -1;
+                    out[n].batch = -1;
+                    n++;
+                } else {
+                    int32_t t = -1;
+                    for (int32_t i = n - 1; i >= 0; i--)
+                        if (out[i].kind == kind && out[i].cx == cx &&
+                            out[i].cz == cz) {
+                            t = i;
+                            break;
+                        }
+                    if (t < 0 || out[t].comp_nanos >= 0)
+                        die("stages.log completion without submit", p);
+                    out[t].comp_nanos = nanos;
+                }
             }
         }
         p = nl + 1;
     }
-    printf("stages.log: %d initialize_light, %d light submissions\n", n_r,
-           n_s);
-    if (n_r < 1024 || n_s < 1024)
-        die("stages.log submission sets unexpectedly small", path);
+    for (int32_t a = 1; a < g_tl_n; a++) {
+        int64_t kn = g_tl_nanos[a];
+        int32_t ks = g_tl_seq[a];
+        int32_t b = a - 1;
+        while (b >= 0 && g_tl_nanos[b] > kn) {
+            g_tl_nanos[b + 1] = g_tl_nanos[b];
+            g_tl_seq[b + 1] = g_tl_seq[b];
+            b--;
+        }
+        g_tl_nanos[b + 1] = kn;
+        g_tl_seq[b + 1] = ks;
+    }
+    for (int32_t a = 1; a < n; a++) {
+        ltask_t key = out[a];
+        int32_t b = a - 1;
+        while (b >= 0 && out[b].sub_nanos > key.sub_nanos) {
+            out[b + 1] = out[b];
+            b--;
+        }
+        out[b + 1] = key;
+    }
+    /* 큐-드레인 배치 (09 전용; 08 은 배치 밖 — 원 주석 참조) */
+    int32_t nb = 0, i = 0;
+    int64_t t = -1;
+    while (i < n) {
+        if (out[i].kind != 1) {
+            out[i].batch = -1;
+            i++;
+            continue;
+        }
+        if (out[i].sub_nanos > t)
+            t = out[i].sub_nanos + 2000000; /* δ_wake = 2ms */
+        if (nb >= TL_CAP)
+            die("light batch count exceeds cap", path);
+        g_batch_drain[nb] = t;
+        int64_t end = t;
+        while (i < n && (out[i].kind != 1 || out[i].sub_nanos <= t)) {
+            if (out[i].kind != 1) {
+                out[i].batch = -1;
+                i++;
+                continue;
+            }
+            out[i].batch = nb;
+            if (out[i].comp_nanos > end)
+                end = out[i].comp_nanos;
+            i++;
+        }
+        t = end;
+        nb++;
+    }
+    /* POST-실행가능성 병합 (T_PRE_MIN = 2ms) */
+    enum { T_PRE_MIN_NANOS = 2000000 };
+    for (int32_t b = 1; b < nb; b++) {
+        int64_t prev_last_post = -1, cur_first_post = -1;
+        for (int32_t k = 0; k < n; k++) {
+            if (out[k].kind != 1 || out[k].comp_nanos < 0)
+                continue;
+            if (out[k].batch < b && out[k].comp_nanos > prev_last_post)
+                prev_last_post = out[k].comp_nanos;
+            if (out[k].batch == b &&
+                (cur_first_post < 0 || out[k].comp_nanos < cur_first_post))
+                cur_first_post = out[k].comp_nanos;
+        }
+        if (prev_last_post < 0 || cur_first_post < 0)
+            continue;
+        if (cur_first_post - prev_last_post >= T_PRE_MIN_NANOS)
+            continue;
+        int64_t drain2 = g_batch_drain[b - 1];
+        for (int32_t k = 0; k < n; k++)
+            if (out[k].batch == b && out[k].kind == 1 &&
+                out[k].sub_nanos > drain2)
+                drain2 = out[k].sub_nanos;
+        for (int32_t k = 0; k < n; k++) {
+            if (out[k].batch == b) {
+                out[k].batch = out[k].sub_nanos <= drain2 ? b - 1 : b;
+            } else if (out[k].batch > b) {
+                out[k].batch -= 1;
+            }
+        }
+        g_batch_drain[b - 1] = drain2;
+        for (int32_t k = b; k + 1 < nb; k++)
+            g_batch_drain[k] = g_batch_drain[k + 1];
+        nb--;
+        b--;
+    }
+    g_nbatch = nb;
+    return n;
 }
 
 /* --- 마킹 교차검증 + 드레인 (postprocess.manifest 전체) --- */
@@ -899,9 +1046,13 @@ int main(int argc, char **argv) {
     if (g_sctx) {
         rg.struct_step = struct_step_cb;
         rg.struct_ud = g_sctx;
+        rg.be = &g_sctx->be; /* monster_room BE 기록 (Task 14) */
     }
 
-    /* --- 데코 재생: 리전 전체 manifest --- */
+    /* --- 데코 재생: 리전 전체 manifest + 09 라이트 배치 인터리브.
+     * 각 r.0.0 청크의 저장 라이트 = lfp(블록@P(C), R(C), S(C)) — P(C)
+     * 오름차순으로 단일 전진 리플레이하며 3×3 로컬 window 로 solve 후
+     * 동결한다 (파일 상단 ltask_t 주석). --- */
     enum { MAX_MANIFEST = 4096 };
     static manifest_line_t man[MAX_MANIFEST];
     char mpath[1024];
@@ -909,15 +1060,131 @@ int main(int argc, char **argv) {
     int32_t n_man = load_manifest(mpath, seed, man, MAX_MANIFEST);
     if (n_man < 1024)
         die("manifest unexpectedly short", mpath);
-    for (int32_t pos = 0; pos < n_man; pos++) {
+
+    static ltask_t          lt[8192];
+    int32_t                 n_lt = 0;
+    static int32_t          t09_of[1024], P_of[1024], order_pc[1024];
+    static hc_light_chunk_t frozen[1024];
+    static int32_t          dec_pos[WORLD_CHUNKS];
+    void                   *lmem = NULL;
+    int light_on = !getenv("HC_SURVEY_SKIP_LIGHT");
+    for (int32_t i = 0; i < WORLD_CHUNKS; i++)
+        dec_pos[i] = INT32_MAX;
+    for (int32_t pos = 0; pos < n_man; pos++)
+        dec_pos[widx(man[pos].cx, man[pos].cz)] = pos;
+    if (light_on) {
+        char lpath[1024];
+        snprintf(lpath, sizeof lpath, "%s/stages.log", stages_dir);
+        n_lt = load_light_tasks(lpath, lt, 8192);
+        for (int32_t idx = 0; idx < 1024; idx++) {
+            int32_t cx = idx & 31, cz = idx >> 5;
+            t09_of[idx] = -1;
+            for (int32_t k = 0; k < n_lt; k++)
+                if (lt[k].kind == 1 && lt[k].cx == cx && lt[k].cz == cz) {
+                    t09_of[idx] = k;
+                    break;
+                }
+            if (t09_of[idx] < 0 || lt[t09_of[idx]].comp_nanos < 0)
+                die("r.0.0 chunk without completed 09 light task", NULL);
+            P_of[idx] = counter_at(g_batch_drain[lt[t09_of[idx]].batch]);
+            order_pc[idx] = idx;
+        }
+        for (int32_t a = 1; a < 1024; a++) {
+            int32_t key = order_pc[a], b = a - 1;
+            while (b >= 0 && P_of[order_pc[b]] > P_of[key]) {
+                order_pc[b + 1] = order_pc[b];
+                b--;
+            }
+            order_pc[b + 1] = key;
+        }
+        lmem = hc_arena_alloc(&g_arena, 48u << 20, 16);
+        if (!lmem)
+            die("arena exhausted (light window)", NULL);
+        for (int32_t idx = 0; idx < 1024; idx++) {
+            frozen[idx].light[0] = hc_arena_alloc(&g_arena, 26 * 4096, 1);
+            frozen[idx].light[1] = hc_arena_alloc(&g_arena, 26 * 4096, 1);
+            if (!frozen[idx].light[0] || !frozen[idx].light[1])
+                die("arena exhausted (frozen light)", NULL);
+        }
+        printf("[%6.1fs] light batches: %d; P range %d..%d\n", now_s() - t0,
+               g_nbatch, P_of[order_pc[0]], P_of[order_pc[1023]]);
+    }
+
+    int32_t next_c = 0;
+    for (int32_t pos = 0; pos <= n_man; pos++) {
+        while (light_on && next_c < 1024 &&
+               P_of[order_pc[next_c]] == pos) {
+            int32_t       idx = order_pc[next_c];
+            int32_t       ccx = idx & 31, ccz = idx >> 5;
+            const ltask_t *T = &lt[t09_of[idx]];
+            /* 7×7 window: 09 적용은 ±1 (C 의 lfp 에 기여 가능한 광원
+             * 거리 <=15 < 16 — ±2 광원의 경로는 >=17), 08 적용은 ±2
+             * (±1 의 09 가 요구하는 이웃 등록 — ±2 등록 자체는 C 값에
+             * 무영향: ±2 를 경유해 C 로 돌아오는 경로 >=18), ±3 링은
+             * ±2 08 의 등록 스필 수용용 attach. 필터 (sub<comp, dec<P)
+             * 는 파이프라인 피라미드로 배치<=k_C 인 09 의 링 08 에서
+             * 구조적으로 참 (counter 단조 논증 — ltask_t 주석). */
+            hc_arena_t    la;
+            hc_arena_init(&la, lmem, 48u << 20);
+            static hc_light_world_t lw3;
+            if (hc_light_world_init(&lw3, &la, ccx - 3, ccz - 3, 7) != 0)
+                die("light window init failed", NULL);
+            for (int32_t dz = -3; dz <= 3; dz++)
+                for (int32_t dx = -3; dx <= 3; dx++)
+                    if (hc_light_attach(&lw3, &la,
+                                        &g_chunks[widx(ccx + dx,
+                                                       ccz + dz)]) != 0)
+                        die("light window attach failed", NULL);
+            for (int32_t dz = -3; dz <= 3; dz++)
+                for (int32_t dx = -3; dx <= 3; dx++)
+                    if (dec_pos[widx(ccx + dx, ccz + dz)] < P_of[idx])
+                        hc_light_set_featured(&lw3, ccx + dx, ccz + dz);
+            for (int32_t k = 0; k < n_lt; k++) {
+                int32_t adx = lt[k].cx - ccx, adz = lt[k].cz - ccz;
+                if (adx < 0)
+                    adx = -adx;
+                if (adz < 0)
+                    adz = -adz;
+                if (lt[k].kind == 0) {
+                    if (adx > 2 || adz > 2)
+                        continue;
+                    /* R: 제출 < C 완료, 프리픽스에 deco 있는 청크만 */
+                    if (lt[k].sub_nanos >= T->comp_nanos)
+                        continue;
+                    if (dec_pos[widx(lt[k].cx, lt[k].cz)] >= P_of[idx])
+                        continue;
+                    hc_gen_initialize_light_stage(&lw3, lt[k].cx, lt[k].cz);
+                } else {
+                    if (adx > 1 || adz > 1)
+                        continue;
+                    if (lt[k].batch > T->batch)
+                        continue;
+                    hc_gen_light_stage(&lw3, lt[k].cx, lt[k].cz);
+                }
+            }
+            hc_light_solve(&lw3);
+            hc_light_chunk_t *src = &lw3.slots[3 * 7 + 3];
+            uint8_t *l0 = frozen[idx].light[0], *l1 = frozen[idx].light[1];
+            memcpy(l0, src->light[0], 26 * 4096);
+            memcpy(l1, src->light[1], 26 * 4096);
+            frozen[idx] = *src;
+            frozen[idx].light[0] = l0;
+            frozen[idx].light[1] = l1;
+            next_c++;
+        }
+        if (pos == n_man)
+            break;
         if (man[pos].cx < WC0 + 1 || man[pos].cx >= WC0 + WN - 1 ||
             man[pos].cz < WC0 + 1 || man[pos].cz >= WC0 + WN - 1)
             die("manifest entry outside decorable window", mpath);
         hc_gen_features_chunk(&rg, man[pos].cx, man[pos].cz, seed, freg,
                               &view, &g_reg, (int32_t)sea->num, 10, &g_sink);
     }
-    printf("[%6.1fs] replayed %d manifest entries; %d scheduled ticks\n",
-           now_s() - t0, n_man, recorder.n);
+    if (light_on && next_c != 1024)
+        die("light freeze incomplete (P beyond manifest?)", NULL);
+    printf("[%6.1fs] replayed %d manifest entries; %d scheduled ticks; "
+           "%d light freezes\n",
+           now_s() - t0, n_man, recorder.n, next_c);
     if (g_survey && g_n_gaps) {
         printf("== SURVEY: unimplemented feature fires ==\n");
         for (int32_t i = 0; i < g_n_gaps; i++) {
@@ -1038,27 +1305,8 @@ int main(int argc, char **argv) {
                hc_postprocess_unmodeled_veg_evals());
     }
 
-    /* --- 라이트 최종 고정점 (R/S = stages.log 실측 집합) --- */
-    if (!getenv("HC_SURVEY_SKIP_LIGHT")) {
-        load_stage_sets(stages_dir);
-        static hc_light_world_t lw;
-        if (hc_light_world_init(&lw, &g_arena, WC0, WC0, WN) != 0)
-            die("arena exhausted (light world)", NULL);
-        for (int32_t i = 0; i < WORLD_CHUNKS; i++)
-            if (hc_light_attach(&lw, &g_arena, &g_chunks[i]) != 0)
-                die("arena exhausted (light chunks)", NULL);
-        for (int32_t pos = 0; pos < n_man; pos++)
-            hc_light_set_featured(&lw, man[pos].cx, man[pos].cz);
-        for (int32_t i = 0; i < WORLD_CHUNKS; i++)
-            if (g_stage_r[i])
-                hc_gen_initialize_light_stage(&lw, g_chunks[i].cx,
-                                              g_chunks[i].cz);
-        for (int32_t i = 0; i < WORLD_CHUNKS; i++)
-            if (g_stage_s[i])
-                hc_gen_light_stage(&lw, g_chunks[i].cx, g_chunks[i].cz);
-        hc_light_solve(&lw);
-        printf("[%6.1fs] light fixed point solved\n", now_s() - t0);
-
+    /* --- 직렬화 (라이트 = 리플레이 중 동결된 배치 lfp) --- */
+    if (light_on) {
         /* --- 직렬화 + 대조 + canonical 해시 --- */
         static hc_region_chunk_t region_chunks[1024];
         hc_arena_t               scratch;
@@ -1071,8 +1319,7 @@ int main(int argc, char **argv) {
         for (int32_t idx = 0; idx < 1024; idx++) {
             int32_t     cx = idx & 31, cz = idx >> 5;
             hc_chunk_t *c = &g_chunks[widx(cx, cz)];
-            hc_light_chunk_t *ls =
-                &lw.slots[(cz - lw.cz0) * lw.n + (cx - lw.cx0)];
+            hc_light_chunk_t *ls = &frozen[idx];
             uint8_t *payload = hc_arena_alloc(&g_arena, 256u << 10, 1);
             if (!payload)
                 die("arena exhausted (payload)", NULL);

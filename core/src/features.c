@@ -1,6 +1,7 @@
 #include "hc_carvers.h" /* hc_mth_sin (Mth 테이블) */
 #include "features_internal.h"
 #include "hc_jdk_trig.h" /* ore 각도 sin/cos (JDK 스텁 이식) */
+#include "hc_structures.h" /* hc_be_record (monster_room BE — Task 14) */
 
 #include <assert.h>
 #include <math.h>
@@ -916,8 +917,18 @@ static int monster_room_place(feat_env_t *e, int32_t ox, int32_t oy,
                     solids++;
             if (solids != 1)
                 continue;
-            mr_safe_set(e, px, oy, pz, mr_reorient_chest(e, px, oy, pz));
-            (void)hc_wgr_next_long(e->rng); /* 전리품 테이블 시드 */
+            uint16_t cs = mr_reorient_chest(e, px, oy, pz);
+            mr_safe_set(e, px, oy, pz, cs);
+            /* RandomizableContainer.setBlockEntityLootTable — 상자는 공기
+             * 위에만 놓이므로 BE 존재 보장; 시드 = nextLong (Task 14:
+             * 레코더가 있으면 기록, 없으면 기존 드로우만) */
+            int64_t ls = hc_wgr_next_long(e->rng);
+            if (e->rg->be) {
+                hc_be_rec_t *rec = hc_be_record(e->rg->be, px, oy, pz,
+                                                HC_BE_CHEST_LOOT, cs);
+                rec->loot = "minecraft:chests/simple_dungeon";
+                rec->loot_seed = ls;
+            }
             break;
         }
     /* 스포너 (@749-801): safeSet 후 getBlockEntity 가 SpawnerBlockEntity
@@ -926,8 +937,19 @@ static int monster_room_place(feat_env_t *e, int32_t ox, int32_t oy,
      * chest/bedrock 에 막히면 드로우 없음). setEntityId 자체는 0 드로우
      * (빈 spawnPotentials → WeightedList.getRandom 셀렉터 null 조기 반환). */
     mr_safe_set(e, ox, oy, oz, HC_B_SPAWNER);
-    if (hc_feat_get_block(e->rg, ox, oy, oz) == HC_B_SPAWNER)
-        (void)hc_wgr_next_int(e->rng, 4);
+    if (hc_feat_get_block(e->rg, ox, oy, oz) == HC_B_SPAWNER) {
+        /* Util.getRandom(MOBS) — {SKELETON, ZOMBIE, ZOMBIE, SPIDER}
+         * (26.2 MonsterRoomFeature.MOBS 디컴파일 핀) */
+        static const char *MR_MOBS[4] = {
+            "minecraft:skeleton", "minecraft:zombie", "minecraft:zombie",
+            "minecraft:spider"};
+        int32_t mi = hc_wgr_next_int(e->rng, 4);
+        if (e->rg->be) {
+            hc_be_rec_t *rec = hc_be_record(e->rg->be, ox, oy, oz,
+                                            HC_BE_SPAWNER, HC_B_SPAWNER);
+            rec->entity = MR_MOBS[mi];
+        }
+    }
     return 1;
 }
 

@@ -109,7 +109,7 @@ typedef struct {
     const char     *entity;    /* SPAWNER: "minecraft:zombie" 등 */
 } hc_be_rec_t;
 
-typedef struct {
+typedef struct hc_be_recorder {
     hc_be_rec_t *recs;
     int32_t      n, cap;
 } hc_be_recorder_t;

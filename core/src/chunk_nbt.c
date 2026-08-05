@@ -336,10 +336,30 @@ static hc_nbt_t *be_to_nbt(hc_arena_t *a, const hc_be_rec_t *r) {
         if (oc)
             bad |= hc_nbt_put(a, t, "ominous_config", (hc_nbt_t *)oc);
     } else if (strcmp(id, "minecraft:vault") == 0) {
+        /* VaultConfig.CODEC: loot_table 은 optionalFieldOf 기본값
+         * (chests/trial_chambers/reward) 과 같으면 인코드 생략 —
+         * ResourceKey 는 값-동등. key_item 기본값 비교는 ItemStack
+         * 참조-동등이라 절대 생략 안 됨 (골든 실측: key_item 유지,
+         * 기본 loot_table 탈락). 템플릿 config 를 필터해 재방출한다. */
         const hc_nbt_t *cfg =
             r->tpl_nbt ? hc_nbt_get(r->tpl_nbt, "config") : NULL;
-        bad |= hc_nbt_put(a, t, "config",
-                          cfg ? (hc_nbt_t *)cfg : hc_nbt_compound(a));
+        hc_nbt_t *fc = hc_nbt_compound(a);
+        if (!fc)
+            return NULL;
+        if (cfg) {
+            int32_t nk = hc_nbt_comp_count(cfg);
+            for (int32_t ki = 0; ki < nk; ki++) {
+                const char     *k = NULL;
+                const hc_nbt_t *v = hc_nbt_comp_at(cfg, ki, &k);
+                if (strcmp(k, "loot_table") == 0 &&
+                    hc_nbt_tag(v) == HC_NBT_STRING &&
+                    strcmp(hc_nbt_str(v),
+                           "minecraft:chests/trial_chambers/reward") == 0)
+                    continue;
+                bad |= hc_nbt_put(a, fc, k, (hc_nbt_t *)v);
+            }
+        }
+        bad |= hc_nbt_put(a, t, "config", fc);
         bad |= hc_nbt_put(a, t, "shared_data", hc_nbt_compound(a));
         bad |= hc_nbt_put(a, t, "server_data", hc_nbt_compound(a));
     } else {

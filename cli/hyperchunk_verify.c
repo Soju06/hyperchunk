@@ -758,6 +758,7 @@ int main(int argc, char **argv) {
     rg.ticks = &recorder;
     rg.struct_step = struct_step_cb;
     rg.struct_ud = g_sctx;
+    rg.be = &g_sctx->be; /* monster_room BE 기록 (Task 14) */
 
     enum { MAX_MANIFEST = 4096 };
     static manifest_line_t man[MAX_MANIFEST];

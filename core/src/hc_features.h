@@ -112,6 +112,9 @@ typedef struct hc_feat_region {
     int32_t     center_cx, center_cz; /* 지금 데코 중인 청크 */
     /* Task 12: NULL = 기록 끔 (기존 게이트 불변) */
     hc_tick_recorder_t *ticks;
+    /* Task 14: 피처-배치 블록엔티티 기록 (monster_room chest/spawner —
+     * 26.2 MonsterRoomFeature). NULL = 기록 끔 (기존 게이트 불변). */
+    struct hc_be_recorder *be;
     /* Task 10 (트레이스+덤프 실증): 기록 서버는 manifest seq 9 직전에
      * 전 청크를 저장/언로드했다 — *_WG 하이트맵은 NBT 에 안 실리므로
      * 이후의 *_WG 읽기는 청크·타입별 "현재 블록에서 첫-읽기 재프라임 후
