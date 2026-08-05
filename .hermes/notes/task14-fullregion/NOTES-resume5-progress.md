@@ -1,7 +1,18 @@
 # Task 14 RESUME-5 진행 노트 (2026-08-05, 커밋 d8d8e13..HEAD)
 
 측정 궤적 (HC_SURVEY 풀 리전): 블록 잔차 8,934셀 → **131셀/53청크**,
-페이로드 불일치 455 → **239청크**. 커밋 로그가 원인·수정 체인의 1차 기록.
+페이로드 불일치 455 → **211청크**. 커밋 로그가 원인·수정 체인의 1차 기록.
+
+## 세션 종료 상태 (RESUME-6 시작점)
+- ctest 29/29 green (full_region 제외) + check_no_fma PASS (64,105
+  insn) — 코어 변경 (beard/noise/postprocess/structures/blocks/BE)
+  전부 기존 게이트 무회귀.
+- full_region strict 미통과 — 지배 잔차는 §라이트 (아래 1번). 원인은
+  판정 완료, 구현이 남음 (995a5f1 메시지 + light-savetime 메모리).
+- cli/hyperchunk-verify + scripts/parity_gate.sh 동작 (판정은 현재
+  잔차만큼 정직하게 FAIL).
+- BE 클래스 닫힘: monster_room chest/spawner 기록 + vault config
+  loot_table 기본값 생략 → 페이로드 239→211.
 
 ## 닫힌 클래스 (실측 근거는 각 커밋 메시지)
 - Beardifier 부재 (지배 클래스): beard.c 포트 + BeardProbe 29,375포인트
@@ -13,7 +24,13 @@
 - 마진 링 바이옴: extract_margin_biomes.py (657청크 오버레이).
 - c.32.17 PPG 마크.
 
-## 남은 클래스 (배치 순서 권장)
+## 최종 페이로드 불일치 성분 (211청크, 세션 말 실측)
+- SkyLight 단독 145 (예 c.7.0) + 라이트 포함 복합 ~15 — §1 라이트 모델.
+- 블록/하이트맵 복합 ~40 (마인샤프트 국경/식생/vines — §4).
+- fluid_ticks#len 4 (c.19.0 등 — ours-only 7틱, §6).
+- BlockLight 섹션 존재 ± 7 — 라이트 모델과 동근원 추정.
+
+## 남은 클래스 (배치 순서 권장; 2·3번 BE 클래스는 닫힘)
 1. **SkyLight 144 + 복합 ~17청크 (18,237셀, 델타 전부 음수)** — 원인
    판정 완료: 바닐라 저장 라이트 = 각 청크 09 배치 시점의 lfp (이후
    데코 미재조명; c.2.26 (47,y,417) 실측 — 나중 정글 캐노피 y95-97
