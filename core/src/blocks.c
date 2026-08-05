@@ -1,5 +1,6 @@
 #include "hc_blocks.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 /* 순서는 hc_blocks.h enum 과 1:1 */
@@ -2308,6 +2309,22 @@ int hc_block_t14_light_emission(uint16_t id) {
 
 uint32_t hc_block_face_occlusion(uint16_t id) {
     return id >= HC_B_T14_BASE ? T14_OCC[id - HC_B_T14_BASE] : 0;
+}
+
+uint16_t hc_block_acacia_leaves_base(void) {
+    /* Task 14: acacia_leaves 14종은 T14 구간에 잎 패밀리 레이아웃
+     * (base + wl*7 + (distance-1)) 으로 연접 등록돼 있다
+     * (R-blockprops2 features 절 — 등록 순서 고정). lazy 해석. */
+    static uint16_t base = 0;
+    if (!base) {
+        const char *nm = "minecraft:acacia_leaves[distance=1,persistent="
+                         "false,waterlogged=false]";
+        int32_t id = hc_block_by_name(nm, (int32_t)strlen(nm));
+        if (id < 0)
+            abort(); /* T14 테이블 생성 불변 위반 */
+        base = (uint16_t)id;
+    }
+    return base;
 }
 
 int hc_block_collision_full(uint16_t id) {

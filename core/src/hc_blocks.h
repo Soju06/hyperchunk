@@ -243,4 +243,8 @@ uint32_t hc_block_face_occlusion(uint16_t id);
  * 전 id 유효 (pre-T14 는 F_FULL/F_LEAVES/spawner 파생). */
 int hc_block_collision_full(uint16_t id);
 
+/* Task 14: acacia_leaves 패밀리 베이스 (T14 구간, wl*7+(d-1) 레이아웃
+ * 14종 연접 — features/postprocess 잎 산술이 공유) */
+uint16_t hc_block_acacia_leaves_base(void);
+
 #endif /* HC_BLOCKS_H */
