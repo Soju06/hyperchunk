@@ -442,6 +442,23 @@ int32_t hc_featx_iprov_sample(hc_wgr_t *r, const hc_iprov_t *p) {
         die("weighted_list roll out of range", NULL);
         return 0;
     }
+    case HC_IP_CLAMPED: {
+        /* ClampedInt.sample: Mth.clamp(source.sample(r), min, max) —
+         * 소스 드로우는 무조건 1회 실행 */
+        int32_t v = iprov_sample(r, p->src);
+        return v < p->a ? p->a : (v < p->b ? v : p->b);
+    }
+    case HC_IP_CLAMPED_NORMAL: {
+        /* ClampedNormalInt.sample@30-36: (int)Mth.clamp(
+         * Mth.normal(r, mean, dev), (float)min, (float)max).
+         * Mth.normal@698: mean + (float)nextGaussian() * dev (전부 f32).
+         * Mth.clamp(float)@102: v < lo ? lo : Math.min(v, hi) — v 는
+         * NaN 불가(유한 가우시안×유한 dev). (int) 캐스트 = 0 방향 절단. */
+        float v = p->mean + (float)hc_wgr_next_gaussian(r) * p->dev;
+        float lo = (float)p->a, hi = (float)p->b;
+        v = v < lo ? lo : (v < hi ? v : hi);
+        return (int32_t)v;
+    }
     }
     if (hc_features_survey) { /* 서베이: 벙어리 값 (feature 단위 재시드라
                                * 오염은 이 feature 안에 갇힌다) */

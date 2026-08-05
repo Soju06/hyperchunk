@@ -24,6 +24,7 @@ add_library(hyperchunk STATIC
   src/carvers.c
   src/gen_carvers_stage.c
   src/jdk_trig.c
+  src/jdk_log.c
   src/features_rng.c
   src/features_compile.c
   src/features.c

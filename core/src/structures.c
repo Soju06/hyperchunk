@@ -1024,7 +1024,7 @@ void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg,
         /* LongOpenHashSet 순회 순서로 재배열 */
         int64_t ordered[24];
         int32_t m = hc_longset_to_array(added, n_hits, ordered);
-        hc_wgr_t rng;
+        hc_wgr_t rng = {0}; /* 가우시안 캐시 위생 — 구조물 경로는 미사용 */
         hc_wgr_set_feature_seed(&rng, deco_seed, idx, step);
         for (int32_t k = 0; k < m; k++) {
             hc_sstart_t *st = NULL;

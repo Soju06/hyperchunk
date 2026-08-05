@@ -146,6 +146,56 @@ static void test_jdk_sincos(const char *path) {
     printf("jdk_sincos: %d vectors, %d mismatches\n", n, bad);
 }
 
+/* golden/rng/wgr_gaussian.txt — 실서버 WorldgenRandom.nextGaussian 399
+ * 드로우 (Task 14, make_wgr_gaussian_golden.sh). 리시드 패턴이 홀수 드로우
+ * 캐시를 물고 넘어가므로 Marsaglia 캐시의 setSeed-비리셋 지속 시맨틱 +
+ * hc_jdk_log 경로까지 함께 게이트한다. */
+static void test_wgr_gaussian(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "FAIL: cannot open %s\n", path);
+        g_fails++;
+        return;
+    }
+    hc_wgr_t r;
+    int64_t deco = hc_wgr_set_decoration_seed(&r, 1234567890LL, 16, 32);
+    char line[128];
+    int  n = 0, bad = 0, i = 0, k = 0, per = 1;
+    hc_wgr_set_feature_seed(&r, deco, 0, 7);
+    while (fgets(line, sizeof line, f)) {
+        unsigned long long want;
+        if (sscanf(line, "g=0x%llx", &want) != 1)
+            continue; /* 헤더 */
+        if (k == per) { /* 다음 feature index 로 재시드 */
+            i++;
+            k = 0;
+            per = 1 + (i % 3);
+            hc_wgr_set_feature_seed(&r, deco, i, 7);
+        }
+        double   g = hc_wgr_next_gaussian(&r);
+        uint64_t b;
+        memcpy(&b, &g, 8);
+        if (b != (uint64_t)want) {
+            if (bad < 5)
+                fprintf(stderr,
+                        "FAIL: gaussian i=%d k=%d %016" PRIx64
+                        " vs %016llx\n",
+                        i, k, b, want);
+            bad++;
+        }
+        k++;
+        n++;
+    }
+    fclose(f);
+    if (n != 399) {
+        fprintf(stderr, "FAIL: gaussian golden has %d vectors (want 399)\n",
+                n);
+        g_fails++;
+    }
+    g_fails += bad;
+    printf("wgr_gaussian: %d vectors, %d mismatches\n", n, bad);
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "usage: test_features_rng <golden_rng_dir>\n");
@@ -157,6 +207,8 @@ int main(int argc, char **argv) {
     char path[1024];
     snprintf(path, sizeof path, "%s/jdk_sincos.txt", argv[1]);
     test_jdk_sincos(path);
+    snprintf(path, sizeof path, "%s/wgr_gaussian.txt", argv[1]);
+    test_wgr_gaussian(path);
     printf("test_features_rng: %d fails\n", g_fails);
     return g_fails == 0 ? 0 : 1;
 }

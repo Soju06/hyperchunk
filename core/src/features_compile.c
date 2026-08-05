@@ -263,7 +263,44 @@ static int iprov_compile(fc_t *fc, const hc_json_t *j, hc_iprov_t *p,
         p->b = (int32_t)mx->num;
         return 0;
     }
-    /* clamped_normal 등 — 샘플 도달 시 즉사 */
+    if (t && hc_json_streq(t, "minecraft:clamped")) {
+        /* ClampedInt — 소스 1 중첩 샘플 후 int clamp (forest_flowers) */
+        const hc_json_t *mn = hc_json_get(j, "min_inclusive");
+        const hc_json_t *mx = hc_json_get(j, "max_inclusive");
+        const hc_json_t *sj = hc_json_get(j, "source");
+        if (!mn || mn->kind != HC_JSON_NUM || !mx || mx->kind != HC_JSON_NUM ||
+            !sj)
+            FAIL("clamped fields missing");
+        p->kind = HC_IP_CLAMPED;
+        p->a = (int32_t)mn->num;
+        p->b = (int32_t)mx->num;
+        p->src = hc_arena_alloc(fc->arena, sizeof(hc_iprov_t),
+                                _Alignof(hc_iprov_t));
+        if (!p->src)
+            FAIL("arena exhausted (clamped)");
+        if (iprov_compile(fc, sj, p->src, depth + 1))
+            return -1;
+        return 0;
+    }
+    if (t && hc_json_streq(t, "minecraft:clamped_normal")) {
+        /* ClampedNormalInt — mean/deviation 은 Codec.FLOAT (Task 14).
+         * 코덱 float 파싱은 double 경유 축소 — 출하 데이터 리터럴
+         * (0.0/3.0/0.6/2.0)은 이중반올림 무손실. */
+        const hc_json_t *mn = hc_json_get(j, "min_inclusive");
+        const hc_json_t *mx = hc_json_get(j, "max_inclusive");
+        const hc_json_t *me = hc_json_get(j, "mean");
+        const hc_json_t *dv = hc_json_get(j, "deviation");
+        if (!mn || mn->kind != HC_JSON_NUM || !mx || mx->kind != HC_JSON_NUM ||
+            !me || me->kind != HC_JSON_NUM || !dv || dv->kind != HC_JSON_NUM)
+            FAIL("clamped_normal fields missing");
+        p->kind = HC_IP_CLAMPED_NORMAL;
+        p->a = (int32_t)mn->num;
+        p->b = (int32_t)mx->num;
+        p->mean = (float)me->num;
+        p->dev = (float)dv->num;
+        return 0;
+    }
+    /* 잔여 미지원 종 — 샘플 도달 시 즉사 */
     p->kind = HC_IP_UNSUPPORTED;
     return 0;
 }
@@ -809,8 +846,12 @@ static int tdec_compile(fc_t *fc, const hc_json_t *j, hc_tdec_t *d) {
 /* 잎 패밀리: [OAK_BASE, +28) = oak/jungle × {d1..7, wl}, [AZALEA_BASE, +28)
  * = azalea/flowering 동일 레이아웃 (hc_blocks.h) */
 static int leaf_state_ok(uint16_t s) {
+    /* acacia 는 T14 구간 [base, base+14) — wl*7+(d-1) 단일 종 (Task 14,
+     * persistent=false 만 존재라 wl 오프셋 +7 산술이 그대로 성립) */
+    uint16_t ac = hc_block_acacia_leaves_base();
     return (s >= HC_B_OAK_LEAVES_BASE && s < HC_B_OAK_LEAVES_BASE + 28) ||
-           (s >= HC_B_AZALEA_LEAVES_BASE && s < HC_B_AZALEA_LEAVES_BASE + 28);
+           (s >= HC_B_AZALEA_LEAVES_BASE && s < HC_B_AZALEA_LEAVES_BASE + 28) ||
+           (s >= ac && s < ac + 14);
 }
 
 static int cf_compile(fc_t *fc, const hc_json_t *cf, hc_pfeat_t *pf,

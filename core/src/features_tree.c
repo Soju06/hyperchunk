@@ -922,6 +922,11 @@ static uint16_t leaf_family_base(uint16_t s) {
         return HC_B_OAK_LEAVES_BASE;
     if (s >= HC_B_AZALEA_LEAVES_BASE && s < HC_B_AZALEA_LEAVES_BASE + 28)
         return HC_B_AZALEA_LEAVES_BASE;
+    /* acacia — T14 [base, base+14), wl*7+(d-1) (Task 14). (s-fam)%7 및
+     * /7*7 산술이 2-종 패밀리와 동형 (종 항이 0 일 뿐). */
+    uint16_t ac = hc_block_acacia_leaves_base();
+    if (s >= ac && s < ac + 14)
+        return ac;
     return 0;
 }
 
@@ -1827,9 +1832,11 @@ int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
     /* rootPos = origin (root placer 없음) */
     if (!(oy >= HC_MIN_Y + 1 && oy + height + 1 <= HC_MAX_Y + 1))
         return 0;
-    /* getMaxFreeTreeHeight */
+    /* getMaxFreeTreeHeight — 상계는 height+1 (TreeFeature@100: 나무 위
+     * 1층까지 검사; R2-trees §전사오류 정정, Task 14 감사). 층 height+1
+     * 에서 첫 장애물이면 max_free = height-1 로 클립. */
     int32_t max_free = height;
-    for (int32_t y = 0; y <= height; y++) {
+    for (int32_t y = 0; y <= height + 1; y++) {
         int32_t size = two_layers_size(cfg, y);
         int found = 0;
         for (int32_t dx = -size; dx <= size && !found; dx++)

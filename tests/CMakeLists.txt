@@ -114,6 +114,11 @@ target_link_libraries(test_features_rng PRIVATE hyperchunk)
 add_test(NAME features_rng COMMAND test_features_rng
          ${CMAKE_SOURCE_DIR}/golden/rng)
 
+add_executable(test_jdk_log unit/test_jdk_log.c)
+target_link_libraries(test_jdk_log PRIVATE hyperchunk)
+add_test(NAME jdk_log COMMAND test_jdk_log
+         ${CMAKE_SOURCE_DIR}/golden/rng/jdk_log.txt)
+
 add_executable(test_features_walk parity/test_features_walk.c)
 target_link_libraries(test_features_walk PRIVATE hyperchunk)
 add_test(NAME features_walk COMMAND test_features_walk

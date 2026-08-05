@@ -326,6 +326,12 @@ static int leaves_distance(uint16_t s) {
     if (s >= HC_B_FLOWERING_AZALEA_LEAVES_BASE &&
         s < HC_B_FLOWERING_AZALEA_LEAVES_BASE + 14)
         return (s - HC_B_FLOWERING_AZALEA_LEAVES_BASE) % 7 + 1;
+    {
+        /* acacia — T14 [base, base+14), wl*7+(d-1) (Task 14) */
+        uint16_t ac = hc_block_acacia_leaves_base();
+        if (s >= ac && s < ac + 14)
+            return (s - ac) % 7 + 1;
+    }
     return 7;
 }
 

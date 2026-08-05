@@ -28,6 +28,13 @@
  * XoroshiroRandomSource.nextInt 의 128bit 곱 경로가 아니다 (A3 §1.4). */
 typedef struct {
     hc_xoro_t x;
+    /* MarsagliaPolarGaussian 캐시 — LegacyRandomSource 계층 (Task 14).
+     * WorldgenRandom.setSeed 오버라이드는 gaussianSource.reset() 을 부르지
+     * 않아 setDecoration/FeatureSeed 를 넘어 인스턴스 수명 동안 지속
+     * (WorldgenRandom@33-37). 인스턴스 = 청크 데코 1회 — 생성 대응
+     * 지점(set_decoration_seed)에서 비운다. */
+    int32_t have_g;
+    double  next_g;
 } hc_wgr_t;
 
 void    hc_wgr_set_seed(hc_wgr_t *r, int64_t seed);
@@ -36,6 +43,9 @@ int64_t hc_wgr_next_long(hc_wgr_t *r);
 int32_t hc_wgr_next_int(hc_wgr_t *r, int32_t bound);
 float   hc_wgr_next_float(hc_wgr_t *r);
 double  hc_wgr_next_double(hc_wgr_t *r);
+/* nextGaussian — Marsaglia polar (nextDouble 쌍 거절 루프 + 짝 캐시),
+ * Math.log 은 hc_jdk_log 스텁 전사 (MarsagliaPolarGaussian@19-38) */
+double  hc_wgr_next_gaussian(hc_wgr_t *r);
 
 /* setDecorationSeed(levelSeed, 16*cx, 16*cz) — 순수 함수 (A3 §2.1).
  * 반환값이 데코 시드; r 은 f(deco) 상태로 남는다. */
@@ -173,8 +183,11 @@ enum {
     HC_IP_WEIGHTED_LIST, /* WeightedListInt — nextInt(total) 픽 후 중첩 샘플 */
     HC_IP_BIASED_TO_BOTTOM, /* min + nextInt(nextInt(b-a+1)+1) — 2 드로우
                              * (BiasedToBottomInt.sample@0-30, sugar_cane) */
-    /* clamped_normal 등 (가우시안 드로우) — 그리드 밖 feature 가 참조.
-     * 컴파일 허용, 샘플 도달 시 즉사. */
+    HC_IP_CLAMPED_NORMAL,   /* (int)clamp(mean + (float)gauss*dev, a, b)
+                             * (ClampedNormalInt.sample@30-36, sulfur_spike) */
+    HC_IP_CLAMPED,          /* clamp(src.sample, a, b) — ClampedInt
+                             * (forest_flowers count) */
+    /* 잔여 미지원 종 — 컴파일 허용, 샘플 도달 시 즉사. */
     HC_IP_UNSUPPORTED,
 };
 typedef struct hc_iprov hc_iprov_t;
@@ -182,8 +195,10 @@ typedef struct hc_iprov_entry hc_iprov_entry_t;
 struct hc_iprov {
     uint8_t           kind;
     int32_t           a, b, c; /* CONST: a / UNIFORM: [a,b] / TRAP: +plateau c */
+    float             mean, dev; /* CLAMPED_NORMAL (a,b = min,max) */
     int32_t           n_entries, total_weight; /* WEIGHTED_LIST */
     hc_iprov_entry_t *entries;
+    hc_iprov_t       *src; /* CLAMPED 소스 */
 };
 struct hc_iprov_entry {
     int32_t   weight;
