@@ -36,6 +36,7 @@
 
 #include <assert.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <inttypes.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -424,6 +425,94 @@ static void sink_feature(void *ud, int32_t step, int32_t index,
 
 static const hc_feat_trace_t g_sink = {sink_pos_nop, sink_feature, NULL};
 
+/* --- 진단: 우리측 04..06 스테이지 블록 덤프 ---
+ * HC_DIAG_STAGE_DUMP="x0 z0 x1 z1 dir" (리전 청크좌표 박스, 밖이면 무경로).
+ * FORMAT.md v1 blocks 레이아웃 (팔레트 첫등장순 + y승순 z행 x16열) —
+ * 바닐라 스테이지 덤프와 tools/golden/diff_stage_dump.py 로 대조. */
+static int  g_diag_x0 = 1, g_diag_z0 = 1, g_diag_x1 = 0, g_diag_z1 = 0;
+static char g_diag_dir[512];
+
+static void diag_dump_stage(const hc_chunk_t *c, const char *stage) {
+    if (c->cx < g_diag_x0 || c->cx > g_diag_x1 || c->cz < g_diag_z0 ||
+        c->cz > g_diag_z1)
+        return;
+    char path[1024];
+    snprintf(path, sizeof path, "%s/c.%d.%d", g_diag_dir, c->cx, c->cz);
+    mkdir(path, 0755);
+    snprintf(path, sizeof path, "%s/c.%d.%d/%s.blocks.txt", g_diag_dir, c->cx,
+             c->cz, stage);
+    FILE *f = fopen(path, "w");
+    if (!f)
+        die("diag dump fopen failed", path);
+    fprintf(f,
+            "# hyperchunk C stage dump (diag)\n# kind blocks\n"
+            "# chunk %d %d\n# stage %s\n# minY %d maxY %d height %d\n",
+            c->cx, c->cz, stage, HC_MIN_Y, HC_MAX_Y, HC_MAX_Y - HC_MIN_Y + 1);
+    uint16_t pal[4096];
+    int32_t  npal = 0;
+    static _Thread_local int32_t inv[HC_B_COUNT];
+    for (int32_t i = 0; i < HC_B_COUNT; i++)
+        inv[i] = -1;
+    for (int32_t y = HC_MIN_Y; y <= HC_MAX_Y; y++)
+        for (int32_t lz = 0; lz < 16; lz++)
+            for (int32_t lx = 0; lx < 16; lx++) {
+                uint16_t s = c->states[hc_idx(lx, y, lz)];
+                if (inv[s] < 0) {
+                    if (npal == 4096)
+                        die("diag palette overflow", NULL);
+                    inv[s] = npal;
+                    pal[npal++] = s;
+                }
+            }
+    for (int32_t i = 0; i < npal; i++)
+        fprintf(f, "palette %d %s\n", i, hc_block_name(pal[i]));
+    fprintf(f, "data\n");
+    for (int32_t y = HC_MIN_Y; y <= HC_MAX_Y; y++)
+        for (int32_t lz = 0; lz < 16; lz++) {
+            for (int32_t lx = 0; lx < 16; lx++)
+                fprintf(f, lx ? " %d" : "%d",
+                        inv[c->states[hc_idx(lx, y, lz)]]);
+            fputc('\n', f);
+        }
+    fclose(f);
+}
+
+/* 진단: PSL 그리드 덤프 (diag 박스 청크, 04 직후 — aquifer 입력 대조) */
+static void diag_dump_psl(const hc_chunk_t *c, hc_noise_chunk_t *nc) {
+    if (c->cx < g_diag_x0 || c->cx > g_diag_x1 || c->cz < g_diag_z0 ||
+        c->cz > g_diag_z1)
+        return;
+    char path[1024];
+    snprintf(path, sizeof path, "%s/c.%d.%d", g_diag_dir, c->cx, c->cz);
+    mkdir(path, 0755);
+    snprintf(path, sizeof path, "%s/c.%d.%d/psl.txt", g_diag_dir, c->cx,
+             c->cz);
+    FILE *f = fopen(path, "w");
+    if (!f)
+        die("diag psl fopen failed", path);
+    for (int32_t z = c->cz * 16 - 32; z <= c->cz * 16 + 47; z += 4)
+        for (int32_t x = c->cx * 16 - 32; x <= c->cx * 16 + 47; x += 4)
+            fprintf(f, "psl %d %d %d\n", x, z, hc_nc_psl(nc, x, z));
+    fclose(f);
+    /* 대수층 그리드 셀 소스/상태 (블록 ±2 그리드) */
+    snprintf(path, sizeof path, "%s/c.%d.%d/aquifer.txt", g_diag_dir, c->cx,
+             c->cz);
+    f = fopen(path, "w");
+    if (!f)
+        die("diag aquifer fopen failed", path);
+    int32_t cgx = c->cx, cgz = c->cz; /* gridX(16cx)=cx (16블록 그리드) */
+    for (int32_t gy = -6; gy <= 3; gy++)
+        for (int32_t gz = cgz - 2; gz <= cgz + 2; gz++)
+            for (int32_t gx = cgx - 2; gx <= cgx + 2; gx++) {
+                int32_t sx, sy, sz, lvl, ty;
+                hc_aquifer_debug_cell(&nc->aq, gx, gy, gz, &sx, &sy, &sz,
+                                      &lvl, &ty);
+                fprintf(f, "cell %d %d %d src %d %d %d level %d type %s\n",
+                        gx, gy, gz, sx, sy, sz, lvl, hc_block_name(ty));
+            }
+    fclose(f);
+}
+
 /* --- 병렬 04..06 체인 --- */
 
 typedef struct {
@@ -453,11 +542,15 @@ static void *chain_worker(void *ud) {
                               job->seed, c->cx, c->cz, job->sea) != 0)
             die("thread arena exhausted (noise chunk)", NULL);
         hc_gen_noise_stage(c, nc);
+        diag_dump_stage(c, "04_noise");
+        diag_dump_psl(c, nc);
         hc_gen_surface_stage(c, nc, job->surf, job->view);
+        diag_dump_stage(c, "05_surface");
         uint64_t mask[HC_CARVING_MASK_WORDS];
         memset(mask, 0, sizeof mask);
         hc_gen_carvers_stage(c, nc, job->surf, job->view, job->seed,
                              job->carvers, 3, mask);
+        diag_dump_stage(c, "06_carvers");
         job->arena.off = mark;
     }
 }
@@ -545,6 +638,14 @@ int main(int argc, char **argv) {
     int32_t     fx0 = 0, fz0 = 0, fx1 = 31, fz1 = 31;
     if (focus_env)
         sscanf(focus_env, "%d %d %d %d", &fx0, &fz0, &fx1, &fz1);
+    {
+        const char *de = getenv("HC_DIAG_STAGE_DUMP");
+        if (de && sscanf(de, "%d %d %d %d %511s", &g_diag_x0, &g_diag_z0,
+                         &g_diag_x1, &g_diag_z1, g_diag_dir) == 5)
+            mkdir(g_diag_dir, 0755);
+        else if (de)
+            die("HC_DIAG_STAGE_DUMP malformed (want: x0 z0 x1 z1 dir)", de);
+    }
 
     double t0 = now_s();
     size_t backing_sz = (size_t)6 << 30;

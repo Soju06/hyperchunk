@@ -1,5 +1,9 @@
 #include "hc_gen_noise.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 /* NoiseBasedChunkGenerator.doFill 26.2 (javap) — 루프 중첩/순서 그대로:
  * cellX 오름 → cellZ 오름 → cellY 내림 → inCellY 내림 → inCellX 오름 →
  * inCellZ 오름. swapSlices 는 매 cellX 뒤 (마지막 포함).
@@ -46,6 +50,16 @@ void hc_hm_update_both(hc_chunk_t *c, int x, int y, int z, uint16_t state) {
 }
 
 void hc_gen_noise_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc) {
+    /* ---- Task 14 임시 진단 (HC_DIAG_DENSITY="cx cz path") — 제거 예정 ---- */
+    FILE *diag_df = NULL;
+    {
+        const char *e = getenv("HC_DIAG_DENSITY");
+        int         dcx, dcz;
+        char        dp[512];
+        if (e && sscanf(e, "%d %d %511s", &dcx, &dcz, dp) == 3 &&
+            chunk->cx == dcx && chunk->cz == dcz)
+            diag_df = fopen(dp, "w");
+    }
     /* getOrCreateHeightmapUnprimed: zero-init 스토리지 == 전 컬럼 minY */
     for (int i = 0; i < 256; i++) {
         chunk->heightmap_ocean_floor[i] = HC_MIN_Y;
@@ -95,6 +109,10 @@ void hc_gen_noise_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc) {
                                                  nc->cc.in_cell_z];
                             int b = hc_aquifer_substance(
                                 &nc->aq, block_x, block_y, block_z, density);
+                            if (diag_df)
+                                fprintf(diag_df, "sub %d %d %d %s\n",
+                                        block_x, block_y, block_z,
+                                        b < 0 ? "null" : hc_block_name((uint16_t)b));
                             if (b < 0) {
                                 /* 2) OreVeinifier, 3) null → defaultBlock */
                                 b = hc_ore_vein_block(nc, block_x, block_y,
@@ -125,5 +143,7 @@ void hc_gen_noise_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc) {
         }
         hc_nc_swap_slices(nc);
     }
+    if (diag_df)
+        fclose(diag_df);
     /* stopInterpolation(): 플래그 전용 — 상태 없음 */
 }

@@ -132,6 +132,11 @@ double hc_nc_eval_block(hc_noise_chunk_t *nc, int32_t root, int32_t x,
 
 /* Aquifer.computeSubstance: 블록 id 또는 -1 (= solid 유지, 호출자가
  * veinifier → defaultBlock 순으로 진행) */
+/* Task 14 진단 전용: 그리드 셀의 소스 위치(positional RNG) + FluidStatus */
+void hc_aquifer_debug_cell(hc_aquifer_t *aq, int32_t gx, int32_t gy,
+                           int32_t gz, int32_t *sx, int32_t *sy, int32_t *sz,
+                           int32_t *level, int32_t *type);
+
 int hc_aquifer_substance(hc_aquifer_t *aq, int32_t x, int32_t y, int32_t z,
                          double density);
 

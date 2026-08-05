@@ -479,3 +479,21 @@ int hc_aquifer_init(hc_aquifer_t *aq, hc_arena_t *arena,
     aq->skip_sampling_above_y = (g * 12 + 11) - 1; /* fromGridY(g,11) - 1 */
     return 0;
 }
+
+/* --- Task 14 진단 전용 (게이트 무경로): 그리드 셀 소스 위치 + 상태 --- */
+
+void hc_aquifer_debug_cell(hc_aquifer_t *aq, int32_t gx, int32_t gy,
+                           int32_t gz, int32_t *sx, int32_t *sy, int32_t *sz,
+                           int32_t *level, int32_t *type) {
+    hc_xoro_t r;
+    hc_xoro_at(&aq->fork, gx, gy, gz, &r);
+    int32_t ox = hc_xoro_next_int(&r, 10);
+    int32_t oy = hc_xoro_next_int(&r, 9);
+    int32_t oz = hc_xoro_next_int(&r, 10);
+    *sx = shl32(gx, 4) + ox;
+    *sy = gy * 12 + oy;
+    *sz = shl32(gz, 4) + oz;
+    hc_fluid_status_t s = compute_fluid(aq, *sx, *sy, *sz);
+    *level = s.level;
+    *type = s.type;
+}

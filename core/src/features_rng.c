@@ -2,10 +2,7 @@
 
 #include <math.h>
 
-#include "hc_jdk_trig.h"
-
-/* jdk_log.c (HotSpot dlog 스텁 전사) — 헤더 편입 전 전방선언 */
-double hc_jdk_log(double x);
+#include "hc_jdk_log.h"
 
 /* WorldgenRandom over XoroshiroRandomSource — 26.2 바이트코드 1:1
  * (task9pre A3 §1-2, §4). 핵심: 래퍼의 next(bits) 는 델리게이트
