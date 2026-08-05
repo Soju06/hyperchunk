@@ -1068,11 +1068,15 @@ int main(int argc, char **argv) {
     static int32_t          dec_pos[WORLD_CHUNKS];
     void                   *lmem = NULL;
     int light_on = !getenv("HC_SURVEY_SKIP_LIGHT");
+    /* 기본 = 최종-블록 고정점 (안정 기준선; 잔차 161청크 sky — 진행
+     * 노트 참조). HC_LIGHT_BATCH=1 은 09 배치-동결 모델 (WIP — 커밋
+     * 995a5f1 메시지의 미해결 시맨틱). */
+    int light_batch = light_on && getenv("HC_LIGHT_BATCH") != NULL;
     for (int32_t i = 0; i < WORLD_CHUNKS; i++)
         dec_pos[i] = INT32_MAX;
     for (int32_t pos = 0; pos < n_man; pos++)
         dec_pos[widx(man[pos].cx, man[pos].cz)] = pos;
-    if (light_on) {
+    if (light_batch) {
         char lpath[1024];
         snprintf(lpath, sizeof lpath, "%s/stages.log", stages_dir);
         n_lt = load_light_tasks(lpath, lt, 8192);
@@ -1112,7 +1116,7 @@ int main(int argc, char **argv) {
 
     int32_t next_c = 0;
     for (int32_t pos = 0; pos <= n_man; pos++) {
-        while (light_on && next_c < 1024 &&
+        while (light_batch && next_c < 1024 &&
                P_of[order_pc[next_c]] == pos) {
             int32_t       idx = order_pc[next_c];
             int32_t       ccx = idx & 31, ccz = idx >> 5;
@@ -1180,7 +1184,7 @@ int main(int argc, char **argv) {
         hc_gen_features_chunk(&rg, man[pos].cx, man[pos].cz, seed, freg,
                               &view, &g_reg, (int32_t)sea->num, 10, &g_sink);
     }
-    if (light_on && next_c != 1024)
+    if (light_batch && next_c != 1024)
         die("light freeze incomplete (P beyond manifest?)", NULL);
     printf("[%6.1fs] replayed %d manifest entries; %d scheduled ticks; "
            "%d light freezes\n",
@@ -1305,8 +1309,34 @@ int main(int argc, char **argv) {
                hc_postprocess_unmodeled_veg_evals());
     }
 
-    /* --- 직렬화 (라이트 = 리플레이 중 동결된 배치 lfp) --- */
+    /* --- 직렬화 (라이트: 기본 = 최종 고정점; HC_LIGHT_BATCH 는 동결) --- */
     if (light_on) {
+        if (!light_batch) {
+            /* 최종-블록 고정점: R/S = stages.log 제출 집합 전체 */
+            char lpath[1024];
+            snprintf(lpath, sizeof lpath, "%s/stages.log", stages_dir);
+            n_lt = load_light_tasks(lpath, lt, 8192);
+            static hc_light_world_t lw;
+            if (hc_light_world_init(&lw, &g_arena, WC0, WC0, WN) != 0)
+                die("arena exhausted (light world)", NULL);
+            for (int32_t i = 0; i < WORLD_CHUNKS; i++)
+                if (hc_light_attach(&lw, &g_arena, &g_chunks[i]) != 0)
+                    die("arena exhausted (light chunks)", NULL);
+            for (int32_t pos = 0; pos < n_man; pos++)
+                hc_light_set_featured(&lw, man[pos].cx, man[pos].cz);
+            for (int32_t k = 0; k < n_lt; k++)
+                if (lt[k].kind == 0)
+                    hc_gen_initialize_light_stage(&lw, lt[k].cx, lt[k].cz);
+            for (int32_t k = 0; k < n_lt; k++)
+                if (lt[k].kind == 1)
+                    hc_gen_light_stage(&lw, lt[k].cx, lt[k].cz);
+            hc_light_solve(&lw);
+            for (int32_t idx = 0; idx < 1024; idx++) {
+                int32_t cx = idx & 31, cz = idx >> 5;
+                frozen[idx] = lw.slots[(cz - lw.cz0) * lw.n + (cx - lw.cx0)];
+            }
+            printf("[%6.1fs] light fixed point solved\n", now_s() - t0);
+        }
         /* --- 직렬화 + 대조 + canonical 해시 --- */
         static hc_region_chunk_t region_chunks[1024];
         hc_arena_t               scratch;
