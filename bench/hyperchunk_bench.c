@@ -528,6 +528,202 @@ static int raw_brightness_cb(void *ud, int32_t x, int32_t y, int32_t z) {
     return sky > blk ? sky : blk;
 }
 
+/* ================= FREE 모드 (P2-3, ADR-008 D1) =================
+ * 자체 이력: σ* = 5×5 잔차 버킷 스트라이드 (체스판), Λ* = 데코 직후 08 +
+ * 버킷 경계 배치 (09 피라미드 준수), π* = 골든 pp 집합의 행우선.
+ * 이벤트/셀 모델·정확성 논거 = tests/parity/test_free_region.c 헤더. */
+
+#include "../core/include/hc_sched.h"
+
+enum { EV_DECO = 0, EV_L08 = 1, EV_L09 = 2, EV_PREPARE = 3 };
+
+enum { MAX_THREADS = 64 };
+
+typedef struct {
+    hc_feat_region_t rg;
+    hc_light_ctx_t   lctx;
+    int32_t          cur_pos;
+    uint64_t cpu_deco, cpu_l08, cpu_l09, cpu_prep, cpu_flush; /* 귀속 */
+    char     pad[64];
+} fw_t;
+static fw_t g_fw[MAX_THREADS];
+
+typedef struct {
+    uint8_t kind;
+    int32_t cx, cz;
+    int32_t pos;
+} ev_ud_t;
+
+enum { MAX_EV = 8192, MAX_CELLS = 1 << 18 };
+static hc_sched_ev_t g_evs[MAX_EV];
+static ev_ud_t       g_evud[MAX_EV];
+static int32_t       g_ev_n;
+static int32_t       g_cells[MAX_CELLS];
+static int32_t       g_cells_n;
+static int32_t       g_ncellspace;
+
+static hc_light_world_t     *g_lwp;
+static const hc_feat_reg_t  *g_fregp;
+static const hc_biome_view_t *g_viewp;
+static int32_t                g_sea_g;
+static int64_t                g_seed_g;
+static uint64_t               B_dag;
+
+static void fw_light_write_hook(void *ud, int32_t x, int32_t y, int32_t z,
+                                uint16_t old_id, uint16_t new_id) {
+    fw_t *w = ud;
+    int32_t la = g_live_at[widx(x >> 4, z >> 4)];
+    if (la == INT32_MAX || w->cur_pos < la)
+        return;
+    hc_light_accum_write_ctx(g_lwp, &w->lctx, x, y, z, old_id, new_id);
+}
+
+static int fw_raw_brightness(void *ud, int32_t x, int32_t y, int32_t z) {
+    fw_t   *w = ud;
+    int32_t cx = x >> 4, cz = z >> 4;
+    int     vis = 0;
+    for (int dz = -1; dz <= 1 && !vis; dz++)
+        for (int dx = -1; dx <= 1 && !vis; dx++) {
+            int32_t la = g_live_at[widx(cx + dx, cz + dz)];
+            if (la != INT32_MAX && la <= w->cur_pos)
+                vis = 1;
+        }
+    if (!vis)
+        return 15;
+    int sky = hc_light_get(g_lwp, HC_LIGHT_SKY, x, y, z);
+    int blk = hc_light_get(g_lwp, HC_LIGHT_BLOCK, x, y, z);
+    return sky > blk ? sky : blk;
+}
+
+static void exec_ev(void *ud, int32_t worker) {
+    ev_ud_t *e = ud;
+    fw_t    *w = &g_fw[worker];
+    uint64_t c0 = tcpu_ns();
+    switch (e->kind) {
+    case EV_DECO:
+        w->cur_pos = e->pos;
+        hc_gen_features_chunk(&w->rg, e->cx, e->cz, g_seed_g, g_fregp,
+                              g_viewp, &g_reg, g_sea_g, 10, &g_sink);
+        hc_light_set_featured(g_lwp, e->cx, e->cz);
+        w->cpu_deco += tcpu_ns() - c0;
+        c0 = tcpu_ns();
+        hc_light_accum_flush_ctx(g_lwp, &w->lctx);
+        w->cpu_flush += tcpu_ns() - c0;
+        break;
+    case EV_L08:
+        hc_light_accum_init_chunk(g_lwp, e->cx, e->cz);
+        w->cpu_l08 += tcpu_ns() - c0;
+        break;
+    case EV_L09:
+        hc_light_accum_light_chunk_ctx(g_lwp, &w->lctx, e->cx, e->cz);
+        w->cpu_l09 += tcpu_ns() - c0;
+        break;
+    case EV_PREPARE:
+        hc_light_accum_prepare(g_lwp);
+        w->cpu_prep += tcpu_ns() - c0;
+        break;
+    }
+}
+
+static int32_t emit_box_cells(int32_t *dst, int32_t cx, int32_t cz,
+                              int32_t r) {
+    int32_t m = 0;
+    for (int32_t dz = -r; dz <= r; dz++)
+        for (int32_t dx = -r; dx <= r; dx++) {
+            int32_t x = cx + dx, z = cz + dz;
+            if (x < WC0 || x >= WC0 + WN || z < WC0 || z >= WC0 + WN)
+                continue;
+            dst[m++] = (z - WC0) * WN + (x - WC0);
+        }
+    return m;
+}
+
+static int32_t emit_piece_cells(int32_t *dst, int32_t cx, int32_t cz) {
+    if (!g_sctx)
+        return 0;
+    int32_t m = 0;
+    int32_t bx0 = cx * 16, bz0 = cz * 16, bx1 = bx0 + 15, bz1 = bz0 + 15;
+    int32_t vbase = WORLD_CHUNKS;
+    for (int32_t i = 0; i < g_sctx->n_starts; i++) {
+        const hc_sstart_t *st = &g_sctx->starts[i];
+        if (st->scx < cx - 8 || st->scx > cx + 8 || st->scz < cz - 8 ||
+            st->scz > cz + 8) {
+            vbase += st->n_pieces;
+            continue;
+        }
+        for (int32_t j = 0; j < st->n_pieces; j++) {
+            const hc_spiece_t *p = &st->pieces[j];
+            if (p->bb[3] >= bx0 && p->bb[0] <= bx1 && p->bb[5] >= bz0 &&
+                p->bb[2] <= bz1)
+                dst[m++] = vbase + j;
+        }
+        vbase += st->n_pieces;
+    }
+    return m;
+}
+
+static void push_event(uint8_t kind, int32_t cx, int32_t cz, int32_t pos,
+                       int32_t radius, int with_pieces) {
+    if (g_ev_n >= MAX_EV)
+        die("event cap exceeded", NULL);
+    ev_ud_t *u = &g_evud[g_ev_n];
+    u->kind = kind;
+    u->cx = cx;
+    u->cz = cz;
+    u->pos = pos;
+    hc_sched_ev_t *e = &g_evs[g_ev_n];
+    e->exec = exec_ev;
+    e->ud = u;
+    if (kind == EV_PREPARE) {
+        e->cells = NULL;
+        e->n_cells = 0;
+    } else {
+        int32_t *dst = &g_cells[g_cells_n];
+        int32_t  m = emit_box_cells(dst, cx, cz, radius);
+        if (with_pieces)
+            m += emit_piece_cells(dst + m, cx, cz);
+        if (g_cells_n + m > MAX_CELLS)
+            die("cell cap exceeded", NULL);
+        e->cells = dst;
+        e->n_cells = m;
+        g_cells_n += m;
+    }
+    g_ev_n++;
+}
+
+/* FREE 병렬 직렬화 (청크별 순수; test_free_region.c 와 동형) */
+typedef struct {
+    void  *smem;
+    size_t ssz;
+} ser_job_t;
+static ser_job_t              g_ser_job[MAX_THREADS];
+static _Atomic int32_t        g_ser_next;
+static uint8_t               *g_ser_payload[1024];
+static ptrdiff_t              g_ser_plen[1024];
+static const hc_light_chunk_t *g_ser_frozen;
+static const hc_tick_recorder_t *g_ser_recorder;
+
+static void *ser_worker(void *ud) {
+    ser_job_t *job = ud;
+    for (;;) {
+        int32_t idx =
+            atomic_fetch_add_explicit(&g_ser_next, 1, memory_order_relaxed);
+        if (idx >= 1024)
+            return NULL;
+        int32_t     cx = idx & 31, cz = idx >> 5;
+        hc_chunk_t *c = &g_chunks[widx(cx, cz)];
+        hc_arena_t  scratch;
+        hc_arena_init(&scratch, job->smem, job->ssz);
+        ptrdiff_t n = hc_chunk_to_nbt(
+            c, &g_reg, &g_ser_frozen[idx], g_ser_recorder->recs,
+            g_ser_recorder->n, /*last_update=*/0, g_sctx, &scratch,
+            g_ser_payload[idx], 256u << 10);
+        if (n < 0)
+            die("chunk serialization failed", NULL);
+        g_ser_plen[idx] = n;
+    }
+}
+
 typedef struct {
     uint8_t kind; /* 0 = 08 initialize_light, 1 = 09 light */
     int32_t cx, cz;
@@ -705,13 +901,14 @@ static int32_t load_light_tasks(const char *path, ltask_t *out, int32_t cap) {
     return n;
 }
 
-static const char *expected_canonical(const char *repo, int64_t seed) {
+static const char *expected_canonical(const char *repo, int64_t seed,
+                                      const char *suffix) {
     char path[1024];
     snprintf(path, sizeof path, "%s/golden/SHA256SUMS", repo);
     char  *buf = read_file(path, NULL);
     char   want[128];
-    snprintf(want, sizeof want, "seed%" PRId64 "_r.0.0.mca#canonical-payload",
-             seed);
+    snprintf(want, sizeof want, "seed%" PRId64 "_r.0.0.mca#%s", seed,
+             suffix);
     char *p = buf;
     while (*p) {
         char *nl = strchr(p, '\n');
@@ -731,8 +928,6 @@ static const char *expected_canonical(const char *repo, int64_t seed) {
     return NULL;
 }
 
-enum { MAX_THREADS = 64 };
-
 int main(int argc, char **argv) {
     int64_t     seed = 0;
     int         have_seed = 0;
@@ -740,6 +935,7 @@ int main(int argc, char **argv) {
     int         have_region = 0;
     const char *repo = ".";
     int         nthreads = 20;
+    int         free_mode = 0; /* --policy free (ADR-008 D1 벤치 모드) */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
             seed = strtoll(argv[++i], NULL, 10);
@@ -752,9 +948,15 @@ int main(int argc, char **argv) {
             repo = argv[++i];
         } else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) {
             nthreads = (int)strtol(argv[++i], NULL, 10);
+        } else if (strcmp(argv[i], "--policy") == 0 && i + 1 < argc) {
+            const char *p = argv[++i];
+            if (strcmp(p, "free") == 0)
+                free_mode = 1;
+            else if (strcmp(p, "replay") != 0)
+                die("--policy must be replay|free", p);
         } else {
             die("usage: hyperchunk-bench --seed <s> --region <x> <z> "
-                "[--repo <root>] [--threads <n>]",
+                "[--repo <root>] [--threads <n>] [--policy replay|free]",
                 argv[i]);
         }
     }
@@ -770,6 +972,8 @@ int main(int argc, char **argv) {
     size_t backing_sz = (size_t)6 << 30;
     if (nthreads > 20)
         backing_sz += (size_t)(nthreads - 20) * (160u << 20);
+    if (free_mode) /* 워커 라이트 ctx + 페이로드 슬랩 + 병렬 ser 스크래치 */
+        backing_sz += (size_t)3 << 30;
     void *backing = malloc(backing_sz);
     if (!backing)
         die("cannot allocate backing", NULL);
@@ -786,7 +990,12 @@ int main(int argc, char **argv) {
              seed);
     snprintf(region_ref_dir, sizeof region_ref_dir, "%s/golden/region-ref",
              repo);
-    const char *canonical_hex = expected_canonical(repo, seed);
+    /* ADR-008 Pitfall 2: 벤치 수치도 항상 패리티 판정과 함께. REPLAY 는
+     * 골든 canonical, FREE 는 자체-이력 상수 (#canonical-own-v1 — 자체
+     * 이력 σ*·Λ*·π* 는 (manifest, seed) 의 순수 함수라 결정론; REPLAY==
+     * FREE 는 free_region_own 게이트가 증명, 상수 자체는 여기 고정). */
+    const char *canonical_hex = expected_canonical(
+        repo, seed, free_mode ? "canonical-own-v1" : "canonical-payload");
 
     char sub[2048];
     snprintf(sub, sizeof sub, "%s/density_function", ref_dir);
@@ -1027,7 +1236,7 @@ int main(int argc, char **argv) {
     static int32_t          idx08[4096];
     static int32_t          P08[4096];
     int32_t                 n08 = 0;
-    {
+    if (!free_mode) {
         char lpath[1024];
         tr0 = now_ns();
         snprintf(lpath, sizeof lpath, "%s/stages.log", stages_dir);
@@ -1063,11 +1272,111 @@ int main(int argc, char **argv) {
         g_lw_hook = &lw;
         rg.on_block_write = light_write_hook;
         rg.raw_brightness = raw_brightness_cb;
+    } else {
+        /* --- FREE: 라이트 월드 + 워커 ctx + 자체 이력 이벤트 그래프 --- */
+        tr0 = now_ns();
+        if (hc_light_world_init(&lw, &g_arena, WC0, WC0, WN) != 0)
+            die("arena exhausted (light world)", NULL);
+        for (int32_t i = 0; i < WORLD_CHUNKS; i++)
+            if (hc_light_attach(&lw, &g_arena, &g_chunks[i]) != 0)
+                die("arena exhausted (light chunks)", NULL);
+        B_light_setup += now_ns() - tr0;
+        for (int32_t i = 0; i < WORLD_CHUNKS; i++)
+            g_live_at[i] = INT32_MAX;
+        g_lw_hook = &lw;
+        /* 마스터 rg 훅은 pp (DAG 후 단일 스레드, g_cur_pos=INT32_MAX) 용 */
+        rg.on_block_write = light_write_hook;
+        rg.raw_brightness = raw_brightness_cb;
+        rg.free_read_guard = 1;
+        g_lwp = &lw;
+        g_fregp = freg;
+        g_viewp = &view;
+        g_sea_g = (int32_t)sea->num;
+        g_seed_g = seed;
+        hc_features_prewarm(seed);
+        for (int t = 0; t < nthreads; t++) {
+            g_fw[t].rg = rg;
+            g_fw[t].rg.on_block_write = fw_light_write_hook;
+            g_fw[t].rg.light_ud = &g_fw[t];
+            g_fw[t].rg.raw_brightness = fw_raw_brightness;
+            if (hc_light_ctx_init(&g_fw[t].lctx, &jobs[t].arena, 20, 17,
+                                  WORLD_CHUNKS) != 0)
+                die("arena exhausted (light ctx)", NULL);
+        }
+        /* σ*: 5×5 잔차 버킷 (버킷 내 manifest 순), Λ*: 데코 직후 08 +
+         * 버킷 경계 배치 (eligibility: ±1 전부 08). base = 이벤트 인덱스. */
+        g_ev_n = 0;
+        g_cells_n = 0;
+        {
+            int32_t n_pieces = 0;
+            for (int32_t i = 0; i < g_sctx->n_starts; i++)
+                n_pieces += g_sctx->starts[i].n_pieces;
+            g_ncellspace = WORLD_CHUNKS + n_pieces;
+        }
+        static uint8_t deco_set[WORLD_CHUNKS], has08[WORLD_CHUNKS],
+            has09[WORLD_CHUNKS];
+        memset(deco_set, 0, sizeof deco_set);
+        memset(has08, 0, sizeof has08);
+        memset(has09, 0, sizeof has09);
+        for (int32_t i = 0; i < n_man; i++)
+            deco_set[widx(man[i].cx, man[i].cz)] = 1;
+        for (int32_t b = 0; b < 25; b++) {
+            for (int32_t i = 0; i < n_man; i++) {
+                int32_t mx = ((man[i].cx % 5) + 5) % 5;
+                int32_t mz = ((man[i].cz % 5) + 5) % 5;
+                if (mx * 5 + mz != b)
+                    continue;
+                push_event(EV_DECO, man[i].cx, man[i].cz, g_ev_n, 2, 1);
+                g_live_at[widx(man[i].cx, man[i].cz)] = g_ev_n;
+                push_event(EV_L08, man[i].cx, man[i].cz, g_ev_n, 1, 0);
+                has08[widx(man[i].cx, man[i].cz)] = 1;
+            }
+            int32_t        n_elig = 0;
+            static int32_t elig[WORLD_CHUNKS];
+            for (int32_t cz = WC0 + 1; cz < WC0 + WN - 1; cz++)
+                for (int32_t cx = WC0 + 1; cx < WC0 + WN - 1; cx++) {
+                    int32_t wi = widx(cx, cz);
+                    if (!deco_set[wi] || has09[wi] || !has08[wi])
+                        continue;
+                    int ok = 1;
+                    for (int dz = -1; dz <= 1 && ok; dz++)
+                        for (int dx = -1; dx <= 1 && ok; dx++)
+                            if (!has08[widx(cx + dx, cz + dz)] &&
+                                deco_set[widx(cx + dx, cz + dz)])
+                                ok = 0;
+                            else if (!deco_set[widx(cx + dx, cz + dz)])
+                                ok = 0;
+                    if (ok)
+                        elig[n_elig++] = wi;
+                }
+            if (n_elig) {
+                push_event(EV_PREPARE, 0, 0, g_ev_n, 0, 0);
+                for (int32_t k = 0; k < n_elig; k++) {
+                    int32_t wi = elig[k];
+                    push_event(EV_L09, WC0 + (wi % WN), WC0 + (wi / WN),
+                               g_ev_n, 1, 0);
+                    has09[wi] = 1;
+                }
+            }
+        }
     }
 
     uint64_t t_feat0 = now_ns();
+    if (free_mode) {
+        /* --- FREE 실행: 이벤트 그래프 (데코+08+09+배리어 통합) --- */
+        hc_arena_t sched_a;
+        void      *smem_s = hc_arena_alloc(&g_arena, 32u << 20, 16);
+        if (!smem_s)
+            die("arena exhausted (sched)", NULL);
+        hc_arena_init(&sched_a, smem_s, 32u << 20);
+        tr0 = now_ns();
+        if (hc_sched_run(g_evs, g_ev_n, g_ncellspace, HC_SCHED_FREE,
+                         nthreads, &sched_a) != 0)
+            die("hc_sched_run failed", NULL);
+        B_dag = now_ns() - tr0;
+    }
     int32_t next_b = 0, c08 = 0;
-    for (int32_t pos = 0; pos <= n_man; pos++) {
+    for (int32_t pos = 0; !free_mode && pos <= n_man; pos++) {
         uint64_t t0 = now_ns();
         while (c08 < n08 && P08[c08] <= pos) {
             const ltask_t *E = &lt[idx08[c08]];
@@ -1101,7 +1410,7 @@ int main(int argc, char **argv) {
         hc_light_accum_flush(&lw);
         B_light_flush += now_ns() - t3;
     }
-    if (next_b != g_nbatch)
+    if (!free_mode && next_b != g_nbatch)
         die("light batches beyond manifest counter", NULL);
     uint64_t t_feat_end = now_ns();
 
@@ -1118,7 +1427,6 @@ int main(int argc, char **argv) {
         enum { MAX_PPM = 2048 };
         static int32_t pm_cx[MAX_PPM], pm_cz[MAX_PPM];
         int32_t        n_pm = 0;
-        static int32_t seq2chunk[MAX_PPM];
         static int32_t rec_x[MAX_PPM][1100], rec_y[MAX_PPM][1100],
             rec_z[MAX_PPM][1100];
         static int32_t rec_n[MAX_PPM];
@@ -1155,30 +1463,47 @@ int main(int argc, char **argv) {
                     die("postprocess manifest seq gap", ppath);
                 pm_cx[n_pm] = cx;
                 pm_cz[n_pm] = cz;
-                seq2chunk[n_pm] = widx(cx, cz);
                 n_pm++;
             }
             p = nl + 1;
         }
         B_replay_load += now_ns() - tr0;
         n_pm_out = n_pm;
+        if (free_mode) {
+            /* π*: 같은 pp 집합, 행우선 (cz,cx) — 자체 이력이라 기록
+             * 마킹과 비교 불가 (FREE-vs-REPLAY 게이트가 판정) */
+            for (int32_t a = 1; a < n_pm; a++) {
+                int32_t kx = pm_cx[a], kz = pm_cz[a];
+                int32_t b = a - 1;
+                while (b >= 0 && (pm_cz[b] > kz ||
+                                  (pm_cz[b] == kz && pm_cx[b] > kx))) {
+                    pm_cx[b + 1] = pm_cx[b];
+                    pm_cz[b + 1] = pm_cz[b];
+                    b--;
+                }
+                pm_cx[b + 1] = kx;
+                pm_cz[b + 1] = kz;
+            }
+        }
         static int32_t ox[4096], oy[4096], oz[4096];
         for (int32_t m = 0; m < n_pm; m++) {
             uint64_t t0 = now_ns();
-            int32_t                  wi = seq2chunk[m];
-            const hc_ppg_recorder_t *r = &g_ppg[wi];
-            int32_t n_ours = flatten_marks(r, ox, oy, oz, 4096);
-            int     ok = n_ours == rec_n[m] && n_ours <= 4096;
-            if (ok)
-                for (int32_t i = 0; i < n_ours; i++)
-                    if (ox[i] != rec_x[m][i] || oy[i] != rec_y[m][i] ||
-                        oz[i] != rec_z[m][i]) {
-                        ok = 0;
-                        break;
-                    }
-            if (!ok)
-                die("derived postprocess marks diverge from recording",
-                    NULL);
+            int32_t  wi = widx(pm_cx[m], pm_cz[m]);
+            if (!free_mode) {
+                const hc_ppg_recorder_t *r = &g_ppg[wi];
+                int32_t n_ours = flatten_marks(r, ox, oy, oz, 4096);
+                int     ok = n_ours == rec_n[m] && n_ours <= 4096;
+                if (ok)
+                    for (int32_t i = 0; i < n_ours; i++)
+                        if (ox[i] != rec_x[m][i] || oy[i] != rec_y[m][i] ||
+                            oz[i] != rec_z[m][i]) {
+                            ok = 0;
+                            break;
+                        }
+                if (!ok)
+                    die("derived postprocess marks diverge from recording",
+                        NULL);
+            }
             uint64_t t1 = now_ns();
             B_pp_verify += t1 - t0;
             hc_postprocess_chunk(&rg, pm_cx[m], pm_cz[m], &g_ppg[wi]);
@@ -1204,32 +1529,70 @@ int main(int argc, char **argv) {
     }
     B_light_final += now_ns() - tr0;
 
-    hc_arena_t scratch;
-    void    *smem = hc_arena_alloc(&g_arena, 64u << 20, 16);
     uint8_t *cat = hc_arena_alloc(&g_arena, 192u << 20, 16);
-    if (!smem || !cat)
-        die("arena exhausted (serialize scratch)", NULL);
+    if (!cat)
+        die("arena exhausted (serialize cat)", NULL);
     size_t cat_off = 0;
     tr0 = now_ns();
-    for (int32_t idx = 0; idx < 1024; idx++) {
-        int32_t           cx = idx & 31, cz = idx >> 5;
-        hc_chunk_t       *c = &g_chunks[widx(cx, cz)];
-        hc_light_chunk_t *ls = &frozen[idx];
-        uint8_t *payload = hc_arena_alloc(&g_arena, 256u << 10, 1);
-        if (!payload)
-            die("arena exhausted (payload)", NULL);
-        hc_arena_init(&scratch, smem, 64u << 20);
-        ptrdiff_t n = hc_chunk_to_nbt(c, &g_reg, ls, recorder.recs,
-                                      recorder.n, /*last_update=*/0, g_sctx,
-                                      &scratch, payload, 256u << 10);
-        if (n < 0)
-            die("chunk serialization failed", NULL);
-        cat[cat_off++] = (uint8_t)(idx >> 24);
-        cat[cat_off++] = (uint8_t)(idx >> 16);
-        cat[cat_off++] = (uint8_t)(idx >> 8);
-        cat[cat_off++] = (uint8_t)idx;
-        memcpy(cat + cat_off, payload, (size_t)n);
-        cat_off += (size_t)n;
+    if (!free_mode) {
+        hc_arena_t scratch;
+        void *smem = hc_arena_alloc(&g_arena, 64u << 20, 16);
+        if (!smem)
+            die("arena exhausted (serialize scratch)", NULL);
+        for (int32_t idx = 0; idx < 1024; idx++) {
+            int32_t           cx = idx & 31, cz = idx >> 5;
+            hc_chunk_t       *c = &g_chunks[widx(cx, cz)];
+            hc_light_chunk_t *ls = &frozen[idx];
+            uint8_t *payload = hc_arena_alloc(&g_arena, 256u << 10, 1);
+            if (!payload)
+                die("arena exhausted (payload)", NULL);
+            hc_arena_init(&scratch, smem, 64u << 20);
+            ptrdiff_t n = hc_chunk_to_nbt(c, &g_reg, ls, recorder.recs,
+                                          recorder.n, /*last_update=*/0,
+                                          g_sctx, &scratch, payload,
+                                          256u << 10);
+            if (n < 0)
+                die("chunk serialization failed", NULL);
+            cat[cat_off++] = (uint8_t)(idx >> 24);
+            cat[cat_off++] = (uint8_t)(idx >> 16);
+            cat[cat_off++] = (uint8_t)(idx >> 8);
+            cat[cat_off++] = (uint8_t)idx;
+            memcpy(cat + cat_off, payload, (size_t)n);
+            cat_off += (size_t)n;
+        }
+    } else {
+        /* 청크별 순수 병렬 (references scratch 수정 선행) — 연접만 순차 */
+        g_ser_frozen = frozen;
+        g_ser_recorder = &recorder;
+        for (int32_t idx = 0; idx < 1024; idx++) {
+            g_ser_payload[idx] = hc_arena_alloc(&g_arena, 256u << 10, 1);
+            if (!g_ser_payload[idx])
+                die("arena exhausted (payload)", NULL);
+        }
+        for (int t = 0; t < nthreads; t++) {
+            g_ser_job[t].ssz = 96u << 20;
+            g_ser_job[t].smem =
+                hc_arena_alloc(&jobs[t].arena, g_ser_job[t].ssz, 16);
+            if (!g_ser_job[t].smem)
+                die("arena exhausted (ser scratch)", NULL);
+        }
+        atomic_store(&g_ser_next, 0);
+        pthread_t stids[MAX_THREADS];
+        for (int t = 0; t < nthreads; t++)
+            if (pthread_create(&stids[t], NULL, ser_worker,
+                               &g_ser_job[t]) != 0)
+                die("pthread_create failed (ser)", NULL);
+        for (int t = 0; t < nthreads; t++)
+            pthread_join(stids[t], NULL);
+        for (int32_t idx = 0; idx < 1024; idx++) {
+            cat[cat_off++] = (uint8_t)(idx >> 24);
+            cat[cat_off++] = (uint8_t)(idx >> 16);
+            cat[cat_off++] = (uint8_t)(idx >> 8);
+            cat[cat_off++] = (uint8_t)idx;
+            memcpy(cat + cat_off, g_ser_payload[idx],
+                   (size_t)g_ser_plen[idx]);
+            cat_off += (size_t)g_ser_plen[idx];
+        }
     }
     B_serialize = now_ns() - tr0;
     tr0 = now_ns();
@@ -1264,7 +1627,23 @@ int main(int argc, char **argv) {
     uint64_t chain_cpu_total =
         cc.nc_init + cc.beard + cc.noise + cc.surface + cc.carvers;
     /* 생성 비용 wall 합 — 하네스 오버헤드(replay_load, pp_verify) 제외 */
-    uint64_t gen_wall = chain_wall + B_light_setup + B_light08 + B_light09 +
+    uint64_t D_deco = 0, D_l08 = 0, D_l09 = 0, D_prep = 0, D_flush = 0;
+    for (int t = 0; t < nthreads; t++) {
+        D_deco += g_fw[t].cpu_deco;
+        D_l08 += g_fw[t].cpu_l08;
+        D_l09 += g_fw[t].cpu_l09;
+        D_prep += g_fw[t].cpu_prep;
+        D_flush += g_fw[t].cpu_flush;
+    }
+    if (free_mode) {
+        /* FREE 는 데코/라이트가 DAG 하나 — 버킷 재정의 */
+        B_features = 0;
+        B_light08 = 0;
+        B_light09 = 0;
+        B_light_flush = 0;
+    }
+    uint64_t gen_wall = chain_wall + (free_mode ? B_dag : 0) +
+                        B_light_setup + B_light08 + B_light09 +
                         B_features + B_light_flush + B_pp + B_light_final +
                         B_serialize + B_sha256;
 
@@ -1310,8 +1689,15 @@ int main(int argc, char **argv) {
             (t_proc_end - t_proc0) / 1e6,
             ru.ru_maxrss / 1024.0 / 1024.0,
             pass ? "PASS: bit-exact parity" : "FAIL: hash mismatch");
+    if (free_mode)
+        fprintf(stderr,
+                "FREE dag wall %.1f ms (events %d; cpu-sum: deco %.1f, "
+                "flush %.1f, 08 %.1f, 09 %.1f, prepare %.1f ms)\n",
+                B_dag / 1e6, g_ev_n, D_deco / 1e6, D_flush / 1e6,
+                D_l08 / 1e6, D_l09 / 1e6, D_prep / 1e6);
 
-    printf("{\"seed\":%" PRId64 ",\"threads\":%d,\"pass\":%s,"
+    printf("{\"seed\":%" PRId64 ",\"threads\":%d,\"policy\":\"%s\","
+           "\"pass\":%s,"
            "\"canonical\":\"%s\","
            "\"chunks\":{\"chain\":%d,\"decorated\":%d,\"postprocessed\":%d,"
            "\"emitted\":1024},"
@@ -1329,14 +1715,20 @@ int main(int argc, char **argv) {
            ",\"postprocess\":%" PRIu64 ",\"pp_verify\":%" PRIu64
            ",\"light_final\":%" PRIu64 ",\"serialize\":%" PRIu64
            ",\"sha256\":%" PRIu64 "},"
+           "\"dag_wall_ns\":%" PRIu64 ","
+           "\"dag_cpu_ns\":{\"deco\":%" PRIu64 ",\"flush\":%" PRIu64
+           ",\"l08\":%" PRIu64 ",\"l09\":%" PRIu64 ",\"prepare\":%" PRIu64
+           "},"
            "\"feat_phase_wall_ns\":%" PRIu64 ",\"gen_wall_ns\":%" PRIu64
            ",\"proc_wall_ns\":%" PRIu64 ",\"maxrss_kib\":%ld}\n",
-           seed, nthreads, pass ? "true" : "false", hex, WORLD_CHUNKS, n_man,
+           seed, nthreads, free_mode ? "free" : "replay",
+           pass ? "true" : "false", hex, WORLD_CHUNKS, n_man,
            n_pm_out, setup_ns, B_replay_load, chain_wall, cc.nc_init,
            cc.beard, cc.noise, cc.surface, cc.carvers, cw.nc_init, cw.beard,
            cw.noise, cw.surface, cw.carvers, B_light_setup, B_light08,
            B_light09, B_light_flush, B_features, B_pp, B_pp_verify,
-           B_light_final, B_serialize, B_sha256, feat_phase_wall, gen_wall,
+           B_light_final, B_serialize, B_sha256, B_dag, D_deco, D_flush,
+           D_l08, D_l09, D_prep, feat_phase_wall, gen_wall,
            t_proc_end - t_proc0, ru.ru_maxrss);
 
     if (!pass) {
