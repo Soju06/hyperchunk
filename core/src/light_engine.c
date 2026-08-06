@@ -181,12 +181,13 @@ static const uint8_t DIR_OPP[6] = {DIR_U, DIR_D, DIR_S, DIR_N, DIR_E, DIR_W};
 typedef struct {
     hc_light_world_t *w;
     uint64_t          head, tail; /* head==tail 비어 있음 */
-    uint64_t         *buf;        /* w->queue (증가) 또는 w->queue2 (감소) */
+    uint64_t         *buf;        /* ctx->inc (증가) 또는 ctx->dec (감소) */
+    uint32_t          qlog;
 } bfs_t;
 
 static inline void q_push(bfs_t *q, int32_t x, int32_t y, int32_t z, int level,
                           unsigned mask, int emission) {
-    uint64_t cap = 1ull << q->w->qlog;
+    uint64_t cap = 1ull << q->qlog;
     if (q->tail - q->head >= cap) {
         fprintf(stderr, "hc_light: BFS queue overflow (raise QLOG)\n");
         abort();
@@ -201,7 +202,7 @@ static inline void q_push(bfs_t *q, int32_t x, int32_t y, int32_t z, int level,
  * (결과는 lfp 라 어차피 불변 — 엔트리 수 패리티만 위한 보존). */
 static void bfs_run(bfs_t *q, int layer) {
     hc_light_world_t *w = q->w;
-    uint64_t          cap = 1ull << w->qlog;
+    uint64_t          cap = 1ull << q->qlog;
     while (q->head != q->tail) {
         uint64_t e = q->buf[q->head++ & (cap - 1)];
         int32_t  x = (int32_t)(e & 0x1FFF) - 4096;
@@ -256,6 +257,19 @@ static void bfs_run(bfs_t *q, int layer) {
 
 /* --- 공개 API --- */
 
+int hc_light_ctx_init(hc_light_ctx_t *c, hc_arena_t *a, uint32_t qlog,
+                      uint32_t check_log, int32_t dirty_cap) {
+    c->inc = hc_arena_alloc(a, sizeof(uint64_t) << qlog, 8);
+    c->dec = hc_arena_alloc(a, sizeof(uint64_t) << qlog, 8);
+    c->check = hc_arena_alloc(a, sizeof(uint64_t) << check_log, 8);
+    c->dirty = hc_arena_alloc(a, sizeof(int32_t) * (size_t)dirty_cap, 4);
+    c->qlog = qlog;
+    c->check_log = check_log;
+    c->n_check = 0;
+    c->n_dirty = 0;
+    return (!c->inc || !c->dec || !c->check || !c->dirty) ? -1 : 0;
+}
+
 int hc_light_world_init(hc_light_world_t *w, hc_arena_t *a, int32_t cx0,
                         int32_t cz0, int32_t n) {
     if (!g_tables_ready)
@@ -263,16 +277,10 @@ int hc_light_world_init(hc_light_world_t *w, hc_arena_t *a, int32_t cx0,
     w->cx0 = cx0;
     w->cz0 = cz0;
     w->n = n;
-    w->qlog = QLOG;
     w->slots = hc_arena_alloc(a, sizeof(hc_light_chunk_t) * (size_t)(n * n),
                               _Alignof(hc_light_chunk_t));
-    w->queue = hc_arena_alloc(a, sizeof(uint64_t) << QLOG, 8);
-    w->queue2 = hc_arena_alloc(a, sizeof(uint64_t) << QLOG, 8);
-    w->check = hc_arena_alloc(a, sizeof(uint64_t) << CHECK_LOG, 8);
-    w->dirty = hc_arena_alloc(a, sizeof(int32_t) * (size_t)(n * n), 4);
-    w->n_check = 0;
-    w->n_dirty = 0;
-    if (!w->slots || !w->queue || !w->queue2 || !w->check || !w->dirty)
+    if (!w->slots ||
+        hc_light_ctx_init(&w->ctx0, a, QLOG, CHECK_LOG, n * n) != 0)
         return -1;
     memset(w->slots, 0, sizeof(hc_light_chunk_t) * (size_t)(n * n));
     return 0;
@@ -506,21 +514,37 @@ static void derive_geometry_chunk(hc_light_world_t *w, hc_light_chunk_t *s) {
 
 /* 갭 없는 컬럼 등록 확인 — propagateFromEmptySections(R3 §3.5) 를
  * 미구현으로 남기는 전제. 깨지면 즉사. */
-static void check_contiguous(const hc_light_world_t *w) {
-    for (int32_t i = 0; i < w->n * w->n; i++) {
-        hc_light_chunk_t *s = &w->slots[i];
-        if (!s->chunk || !s->registered)
-            continue;
-        uint32_t m = s->registered;
-        uint32_t norm = m >> __builtin_ctz(m);
-        if (norm & (norm + 1)) {
-            fprintf(stderr,
-                    "hc_light: non-contiguous section registration in "
-                    "(%d,%d) mask %08x — propagateFromEmptySections needed\n",
-                    s->chunk->cx, s->chunk->cz, m);
-            abort();
-        }
+static void check_contiguous_one(const hc_light_chunk_t *s) {
+    if (!s->chunk || !s->registered)
+        return;
+    uint32_t m = s->registered;
+    uint32_t norm = m >> __builtin_ctz(m);
+    if (norm & (norm + 1)) {
+        fprintf(stderr,
+                "hc_light: non-contiguous section registration in "
+                "(%d,%d) mask %08x — propagateFromEmptySections needed\n",
+                s->chunk->cx, s->chunk->cz, m);
+        abort();
     }
+}
+
+static void check_contiguous(const hc_light_world_t *w) {
+    for (int32_t i = 0; i < w->n * w->n; i++)
+        check_contiguous_one(&w->slots[i]);
+}
+
+/* 국소 검사 (P2-3): 방금 재유도한 청크의 마스크 변화는 자신+±1 로
+ * 국한된다 — 그 박스만 보면 전역 스캔과 검출력이 같고, FREE 모드에서
+ * 무관 이벤트의 슬롯을 읽지 않는다. */
+static void check_contiguous_box(const hc_light_world_t *w, int32_t cx0,
+                                 int32_t cz0, int32_t cx1, int32_t cz1) {
+    for (int32_t cz = cz0; cz <= cz1; cz++)
+        for (int32_t cx = cx0; cx <= cx1; cx++) {
+            int32_t dx = cx - w->cx0, dz = cz - w->cz0;
+            if (dx < 0 || dx >= w->n || dz < 0 || dz >= w->n)
+                continue;
+            check_contiguous_one(&w->slots[dz * w->n + dx]);
+        }
 }
 
 /* phase B 본체: 활성 청크 하나의 sky 직접 채움 + 확산 시드 */
@@ -607,7 +631,7 @@ void hc_light_solve(hc_light_world_t *w) {
             fill_src_y(s);
     }
 
-    bfs_t q = {w, 0, 0, w->queue};
+    bfs_t q = {w, 0, 0, w->ctx0.inc, w->ctx0.qlog};
 
     /* --- phase B: sky (활성 청크; 순서는 lfp 라 무관) --- */
     for (int32_t i = 0; i < w->n * w->n; i++) {
@@ -656,11 +680,13 @@ void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
     }
     s->in_r = 1;
     derive_geometry_chunk(w, s);
-    check_contiguous(w);
+    /* 이 재유도의 마스크 영향 반경은 cx±1 — 국소 검사 (위 주석) */
+    check_contiguous_box(w, cx - 1, cz - 1, cx + 1, cz + 1);
     fill_src_y(s); /* fillFrom — 이 시점 블록으로 동결 */
 }
 
-void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
+void hc_light_accum_light_chunk_ctx(hc_light_world_t *w, hc_light_ctx_t *c,
+                                    int32_t cx, int32_t cz) {
     hc_light_chunk_t *s = slot_must(w, cx, cz);
     if (!s->in_r) {
         fprintf(stderr, "hc_light: accum light before register (%d,%d)\n", cx,
@@ -673,12 +699,16 @@ void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
     }
     s->enabled = 1;
     s->seeded = 1;
-    bfs_t q = {w, 0, 0, w->queue};
+    bfs_t q = {w, 0, 0, c->inc, c->qlog};
     seed_sky_chunk(w, &q, s);
     bfs_run(&q, HC_LIGHT_SKY);
     q.head = q.tail = 0;
     seed_block_chunk(w, &q, s);
     bfs_run(&q, HC_LIGHT_BLOCK);
+}
+
+void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
+    hc_light_accum_light_chunk_ctx(w, &w->ctx0, cx, cz);
 }
 
 /* --- 라이브-창 증분 재조명 (checkBlock 기계, Task 14) ---
@@ -737,8 +767,9 @@ static void src_y_update(hc_light_world_t *w, hc_light_chunk_t *s, int32_t x,
     src_update_edge(w, cell, cur, x, y, z);
 }
 
-void hc_light_accum_write(hc_light_world_t *w, int32_t x, int32_t y, int32_t z,
-                          uint16_t old_id, uint16_t new_id) {
+void hc_light_accum_write_ctx(hc_light_world_t *w, hc_light_ctx_t *c,
+                              int32_t x, int32_t y, int32_t z,
+                              uint16_t old_id, uint16_t new_id) {
     if (y < HC_MIN_Y || y > HC_MAX_Y || old_id == new_id)
         return;
     if (!light_props_differ(old_id, new_id))
@@ -750,19 +781,24 @@ void hc_light_accum_write(hc_light_world_t *w, int32_t x, int32_t y, int32_t z,
         abort();
     }
     src_y_update(w, s, x, y, z);
-    if (w->n_check >= (1 << CHECK_LOG)) {
+    if (c->n_check >= (1 << c->check_log)) {
         fprintf(stderr, "hc_light: checkBlock set overflow\n");
         abort();
     }
     /* 중복 미제거 (바닐라는 해시셋) — 중복 checkNode 는 두 번째가 PULL 로
      * 축약돼 결과 동일 (멱등) */
-    w->check[w->n_check++] = (uint64_t)(x + 4096) |
+    c->check[c->n_check++] = (uint64_t)(x + 4096) |
                              ((uint64_t)(z + 4096) << 13) |
                              ((uint64_t)(y + 512) << 26);
     if (!s->geo_dirty) {
         s->geo_dirty = 1;
-        w->dirty[w->n_dirty++] = (int32_t)(s - w->slots);
+        c->dirty[c->n_dirty++] = (int32_t)(s - w->slots);
     }
+}
+
+void hc_light_accum_write(hc_light_world_t *w, int32_t x, int32_t y, int32_t z,
+                          uint16_t old_id, uint16_t new_id) {
+    hc_light_accum_write_ctx(w, &w->ctx0, x, y, z, old_id, new_id);
 }
 
 /* SkyLightEngine.updateSourcesInColumn (R3 §3.2) — 직접-채움 재동기.
@@ -860,7 +896,7 @@ static void check_node(hc_light_world_t *w, bfs_t *dq, bfs_t *iq, int layer,
  * 폐색 무시 초과-클리어, 경계 생존자 (nl >= from) 는 재-flood 프론티어. */
 static void run_decreases(bfs_t *dq, bfs_t *iq, int layer) {
     hc_light_world_t *w = dq->w;
-    uint64_t          cap = 1ull << w->qlog;
+    uint64_t          cap = 1ull << dq->qlog;
     while (dq->head != dq->tail) {
         uint64_t e = dq->buf[dq->head++ & (cap - 1)];
         int32_t  x = (int32_t)(e & 0x1FFF) - 4096;
@@ -897,26 +933,29 @@ static void run_decreases(bfs_t *dq, bfs_t *iq, int layer) {
     }
 }
 
-void hc_light_accum_flush(hc_light_world_t *w) {
-    if (w->n_check == 0)
+void hc_light_accum_flush_ctx(hc_light_world_t *w, hc_light_ctx_t *c) {
+    if (c->n_check == 0)
         return;
     /* updateSectionStatus 라이브 등가 — 쓰인 청크만 재유도 */
-    for (int32_t i = 0; i < w->n_dirty; i++) {
-        hc_light_chunk_t *s = &w->slots[w->dirty[i]];
+    for (int32_t i = 0; i < c->n_dirty; i++) {
+        hc_light_chunk_t *s = &w->slots[c->dirty[i]];
         s->geo_dirty = 0;
         derive_geometry_chunk(w, s);
+        /* 연속-등록 가드: 이번 재유도가 바꿀 수 있는 마스크는 자신+±1
+         * 뿐 — 전역 스캔 대신 국소 검사 (검출력 동일, FREE 에서 무관
+         * 이벤트의 마스크 쓰기와 읽기가 겹치지 않게 한다). */
+        check_contiguous_box(w, s->chunk->cx - 1, s->chunk->cz - 1,
+                             s->chunk->cx + 1, s->chunk->cz + 1);
     }
-    if (w->n_dirty)
-        check_contiguous(w);
-    w->n_dirty = 0;
+    c->n_dirty = 0;
     /* LevelLightEngine.runLightUpdates: block 엔진 → sky 엔진; 각각
      * checkNode 전체 → 감소 완전 드레인 → 증가 드레인 (R2 §3). */
     for (int pass = 0; pass < 2; pass++) {
         int   layer = pass == 0 ? HC_LIGHT_BLOCK : HC_LIGHT_SKY;
-        bfs_t dq = {w, 0, 0, w->queue2};
-        bfs_t iq = {w, 0, 0, w->queue};
-        for (int32_t i = 0; i < w->n_check; i++) {
-            uint64_t e = w->check[i];
+        bfs_t dq = {w, 0, 0, c->dec, c->qlog};
+        bfs_t iq = {w, 0, 0, c->inc, c->qlog};
+        for (int32_t i = 0; i < c->n_check; i++) {
+            uint64_t e = c->check[i];
             check_node(w, &dq, &iq, layer, (int32_t)(e & 0x1FFF) - 4096,
                        (int32_t)((e >> 26) & 0x3FF) - 512,
                        (int32_t)((e >> 13) & 0x1FFF) - 4096);
@@ -924,7 +963,11 @@ void hc_light_accum_flush(hc_light_world_t *w) {
         run_decreases(&dq, &iq, layer);
         bfs_run(&iq, layer);
     }
-    w->n_check = 0;
+    c->n_check = 0;
+}
+
+void hc_light_accum_flush(hc_light_world_t *w) {
+    hc_light_accum_flush_ctx(w, &w->ctx0);
 }
 
 int hc_light_get(const hc_light_world_t *w, int layer, int32_t x, int32_t y,

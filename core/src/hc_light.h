@@ -54,21 +54,37 @@ typedef struct {
     int32_t     src_y[256]; /* ChunkSkyLightSources.getLowestSourceY; hc_col_idx */
 } hc_light_chunk_t;
 
-typedef struct hc_light_world {
-    hc_light_chunk_t *slots; /* [ (cz-cz0)*n + (cx-cx0) ] */
-    int32_t   cx0, cz0, n;
-    uint64_t *queue;         /* 증가 BFS FIFO 링 (2^qlog 엔트리) */
-    uint64_t *queue2;        /* 감소 큐 (checkBlock 기계 — 증가와 동시 활성) */
+/* 이벤트-로컬 가변 상태 (P2-3): BFS 큐 + checkBlock 펜딩 + dirty 목록.
+ * REPLAY 는 월드 내장 ctx0 하나로 기존과 동일하게 돈다. FREE 워커는
+ * 각자 ctx 를 가진다 — 펜딩/큐는 "그 이벤트의 쓰기" 만 담으므로 이벤트당
+ * flush 시맨틱이 REPLAY (데코마다 flush) 와 같고, 서로 무관한 이벤트의
+ * flush 는 공간상 분리(footprint ±2 청크)라 슬롯 데이터 접근이 겹치지
+ * 않는다 (스케줄러 충돌 규칙이 담보). */
+typedef struct {
+    uint64_t *inc;       /* 증가 BFS FIFO 링 (2^qlog 엔트리) */
+    uint64_t *dec;       /* 감소 큐 (checkBlock 기계 — 증가와 동시 활성) */
     uint32_t  qlog;
     /* blockNodesToCheck 등가 (checkBlock 펜딩 셋; flush 가 소비).
      * check[i] = q_push 패킹과 같은 좌표 인코딩 (level/mask 0). */
     uint64_t *check;
     int32_t   n_check;
+    uint32_t  check_log;
     /* 지오메트리 재유도 대기 청크 (라이브 쓰기 대상; flush 선두에서
      * updateSectionStatus 등가 처리) — 슬롯 인덱스 목록 */
     int32_t  *dirty;
     int32_t   n_dirty;
+} hc_light_ctx_t;
+
+typedef struct hc_light_world {
+    hc_light_chunk_t *slots; /* [ (cz-cz0)*n + (cx-cx0) ] */
+    int32_t   cx0, cz0, n;
+    hc_light_ctx_t ctx0;     /* 기본 ctx (REPLAY/단일 스레드 경로) */
 } hc_light_world_t;
+
+/* 워커 ctx 할당 (arena). qlog/check_log 는 이벤트-로컬 규모로 줄여도
+ * 된다 (한 이벤트 = 한 청크 시딩+드레인 또는 한 데코 flush). 실패 -1. */
+int hc_light_ctx_init(hc_light_ctx_t *c, hc_arena_t *a, uint32_t qlog,
+                      uint32_t check_log, int32_t dirty_cap);
 
 /* 슬롯/큐를 arena 에서 할당. 라이트 배열은 attach 시 할당. 실패 -1. */
 int hc_light_world_init(hc_light_world_t *w, hc_arena_t *a, int32_t cx0,
@@ -135,6 +151,15 @@ void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz);
 void hc_light_accum_write(hc_light_world_t *w, int32_t x, int32_t y, int32_t z,
                           uint16_t old_id, uint16_t new_id);
 void hc_light_accum_flush(hc_light_world_t *w);
+
+/* ctx 명시 변형 (P2-3 FREE 스케줄러) — 위 함수들은 &w->ctx0 래퍼.
+ * 같은 스테이지 코드 공유 (ADR-008 D3): 정책이 바뀌어도 본문은 하나다. */
+void hc_light_accum_light_chunk_ctx(hc_light_world_t *w, hc_light_ctx_t *c,
+                                    int32_t cx, int32_t cz);
+void hc_light_accum_write_ctx(hc_light_world_t *w, hc_light_ctx_t *c,
+                              int32_t x, int32_t y, int32_t z,
+                              uint16_t old_id, uint16_t new_id);
+void hc_light_accum_flush_ctx(hc_light_world_t *w, hc_light_ctx_t *c);
 
 /* 스테이지 진입점 (gen_light_stages.c) — 08 은 register 의 별칭 + 선행
  * 검사, 09 는 반경-1 피라미드 요건 검사 후 enable. */
