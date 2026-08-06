@@ -51,6 +51,14 @@ static int base_is(const char *name, const char *base) {
            (name[l] == '\0' || name[l] == '[');
 }
 
+/* isFaceSturdy(SupportType.FULL) — 지지 형상은 충돌 기반: 폐색 풀큐브
+ * 외에 noOcclusion 풀-충돌 (spawner/유리 등) 도 sturdy. 잎은 지지 형상
+ * EMPTY 오버라이드로 제외 (R1 §2.5). */
+static int pp_face_sturdy(uint16_t s, int dir_mc) {
+    return hc_featx_face_sturdy_full(s, dir_mc) ||
+           (hc_block_collision_full(s) && !hc_block_is_leaves(s));
+}
+
 /* ---------- 유체 상태 (FluidState) ---------- */
 
 enum { FL_NONE = 0, FL_WATER = 1, FL_LAVA = 2 };
@@ -488,7 +496,9 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
                        base_is(nn, "minecraft:pumpkin")) {
                 connect = 0; /* isExceptionForConnection */
             } else {
-                connect = hc_featx_face_sturdy_full(ns, dir ^ 1);
+                /* 실측: c.28.1 (463,22,21/23) 스포너 (noOcclusion
+                 * 풀-충돌) 이웃 연결이 골든 — pp_face_sturdy 주석 참조. */
+                connect = pp_face_sturdy(ns, dir ^ 1);
             }
             int e_ = strstr(nm, "east=true") != NULL;
             int n_ = strstr(nm, "north=true") != NULL;
@@ -512,6 +522,27 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
             if (id < 0)
                 pp_die("oak_fence state missing in table", x, y, z);
             return (uint16_t)id;
+        }
+        /* WallTorchBlock.updateShape (26.2 javap): 업데이트 방향이 부착
+         * 방향 (facing 의 반대) 일 때만 canSurvive = 부착 블록의 facing
+         * 면 sturdy — 실패 시 AIR. 그 외 방향은 불변. 실측 클래스: 배치
+         * 마킹된 벽토치 6셀이 is_plantish 근사 (아래-공기 파괴) 에 걸려
+         * 드레인에서 소실됐다 — 벽토치는 아래가 아니라 옆에 부착된다. */
+        if (base_is(nm, "minecraft:wall_torch")) {
+            int facing_dir; /* facing 방향의 dir 인덱스 */
+            if (strstr(nm, "facing=north"))
+                facing_dir = 2;
+            else if (strstr(nm, "facing=south"))
+                facing_dir = 3;
+            else if (strstr(nm, "facing=west"))
+                facing_dir = 4;
+            else
+                facing_dir = 5;
+            if (dir == (facing_dir ^ 1)) { /* 부착 방향 업데이트 */
+                if (!pp_face_sturdy(ns, facing_dir))
+                    return HC_B_AIR;
+            }
+            return s;
         }
     }
     {
@@ -561,6 +592,82 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
             return s;
         }
     }
+    {
+        /* 행잉/부착 식물 정확 분기 (Task 14 실측: 아래-공기/유체 파괴
+         * 근사가 cave_vines 체인 17셀 + vine 3 + big_dripleaf 2 를
+         * 소실시켰다 — PPVEGKILL 23건 전수 대응 확인). */
+        const char *nm = hc_block_name(s);
+        int cv_head = base_is(nm, "minecraft:cave_vines");
+        int cv_body = base_is(nm, "minecraft:cave_vines_plant");
+        if (cv_head || cv_body) {
+            /* GrowingPlant(Head/Body).updateShape, growthDirection=DOWN
+             * (26.2 javap): 지지는 위 — dir UP && !canSurvive →
+             * scheduleTick(1). canSurvive = 위가 head/body 또는 위 블록
+             * DOWN 면 sturdy. dir DOWN 은 head↔body 변환 경로 — 이 골든
+             * 이력에 부재 (발생 시 fail-loud, 커버리지 경계). */
+            if (dir == 1) {
+                int ok = base_is(hc_block_name(ns), "minecraft:cave_vines") ||
+                         base_is(hc_block_name(ns),
+                                 "minecraft:cave_vines_plant") ||
+                         pp_face_sturdy(ns, 0 /* DOWN */);
+                if (!ok)
+                    sched_block(pp, x, y, z, s, 1);
+                return s;
+            }
+            if (dir == 0) {
+                const char *nn = hc_block_name(ns);
+                int nb_plant = base_is(nn, "minecraft:cave_vines") ||
+                               base_is(nn, "minecraft:cave_vines_plant");
+                if (cv_head && nb_plant)
+                    pp_die("cave_vines head->body conversion unmodeled", x,
+                           y, z);
+                if (cv_body && !nb_plant)
+                    pp_die("cave_vines body->head conversion unmodeled", x,
+                           y, z);
+            }
+            return s;
+        }
+        if (base_is(nm, "minecraft:vine")) {
+            /* VineBlock.updateShape: dir DOWN 은 super (불변); 그 외는
+             * getUpdatedState 면 재계산 — 이 골든의 마크/이벤트 이력에
+             * 면 상실 경로 부재 (관측 이벤트 전부 아래-방향), 불변이
+             * 바닐라와 일치. 재계산 미모델은 커버리지 경계. */
+            return s;
+        }
+        if (base_is(nm, "minecraft:big_dripleaf_stem")) {
+            /* BigDripleafStemBlock.updateShape: (dir DOWN|UP) &&
+             * !canSurvive → scheduleTick(1). canSurvive = 아래 (줄기 ||
+             * UP 면 sturdy) && 위 (줄기 || big_dripleaf). wl=true 는
+             * 상류 수생 분기가 이미 처리. */
+            if (dir == 0 || dir == 1) {
+                uint16_t below = ppget(pp, x, y - 1, z);
+                uint16_t above = ppget(pp, x, y + 1, z);
+                int ok_b =
+                    base_is(hc_block_name(below),
+                            "minecraft:big_dripleaf_stem") ||
+                    pp_face_sturdy(below, 1 /* UP */);
+                int ok_a = base_is(hc_block_name(above),
+                                   "minecraft:big_dripleaf_stem") ||
+                           base_is(hc_block_name(above),
+                                   "minecraft:big_dripleaf");
+                if (!(ok_b && ok_a))
+                    sched_block(pp, x, y, z, s, 1);
+            }
+            return s;
+        }
+        if (base_is(nm, "minecraft:big_dripleaf")) {
+            /* BigDripleafBlock.updateShape: dir DOWN && !canSurvive →
+             * scheduleTick(1). canSurvive = 아래 (줄기 || UP 면 sturdy). */
+            if (dir == 0) {
+                int ok = base_is(hc_block_name(ns),
+                                 "minecraft:big_dripleaf_stem") ||
+                         pp_face_sturdy(ns, 1 /* UP */);
+                if (!ok)
+                    sched_block(pp, x, y, z, s, 1);
+            }
+            return s;
+        }
+    }
     if (is_plantish(s)) {
         /* VegetationBlock/MushroomBlock.updateShape (26.2 javap): 방향
          * 무관 canSurvive 폴드 — 실패 시 AIR. 실측 클래스 (Task 14):
@@ -579,8 +686,12 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
          * 측면 규칙(수련잎 등) 미모델 — 진단 카운트. */
         g_unmodeled_veg_eval++;
         if (dir == 0) {
-            if (hc_block_is_air(ns) || fluid_of(ns).type != FL_NONE)
+            if (hc_block_is_air(ns) || fluid_of(ns).type != FL_NONE) {
+                if (getenv("HC_PP_DEBUG_VEG"))
+                    fprintf(stderr, "PPVEGKILL (%d,%d,%d) %s below=%s\n", x,
+                            y, z, hc_block_name(s), hc_block_name(ns));
                 return HC_B_AIR; /* updateOrDestroy 가 유체 복원 처리 */
+            }
         }
         return s;
     }
