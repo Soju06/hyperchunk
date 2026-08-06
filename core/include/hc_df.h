@@ -43,8 +43,13 @@ typedef enum {
 
     HC_DF_SPLINE,          /* (double)splines[aux].apply — float 산술 */
     HC_DF_INTERVAL_SELECT, /* a=input, ipool[aux..]=함수, dpool[aux2..]=경계, c=개수 */
-    HC_DF_FIND_TOP_SURFACE, /* a=density, b=upper_bound, k0=lower, k1=cell_h,
-                             * ipool[aux..aux+aux2) = density 의존 콘 */
+    HC_DF_FIND_TOP_SURFACE, /* a=density, b=upper_bound, k0=lower, k1=cell_h.
+                             * density 의존 콘은 y-불변/가변 분할 적재 (P2-2):
+                             * ipool[aux] = y-불변 노드 수 nI,
+                             * ipool[aux+1 .. aux+1+aux2) = 콘 노드 aux2 개
+                             * (앞 nI 개 = y-불변, 뒤 = y-가변, 각각 오름차순).
+                             * y-불변부는 사다리 진입 시 1회, y-가변부만 매
+                             * y 재평가 — 분류는 hc_df_mark_y_variant. */
 
     /* 신규 월드(Blender.empty()) 고정값 — 6c 블렌딩 도입 시 재검토 */
     HC_DF_BLEND_OFFSET,  /* 0.0 */
@@ -188,6 +193,35 @@ double hc_df_eval_ex(const hc_df_graph_t *g, double x, double y, double z,
  * 콘 크기를 돌려준다. -1 = FTS 가 비-SP 콘에 도달 (지원 밖). */
 int32_t hc_df_cone_mark(const hc_df_graph_t *g, hc_df_mode_t mode,
                         const int32_t *roots, int32_t n_roots, uint8_t *mark);
+
+/* hc_df_cone_mark 의 flags 판:
+ *  - HC_DF_CONE_WINDOW_SAFE: 모든 평가 좌표가 청크 쿼트 창 안임이 보장된
+ *    문맥 (fill_slice 포인트, flat_cache 테이블 구축 포인트) 전용. SP 모드
+ *    에서도 FLAT_CACHE 자식을 컷한다 — 창 안은 항상 테이블 히트라 자식
+ *    값이 죽은 값이다. 창-밖 폴백이 실재하는 문맥 (psl/erosion/depth 의
+ *    aquifer 청크-밖 컬럼 조회) 에 쓰면 안 된다 — eval 의 폴백 mask
+ *    assert 가 debug 에서 위반을 잡는다. */
+enum { HC_DF_CONE_WINDOW_SAFE = 1u };
+int32_t hc_df_cone_mark_ex(const hc_df_graph_t *g, hc_df_mode_t mode,
+                           const int32_t *roots, int32_t n_roots,
+                           uint8_t *mark, uint32_t flags);
+
+/* --- y-분산 분류 (P2-2) ---
+ *
+ * yv[i] = 1 이면 노드 i 의 값이 (x,z 고정, y 만 변화) 에서 비트가 달라질
+ * 수 있다. 0 이면 어느 y 에서 평가해도 비트 동일 — 컬럼당 1회 평가로
+ * 승격 가능 (fill_slice y-루프, FTS 사다리). 분류는 보수적이다:
+ *  - 무조건 가변: Y, Y_CLAMPED_GRADIENT, BLENDED_NOISE, FIND_TOP_SURFACE,
+ *    맨 NOISE (y_scale==0 이어도 y*0.0 = ±0.0 이 노이즈 인자로 들어가
+ *    부호가 y 부호를 따른다 — 비트 불변 증명 불가).
+ *  - SHIFTED_NOISE: y_scale k1 == 0.0 이고 shift_y(b) 가 CONST +0.0 이며
+ *    shift_x(a)/shift_z(c) 가 y-불변일 때만 불변 — y 인자 = y*±0.0 + (+0.0)
+ *    = +0.0 항상 (y 는 유한 블록 좌표 전제). 그 외 가변.
+ *  - SPLINE/INTERVAL_SELECT 는 coord/중첩 val/함수 전부 전파.
+ *  - 마커(INTERPOLATED/FLAT_CACHE/CACHE_*)는 pass-through 로 자식 전파 —
+ *    창-안 테이블 히트는 y-불변이지만 폴백(자식) 기준의 보수 분류가 전
+ *    문맥(cc==NULL 포함)에서 안전하다. */
+void hc_df_mark_y_variant(const hc_df_graph_t *g, uint8_t *yv);
 
 /* mark 를 오름차순 리스트로 수집. out 용량 = hc_df_cone_mark 반환값 */
 void hc_df_cone_collect(const hc_df_graph_t *g, const uint8_t *mark,

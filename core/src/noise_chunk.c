@@ -130,22 +130,36 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
                           int32_t abs_cell_x) {
     /* fillSlice(boolean, cellX): cellStartBlockX = cellX*cellWidth.
      * 슬라이스 포인트는 전부 청크 쿼트 창 안이라 flat_cache 는 항상
-     * 테이블 히트다 — SP 모드 평가가 바닐라와 좌표 단위로 일치한다.
+     * 테이블 히트다 — SP 모드 평가가 바닐라와 좌표 단위로 일치하고,
+     * 콘은 WINDOW_SAFE (flat 자식 컷) 로 산출돼 있다 (hc_nc_init).
      *
      * 다중-루트 단일-워크 (P2-1): 점당 interp 자식 union 콘을 한 번만
      * 걷고 각 자식 값을 scratch 에서 회수한다 (hc_df.h 의 의도된 다중-
      * 루트 읽기). 평가는 순수라 (RNG 없음) 자식별 개별 워크와 값이
-     * 비트 동일하다 — 공유 서브트리 중복 평가만 사라진다. */
+     * 비트 동일하다 — 공유 서브트리 중복 평가만 사라진다.
+     *
+     * y-불변 분할 (P2-2): (x,z) 컬럼당 y-불변부를 1회 평가하고 y 루프는
+     * 가변부만 걷는다. y-불변 노드는 어느 y 에서도 비트 동일 값이라
+     * (hc_df_mark_y_variant 보수 분류) 전 포인트 재평가와 결과가 같다.
+     * y 인자는 관례상 첫 포인트의 by 를 넘긴다 (읽히지 않는다). */
     nc->cell_start_x = abs_cell_x * nc->cell_width;
     int32_t stride = nc->cell_count_y + 1;
     for (int32_t j = 0; j <= nc->cell_count_xz; j++) {
         int32_t bz = (nc->first_cell_z + j) * nc->cell_width;
+        hc_df_eval_cone(nc->g, nc->cone_slice_inv.list,
+                        nc->cone_slice_inv.len, -1,
+                        (double)nc->cell_start_x,
+                        (double)(nc->cell_noise_min_y * nc->cell_height),
+                        (double)bz, nc->scratch, nc_cc(nc, HC_DF_MODE_SP),
+                        nc->cone_slice_inv.mask);
         for (int32_t i = 0; i <= nc->cell_count_y; i++) {
             int32_t by = (i + nc->cell_noise_min_y) * nc->cell_height;
-            hc_df_eval_cone(nc->g, nc->cone_slice.list, nc->cone_slice.len,
-                            -1, (double)nc->cell_start_x, (double)by,
+            hc_df_eval_cone(nc->g, nc->cone_slice_var.list,
+                            nc->cone_slice_var.len, -1,
+                            (double)nc->cell_start_x, (double)by,
                             (double)bz, nc->scratch,
-                            nc_cc(nc, HC_DF_MODE_SP), nc->cone_slice.mask);
+                            nc_cc(nc, HC_DF_MODE_SP),
+                            nc->cone_slice_var.mask);
             for (int32_t k = 0; k < nc->n_interp; k++) {
                 hc_df_interp_t *it = &nc->interp[k];
                 double *slice = which == 0 ? it->slice0 : it->slice1;
@@ -252,16 +266,16 @@ void hc_nc_swap_slices(hc_noise_chunk_t *nc) {
 }
 
 /* 콘 1개 산출 — mark 버퍼가 그대로 eval assert 용 mask 가 된다 (P2-1) */
-static int cone_build(hc_noise_chunk_t *nc, hc_arena_t *arena,
-                      hc_df_mode_t mode, const int32_t *roots,
-                      int32_t n_roots, int32_t dispatch_root,
-                      hc_nc_cone_t *out) {
+static int cone_build_ex(hc_noise_chunk_t *nc, hc_arena_t *arena,
+                         hc_df_mode_t mode, const int32_t *roots,
+                         int32_t n_roots, int32_t dispatch_root,
+                         uint32_t flags, hc_nc_cone_t *out) {
     const hc_df_graph_t *g = nc->g;
     uint8_t             *mark = hc_arena_alloc(arena, (size_t)g->n, 1);
     if (!mark)
         return -1;
     memset(mark, 0, (size_t)g->n);
-    int32_t len = hc_df_cone_mark(g, mode, roots, n_roots, mark);
+    int32_t len = hc_df_cone_mark_ex(g, mode, roots, n_roots, mark, flags);
     if (len < 0)
         return -1; /* FTS 가 비-SP 콘에 등장 — 콘 규칙 위반 (fail-loud) */
     int32_t *list = hc_arena_alloc(arena, sizeof(int32_t) * (size_t)len, 4);
@@ -273,6 +287,14 @@ static int cone_build(hc_noise_chunk_t *nc, hc_arena_t *arena,
     out->list = list;
     out->mask = mark;
     return 0;
+}
+
+static int cone_build(hc_noise_chunk_t *nc, hc_arena_t *arena,
+                      hc_df_mode_t mode, const int32_t *roots,
+                      int32_t n_roots, int32_t dispatch_root,
+                      hc_nc_cone_t *out) {
+    return cone_build_ex(nc, arena, mode, roots, n_roots, dispatch_root, 0,
+                         out);
 }
 
 int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
@@ -398,18 +420,52 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
                        roots->final_density, &nc->cone_cell))
             return -1;
 
-        /* fill_slice 단일-워크용 interp 자식 union (SP) */
+        /* fill_slice 단일-워크용 interp 자식 union (SP). 슬라이스 포인트는
+         * 전부 청크 쿼트 창 안 (nc_fill_slice 주석의 증명) — flat_cache
+         * 자식을 컷하고 (WINDOW_SAFE), 남은 콘을 y-불변/가변으로 분할해
+         * 컬럼당 y-불변부를 1회만 평가한다 (P2-2). 분할은 값-불변:
+         * y-불변 노드는 어느 y 로 평가해도 비트 동일하고 (hc_df.h 분류
+         * 규칙), 분산 전파가 단조라 불변부 선평가가 위상 순서를 지킨다. */
         int32_t *slice_roots = hc_arena_alloc(
             arena, sizeof(int32_t) * (size_t)(nc->n_interp + 1), 4);
-        if (!slice_roots)
+        uint8_t *yv = hc_arena_alloc(arena, (size_t)g->n, 1);
+        if (!slice_roots || !yv)
             return -1;
         for (int32_t k = 0; k < nc->n_interp; k++)
             slice_roots[k] = g->nodes[nc->interp[k].node].a;
-        if (cone_build(nc, arena, HC_DF_MODE_SP, slice_roots, nc->n_interp,
-                       -1, &nc->cone_slice))
+        hc_nc_cone_t slice_all;
+        if (cone_build_ex(nc, arena, HC_DF_MODE_SP, slice_roots, nc->n_interp,
+                          -1, HC_DF_CONE_WINDOW_SAFE, &slice_all))
             return -1;
+        hc_df_mark_y_variant(g, yv);
+        {
+            int32_t n_inv = 0;
+            for (int32_t j = 0; j < slice_all.len; j++)
+                n_inv += !yv[slice_all.list[j]];
+            int32_t *inv = hc_arena_alloc(
+                arena, sizeof(int32_t) * (size_t)(n_inv + 1), 4);
+            int32_t *var = hc_arena_alloc(
+                arena,
+                sizeof(int32_t) * (size_t)(slice_all.len - n_inv + 1), 4);
+            if (!inv || !var)
+                return -1;
+            int32_t ni = 0, nv = 0;
+            for (int32_t j = 0; j < slice_all.len; j++) {
+                int32_t node = slice_all.list[j];
+                if (yv[node])
+                    var[nv++] = node;
+                else
+                    inv[ni++] = node;
+            }
+            nc->cone_slice_inv =
+                (hc_nc_cone_t){-1, ni, inv, slice_all.mask};
+            nc->cone_slice_var =
+                (hc_nc_cone_t){-1, nv, var, slice_all.mask};
+        }
 
-        /* flat_cache 테이블 구축용 자식 콘 (SP) */
+        /* flat_cache 테이블 구축용 자식 콘 (SP). 구축 포인트는 정의상 창
+         * 격자 자신 — WINDOW_SAFE 로 상류 flat_cache 자식 컷 (하류 flat
+         * 테이블은 노드 오름차순 구축이라 참조 시점에 준비돼 있다). */
         nc->cones_flat = hc_arena_alloc(
             arena, sizeof(hc_nc_cone_t) * (size_t)(nc->n_flat + 1),
             _Alignof(hc_nc_cone_t));
@@ -417,8 +473,8 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
             return -1;
         for (int32_t f = 0; f < nc->n_flat; f++) {
             int32_t child = g->nodes[nc->flat[f].node].a;
-            if (cone_build(nc, arena, HC_DF_MODE_SP, &child, 1, child,
-                           &nc->cones_flat[f]))
+            if (cone_build_ex(nc, arena, HC_DF_MODE_SP, &child, 1, child,
+                              HC_DF_CONE_WINDOW_SAFE, &nc->cones_flat[f]))
                 return -1;
         }
     }

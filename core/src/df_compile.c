@@ -282,27 +282,39 @@ static int mark_spline_deps(hc_df_compiler_t *c, int32_t si, uint8_t *mark) {
     return 0;
 }
 
-/* density 서브그래프의 전이 의존을 오름차순 (== 위상 순서) 으로 ipool 에
- * 적재한다. FTS 평가는 이 콘만 y 를 바꿔 재평가한다. */
+/* density 서브그래프의 전이 의존을 y-불변/가변 분할 레이아웃으로 ipool 에
+ * 적재한다 (hc_df.h FIND_TOP_SURFACE 주석이 SoT): ipool[off] = y-불변 수,
+ * 그 뒤 y-불변부·y-가변부 각각 오름차순 (== 위상 순서). y-분산 전파가
+ * 단조라 (가변 피연산자를 읽는 노드는 가변) y-불변 노드의 피연산자는
+ * 전부 y-불변 — 불변부를 먼저 통째로 평가해도 위상 순서가 성립한다.
+ * FTS 평가는 불변부 1회 + y 마다 가변부만 재평가한다. */
 static int build_cone(hc_df_compiler_t *c, int32_t density,
                       int32_t *off_out, int32_t *len_out) {
     uint8_t *mark = hc_arena_alloc(c->arena, (size_t)c->g->n, 1);
-    if (!mark)
+    uint8_t *yv = hc_arena_alloc(c->arena, (size_t)c->g->n, 1);
+    if (!mark || !yv)
         return (int)fail(c, "arena exhausted (cone mark)");
     memset(mark, 0, (size_t)c->g->n);
     if (mark_deps(c, density, mark))
         return -1;
+    hc_df_mark_y_variant(c->g, yv);
 
-    int32_t len = 0;
-    for (int32_t i = 0; i < c->g->n; i++)
+    int32_t len = 0, n_inv = 0;
+    for (int32_t i = 0; i < c->g->n; i++) {
         len += mark[i];
-    if (c->g->n_ipool + len > HC_DFC_MAX_IPOOL)
+        n_inv += mark[i] && !yv[i];
+    }
+    if (c->g->n_ipool + len + 1 > HC_DFC_MAX_IPOOL)
         return (int)fail(c, "ipool cap exceeded (cone)");
 
     *off_out = c->g->n_ipool;
     *len_out = len;
+    c->g->ipool[c->g->n_ipool++] = n_inv;
     for (int32_t i = 0; i < c->g->n; i++)
-        if (mark[i])
+        if (mark[i] && !yv[i])
+            c->g->ipool[c->g->n_ipool++] = i;
+    for (int32_t i = 0; i < c->g->n; i++)
+        if (mark[i] && yv[i])
             c->g->ipool[c->g->n_ipool++] = i;
     return 0;
 }

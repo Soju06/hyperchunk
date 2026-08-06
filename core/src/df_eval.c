@@ -146,7 +146,8 @@ static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
 
 /* FTS density 콘 재평가: ipool[off..off+len) 은 오름차순 노드 인덱스라
  * 위상 순서가 보존된다. 콘 밖 노드는 건드리지 않는다. mark_deps 가 전
- * 의존을 담아 자족적이므로 mask 검사는 불필요 (NULL). */
+ * 의존을 담아 자족적이므로 mask 검사는 불필요 (NULL). root < 0 이면
+ * sc2 만 채운다 (y-불변 프리픽스 패스). */
 static double eval_cone(const hc_df_graph_t *g, int32_t off, int32_t len,
                         int32_t root, double x, double y, double z,
                         double *sc2, const hc_df_cellctx_t *cc) {
@@ -154,7 +155,7 @@ static double eval_cone(const hc_df_graph_t *g, int32_t off, int32_t len,
         int32_t idx = g->ipool[off + j];
         sc2[idx] = eval_node(g, idx, x, y, z, sc2, NULL, cc, NULL);
     }
-    return sc2[root];
+    return root >= 0 ? sc2[root] : 0.0;
 }
 
 static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
@@ -298,9 +299,17 @@ static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
         int32_t start = (int32_t)(uint32_t)((int64_t)qi * cell);
         if (start <= lower)
             return (double)lower;
+        /* 콘은 [nI][y-불변 nI 개][y-가변] 분할 적재 (hc_df.h, P2-2).
+         * y-불변부는 정의상 y 를 읽지 않아 (hc_df_mark_y_variant 보수
+         * 분류) 어느 y 로 평가해도 비트 동일 — 사다리 진입 시 1회만
+         * 평가한다. y-가변 노드의 피연산자 값은 전 스텝 재평가와 동일
+         * 하므로 (순수 노드, RNG 없음) 사다리 결과도 비트 동일하다. */
+        int32_t n_inv = g->ipool[nd->aux];
+        int32_t inv_off = nd->aux + 1;
+        eval_cone(g, inv_off, n_inv, -1, x, (double)start, z, sc2, cc);
         for (int32_t yy = start; yy >= lower; yy -= cell) {
-            double d = eval_cone(g, nd->aux, nd->aux2, nd->a, x, (double)yy,
-                                 z, sc2, cc);
+            double d = eval_cone(g, inv_off + n_inv, nd->aux2 - n_inv,
+                                 nd->a, x, (double)yy, z, sc2, cc);
             if (d > 0.0)
                 return (double)yy;
         }
@@ -404,6 +413,12 @@ static void cone_mark_spline(const hc_df_graph_t *g, int32_t si,
 int32_t hc_df_cone_mark(const hc_df_graph_t *g, hc_df_mode_t mode,
                         const int32_t *roots, int32_t n_roots,
                         uint8_t *mark) {
+    return hc_df_cone_mark_ex(g, mode, roots, n_roots, mark, 0);
+}
+
+int32_t hc_df_cone_mark_ex(const hc_df_graph_t *g, hc_df_mode_t mode,
+                           const int32_t *roots, int32_t n_roots,
+                           uint8_t *mark, uint32_t flags) {
     /* 하향 스윕: 위상 정렬(피연산자 인덱스 < 노드 인덱스)이라 i 를
      * 내림차순으로 지나며 마크된 노드의 피연산자를 마크하면 전이 닫힘이
      * 완성된다 — 재귀 없음, O(top). */
@@ -422,10 +437,16 @@ int32_t hc_df_cone_mark(const hc_df_graph_t *g, hc_df_mode_t mode,
         const hc_df_node_t *nd = &g->nodes[i];
         switch (nd->op) {
         case HC_DF_INTERPOLATED:
-        case HC_DF_FLAT_CACHE:
-            /* CELL/BLOCK: 셀 상태/테이블만 읽는다 — 자식 컷.
-             * SP: pass-through/창-밖 폴백 — 자식 보수 포함. */
+            /* CELL/BLOCK: 셀 상태만 읽는다 — 자식 컷.
+             * SP: pass-through — 자식 포함. */
             if (mode == HC_DF_MODE_SP)
+                mark[nd->a] = 1;
+            break;
+        case HC_DF_FLAT_CACHE:
+            /* CELL/BLOCK: 테이블만 읽는다 — 자식 컷.
+             * SP: 창-밖 폴백 대비 자식 보수 포함 — 단, 창-안 보장 문맥
+             * (WINDOW_SAFE) 은 항상 테이블 히트라 자식 컷 (hc_df.h). */
+            if (mode == HC_DF_MODE_SP && !(flags & HC_DF_CONE_WINDOW_SAFE))
                 mark[nd->a] = 1;
             break;
         case HC_DF_FIND_TOP_SURFACE:
@@ -480,4 +501,71 @@ double hc_df_eval_cone(const hc_df_graph_t *g, const int32_t *cone,
     }
     assert(root < 0 || !mask || mask[root]);
     return root >= 0 ? scratch[root] : 0.0;
+}
+
+/* --- y-분산 분류 (P2-2, 규칙은 hc_df.h 주석이 SoT) --- */
+
+/* 스플라인 값 경로: coord 나 중첩 val 이 y-가변이면 가변. 중첩 스플라인의
+ * coord/val 노드는 스플라인을 참조하는 노드보다 먼저 컴파일되므로
+ * (compile_spline_spec 순서) yv 는 이미 확정돼 있다. */
+static int spline_y_variant(const hc_df_graph_t *g, int32_t si,
+                            const uint8_t *yv) {
+    const hc_df_spline_t *s = &g->splines[si];
+    if (s->n == 0)
+        return 0;
+    if (yv[s->coord])
+        return 1;
+    for (int32_t j = 0; j < s->n; j++)
+        if (spline_y_variant(g, s->val[j], yv))
+            return 1;
+    return 0;
+}
+
+void hc_df_mark_y_variant(const hc_df_graph_t *g, uint8_t *yv) {
+    for (int32_t i = 0; i < g->n; i++) {
+        const hc_df_node_t *nd = &g->nodes[i];
+        int                 v;
+        switch (nd->op) {
+        case HC_DF_Y:
+        case HC_DF_Y_CLAMPED_GRADIENT:
+        case HC_DF_BLENDED_NOISE:
+        case HC_DF_FIND_TOP_SURFACE:
+        case HC_DF_NOISE:
+            /* 맨 NOISE 는 y_scale==0 이어도 y*0.0 = ±0.0 의 부호가 y 를
+             * 따라 들어간다 — 보수적으로 가변 (hc_df.h). */
+            v = 1;
+            break;
+        case HC_DF_SHIFTED_NOISE: {
+            /* y 인자 = y*k1 + sc[b]. k1 == 0.0 이고 b 가 CONST +0.0
+             * (비트 0) 이면 y*±0.0 ∈ {+0.0,-0.0} 에 +0.0 을 더해 항상
+             * +0.0 — y 는 유한 블록 좌표라 비트 불변이다. */
+            const hc_df_node_t *bn = &g->nodes[nd->b];
+            uint64_t            kb = 0;
+            if (bn->op == HC_DF_CONST)
+                memcpy(&kb, &bn->k0, sizeof kb);
+            if (nd->k1 == 0.0 && bn->op == HC_DF_CONST && kb == 0)
+                v = yv[nd->a] || yv[nd->c];
+            else
+                v = 1;
+            break;
+        }
+        case HC_DF_SPLINE:
+            v = spline_y_variant(g, nd->aux, yv);
+            break;
+        case HC_DF_INTERVAL_SELECT: {
+            v = yv[nd->a];
+            int32_t nf = g->ipool[nd->aux];
+            for (int32_t k = 0; k < nf && !v; k++)
+                v = yv[g->ipool[nd->aux + 1 + k]];
+            break;
+        }
+        default:
+            /* CONST/X/Z/SHIFT_A/SHIFT_B/BLEND_OFFSET/BLEND_ALPHA 는
+             * 피연산자가 없어 불변으로 떨어진다. 마커 포함 나머지는
+             * 피연산자 전파 (위상 정렬이라 yv[<i] 확정). */
+            v = (nd->a >= 0 && yv[nd->a]) || (nd->b >= 0 && yv[nd->b]) ||
+                (nd->c >= 0 && yv[nd->c]);
+        }
+        yv[i] = (uint8_t)v;
+    }
 }

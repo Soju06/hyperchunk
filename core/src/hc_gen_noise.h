@@ -83,8 +83,13 @@ typedef struct hc_noise_chunk_s {
     hc_nc_cone_t cones_block[HC_NC_N_BLOCK_CONES]; /* barrier, vein_toggle,
                                                     * vein_ridged, vein_gap */
     hc_nc_cone_t  cone_cell;   /* final_density (CELL) */
-    hc_nc_cone_t  cone_slice;  /* interp 자식 union (SP) — fill_slice */
-    hc_nc_cone_t *cones_flat;  /* [n_flat] flat_cache 자식 (SP) — 테이블 */
+    /* interp 자식 union (SP, WINDOW_SAFE — 슬라이스 포인트는 전부 쿼트 창
+     * 안이라 flat_cache 자식 컷) 을 y-불변/가변으로 분할한 것 (P2-2).
+     * fill_slice 가 컬럼당 inv 1회 + y 마다 var 만 평가한다. 두 콘은
+     * mask (전체 콘 멤버십) 를 공유한다. */
+    hc_nc_cone_t  cone_slice_inv, cone_slice_var;
+    hc_nc_cone_t *cones_flat;  /* [n_flat] flat_cache 자식 (SP, WINDOW_SAFE
+                                * — 테이블 구축 포인트도 전부 창 안) */
 
     /* wrapNew 디스패치 (hc_df_cellctx_t 가 참조) */
     hc_df_cellctx_t cc;
