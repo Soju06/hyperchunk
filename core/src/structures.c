@@ -1254,16 +1254,20 @@ void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg,
 
 int32_t hc_structures_chunk_bes(const hc_sctx_t *sc, int32_t cx, int32_t cz,
                                 const hc_be_rec_t **recs_out, int32_t cap) {
-    /* 실체화 순서 재구성 (R-serialization §4.4/4.5):
+    /* 실체화 순서 재구성 (R-serialization §4.4/4.5 + Task 14 수정):
      *  - live (TEMPLATE/CHEST_LOOT/SPAWNER): 기록 순서 = 실체화 순서 →
      *    proto live 맵 (fastutil) 에 그 순서로 put.
+     *  - LevelChunk 생성자가 proto 순회 순서로 level 맵 (fastutil) 에
+     *    재삽입 (26.2 디컴파일 :139-141). 이 복사는 충돌쌍의 상대
+     *    순서를 **반전**시킨다: 같은 홈 슬롯의 (a,b) 는 a@h, b@h+1 로
+     *    앉고 순회 (내림차순 스캔) 는 b,a — 그 순서로 재삽입하면 b@h,
+     *    a@h+1 이 되어 다음 순회는 a,b. 이전 "재삽입 순회 보존" 가정은
+     *    오류였다 (실측: 트라이얼 4청크 인접쌍 스왑 — c.14.13
+     *    barrel/hopper 등; 이중 패스가 4청크 전부 골든 재현).
      *  - DUMMY: postProcessGeneration 이 pending HashMap<BlockPos> 순회
-     *    순서로 승격 → live 맵 꼬리에 그 순서로 put.
-     *  - 저장 리스트 = fresh HashSet<BlockPos>(live 키 삽입 = live 맵
-     *    fastutil 순회 순서) 의 순회 (jset).
-     * live 맵 자체도 fastutil — LevelChunk 생성자가 proto 순회 순서로
-     * 복사하지만, 동일 키 집합을 같은 순서로 재삽입하면 순회가 보존된다
-     * (오픈 어드레싱 전방 프로브 — 슬롯 충돌쌍의 상대 순서 유지). */
+     *    순서로 승격 — 복사 이후의 level 맵에 꼬리로 put.
+     *  - 저장 리스트 = fresh HashSet<BlockPos>(level 맵 순회 순서 삽입)
+     *    의 순회 (jset). */
     enum { MAXB = 64 };
     int32_t idx_live[MAXB], n_live = 0;
     int32_t idx_dummy[MAXB], n_dummy = 0;
@@ -1306,11 +1310,24 @@ int32_t hc_structures_chunk_bes(const hc_sctx_t *sc, int32_t cx, int32_t cz,
         assert(m == n_dummy);
         free(js);
     }
-    /* live 맵 put 순서: live (기록순) + dummy (승격순) → fastutil 순회 */
+    /* 패스 1: proto live 맵 (기록순 put) 의 fastutil 순회 = LevelChunk
+     * 생성자 복사의 삽입 순서 */
+    int32_t proto_pos[MAXB][3];
+    for (int32_t i = 0; i < n_live; i++) {
+        const hc_be_rec_t *r = &sc->be.recs[idx_live[i]];
+        proto_pos[i][0] = r->x;
+        proto_pos[i][1] = r->y;
+        proto_pos[i][2] = r->z;
+    }
+    int32_t proto_order[MAXB];
+    int32_t n_proto = hc_o2omap_key_order(proto_pos, n_live, proto_order);
+    assert(n_proto == n_live);
+    /* 패스 2: level 맵 put 순서 = 복사 (proto 순회순) + dummy (승격순)
+     * → level 맵 fastutil 순회 */
     int32_t all[MAXB * 2];
     int32_t n_all = 0;
-    for (int32_t i = 0; i < n_live; i++)
-        all[n_all++] = idx_live[i];
+    for (int32_t i = 0; i < n_proto; i++)
+        all[n_all++] = idx_live[proto_order[i]];
     for (int32_t i = 0; i < n_dummy; i++)
         all[n_all++] = dummy_sorted[i];
     int32_t pos[MAXB * 2][3];
