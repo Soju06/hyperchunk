@@ -1117,6 +1117,10 @@ static void edge_schedule_ticks(feat_env_t *e, uint16_t s, int32_t x,
     }
     if (s == HC_B_WATER || s == HC_B_LAVA ||
         (s >= HC_B_WATER_FLOW_BASE && s < HC_B_WATER_FLOW_BASE + 15)) {
+        /* LiquidBlock.updateShape (26.2 디컴파일 :156-175). 저장 t 는
+         * 스케줄 시점이 결정: 월드젠(proto) 경로는 ProtoChunkTicks 가
+         * SavedTick delay 0 으로 정규화 — 실측: 여기를 5 로 바꾸면
+         * 풀-리전 잔차 14→57 회귀 (survey7). proto 경로 = 전부 0. */
         int flow = s != HC_B_WATER && s != HC_B_LAVA;
         int ns_src = ns == HC_B_WATER || ns == HC_B_LAVA ||
                      hc_block_is_waterlogged(ns);
@@ -1127,8 +1131,8 @@ static void edge_schedule_ticks(feat_env_t *e, uint16_t s, int32_t x,
                                       : (flow ? HC_TICK_FLOWING_WATER
                                               : HC_TICK_WATER),
                                   0);
-        /* tryScheduleBubbleBlockColumn — 물 소스 && 아래가 magma (이
-         * 리전에 soul_sand 부재). 블록 틱 (i=minecraft:water). */
+        /* tryScheduleBubbleBlockColumn (:194-198) — proto 정규화 t=0.
+         * 물 소스 && 아래가 태그 (이 리전은 magma 뿐). */
         if (s == HC_B_WATER && dir == 0 && ns == HC_B_MAGMA_BLOCK)
             hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_BLOCK, 0);
         return;
@@ -1141,7 +1145,12 @@ static void edge_schedule_ticks(feat_env_t *e, uint16_t s, int32_t x,
     if (s == HC_B_SEAGRASS ||
         (s >= HC_B_KELP_BASE && s <= HC_B_KELP_PLANT))
         return;
-    if (hc_block_is_waterlogged(s))
+    /* SimpleWaterloggedBlock 공통 updateShape: waterlogged=true 프로퍼티
+     * 상태만 물 틱 (delay 5). hc_block_is_waterlogged(F_WLOG) 는 고유
+     * 유체 (tall_seagrass 등) 도 참 — 바닐라 TallSeagrass 는 updateShape
+     * 물 틱이 없다 (실측: 난파선 주변 tall_seagrass 셀 ours-only t=0
+     * 6건의 원인). */
+    if (strstr(hc_block_name(s), "waterlogged=true") != NULL)
         hc_feat_schedule_tick(e->rg, x, y, z, s, HC_TICK_WATER, 0);
 }
 
