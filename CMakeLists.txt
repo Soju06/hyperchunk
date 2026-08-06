@@ -44,6 +44,15 @@ if(HC_SANITIZE)
   add_link_options(-fsanitize=address,undefined,float-cast-overflow)
 endif()
 
+# ADR-009 Pitfall 3: 멀티스레드 확장(P2-3 FREE 스케줄러) 진입 시 TSan 게이트
+# 의무. ASan 과 결합 불가라 별도 빌드 (CMakePresets.json 의 tsan).
+# check_no_fma 대상 아님 (계측 혼입 — ADR-009 Pitfall 2 와 동일 논리).
+option(HC_TSAN "Build with ThreadSanitizer (P2-3 scheduler gate build)" OFF)
+if(HC_TSAN)
+  add_compile_options(-fsanitize=thread -fno-omit-frame-pointer -g)
+  add_link_options(-fsanitize=thread)
+endif()
+
 add_subdirectory(core)
 add_subdirectory(cli)
 add_subdirectory(bench)
