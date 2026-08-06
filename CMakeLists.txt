@@ -15,6 +15,11 @@ add_compile_options(
   ${HC_OPT_LEVEL}
   -ffp-contract=off
   -fno-fast-math
+  # 함수 배치 룰렛 고정 (P2-2 실측): df 오브젝트가 커지자 무손대 직렬
+  # 페이즈(light09/features)의 -O3 wall 이 +60% 튀었고, 오브젝트 디스어셈
+  # 블리는 바이트 동일 — 링크 레이아웃 효과. 64B 정렬로 재현·회복 확인.
+  # FP 시맨틱 무관 (parity_gate/check_no_fma 로 재판정).
+  -falign-functions=64
   -Wall -Wextra -Werror
 )
 
