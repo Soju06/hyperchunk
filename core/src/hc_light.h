@@ -43,6 +43,8 @@ typedef struct {
     uint8_t     feat_done;  /* getChunkForLighting 가시성 (status >= FEATURES) */
     uint8_t     in_r;       /* 08 initializeLight 실행됨 (섹션 등록 주체) */
     uint8_t     enabled;    /* 09 propagateLightSources 실행됨 (S) */
+    uint8_t     seeded;     /* 누적 모드: propagateLightSources 시딩 완료
+                             * (바닐라는 청크당 1회 — 재시딩 없음) */
     int32_t     src_y[256]; /* ChunkSkyLightSources.getLowestSourceY; hc_col_idx */
 } hc_light_chunk_t;
 
@@ -78,6 +80,31 @@ void hc_light_solve(hc_light_world_t *w);
  * 갭은 위쪽 첫 레이어 바닥 슬라이스; block 은 미등록 0. y 는 월드 좌표. */
 int hc_light_get(const hc_light_world_t *w, int layer, int32_t x, int32_t y,
                  int32_t z);
+
+/* --- 누적 (increase-only 이력) 모드 (Task 14) ---
+ *
+ * 바닐라 .mca 저장 라이트는 어느 시점의 lfp 도 아니고, 증가-전용 이력의
+ * 최종 상태다: 각 청크의 propagateLightSources(09) 는 그 시점 블록으로
+ * 1회 시딩·flood 하고, 이후 데코 쓰기는 재조명하지 않는다 (ProtoChunk
+ * setBlockState 는 updateSectionStatus/skyLightSources.update 만 —
+ * checkBlock 없음). 나중 배치 이웃의 flood 증가 유입은 반영된다.
+ * 재현: 배치 시간순으로 (블록 전진, 등록/지오메트리 재유도, 새 청크만
+ * 시딩) 을 리셋 없이 반복 — 값은 단조 증가, 최종 상태가 저장분.
+ *
+ * prepare: 등록 지오메트리 (in_r 전체, 현재 블록) 재유도. 마스크/top 은
+ *   단조 성장 (updateSectionStatus 등가 — ProtoChunk 쓰기에 라이브).
+ *   새 섹션의 라이트는 0 (createDataLayer 등가 — repeatFirstLayer 가
+ *   필요한 below-top 생성은 fail-loud; 이 지역은 등록 범위가 전부
+ *   바닥-고정이라 구조적으로 상단 확장뿐).
+ * init_chunk: 08 (initializeLight) 이벤트 — 등록 + src_y 동결 (fillFrom).
+ *   src_y 는 이후 블록 쓰기로 갱신되지 않는다 (c.2.26 실측: 나중-배치
+ *   캐노피 아래 골든 sky 15 — 09 직접 채움이 08 시점 컬럼을 썼다).
+ *   "등록은 제출 즉시 유효" (task13 §3) — 호출 시점 = 제출 카운터.
+ * light_chunk: enable + 시딩 + flood 1회 (seeded 가드). 시딩은 현재
+ *   블록/등록 + 08-동결 src_y (자신·이웃) 기준. */
+void hc_light_accum_prepare(hc_light_world_t *w);
+void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz);
+void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz);
 
 /* 스테이지 진입점 (gen_light_stages.c) — 08 은 register 의 별칭 + 선행
  * 검사, 09 는 반경-1 피라미드 요건 검사 후 enable. */

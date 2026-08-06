@@ -279,6 +279,10 @@ int hc_light_attach(hc_light_world_t *w, hc_arena_t *a, hc_chunk_t *c) {
             return -1;
     }
     s->top = HC_LIGHT_NO_TOP;
+    /* featured-이지만-08-전 이웃이 nb_src 로 읽힌다 (누적 모드) —
+     * fillFrom 전의 ChunkSkyLightSources 는 전-열림 센티널 */
+    for (int i = 0; i < 256; i++)
+        s->src_y[i] = HC_LIGHT_OPEN;
     return 0;
 }
 
@@ -294,6 +298,9 @@ void hc_light_reset(hc_light_world_t *w) {
         s->feat_done = 0;
         s->in_r = 0;
         s->enabled = 0;
+        s->seeded = 0;
+        for (int c = 0; c < 256; c++)
+            s->src_y[c] = HC_LIGHT_OPEN;
     }
 }
 
@@ -395,38 +402,63 @@ static inline int32_t nb_src(const hc_light_world_t *w, int32_t cx, int32_t cz,
     return s->src_y[hc_col_idx(x, z)];
 }
 
-void hc_light_solve(hc_light_world_t *w) {
-    /* --- phase A: 등록 지오메트리 (현재 블록에서 재유도) --- */
-    for (int32_t i = 0; i < w->n * w->n; i++) {
-        hc_light_chunk_t *s = &w->slots[i];
-        if (!s->chunk || !s->in_r)
+/* phase A 본체: in_r 청크 하나의 등록 지오메트리 재유도 (단조 — 마스크는
+ * 자라기만 한다; 누적 모드에서 updateSectionStatus 진화와 등가).
+ *
+ * 신규 비트가 기존 등록 위쪽 슬라이스가 nonzero 인 채로 아래에 생기면
+ * 바닐라는 repeatFirstLayer 로 그 슬라이스를 복사한다 — 이 지역은 모든
+ * 등록 범위가 바닥-고정 ([-5..top+1], 지반이 y=-4 부터 연속) 이라 신규
+ * 비트는 항상 상단 확장 = 제로 생성. 전제가 깨지면 die (미구현 관측). */
+static void derive_geometry_chunk(hc_light_world_t *w, hc_light_chunk_t *s) {
+    int32_t cx = s->chunk->cx, cz = s->chunk->cz;
+    for (int32_t sec = -4; sec <= 19; sec++) {
+        if (!section_has_data(s->chunk, sec))
             continue;
-        int32_t cx = s->chunk->cx, cz = s->chunk->cz;
-        for (int32_t sec = -4; sec <= 19; sec++) {
-            if (!section_has_data(s->chunk, sec))
-                continue;
-            for (int dz = -1; dz <= 1; dz++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    hc_light_chunk_t *t = slot(w, cx + dx, cz + dz);
-                    if (!t) {
-                        fprintf(stderr,
-                                "hc_light: registration of (%d,%d) spills "
-                                "outside the attached world\n",
-                                cx, cz);
-                        abort();
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                hc_light_chunk_t *t = slot(w, cx + dx, cz + dz);
+                if (!t) {
+                    fprintf(stderr,
+                            "hc_light: registration of (%d,%d) spills "
+                            "outside the attached world\n",
+                            cx, cz);
+                    abort();
+                }
+                for (int dy = -1; dy <= 1; dy++) {
+                    int32_t  ns = sec + dy;
+                    uint32_t bit = 1u << (ns - HC_LIGHT_SEC_MIN);
+                    if (!(t->registered & bit)) {
+                        uint32_t above =
+                            t->registered >> (ns - HC_LIGHT_SEC_MIN + 1);
+                        if (above) {
+                            int32_t asec = ns + 1 + __builtin_ctz(above);
+                            const uint8_t *sl =
+                                t->light[HC_LIGHT_SKY] +
+                                (size_t)(asec - HC_LIGHT_SEC_MIN) * 4096;
+                            for (int i = 0; i < 256; i++)
+                                if (sl[i]) {
+                                    fprintf(stderr,
+                                            "hc_light: below-top section "
+                                            "creation with nonzero source "
+                                            "slice ((%d,%d) sec %d) — "
+                                            "repeatFirstLayer unimplemented\n",
+                                            cx + dx, cz + dz, ns);
+                                    abort();
+                                }
+                        }
+                        t->registered |= bit;
                     }
-                    for (int dy = -1; dy <= 1; dy++) {
-                        int32_t ns = sec + dy;
-                        t->registered |= 1u << (ns - HC_LIGHT_SEC_MIN);
-                        if (ns + 1 > t->top || t->top == HC_LIGHT_NO_TOP)
-                            t->top = ns + 1;
-                    }
+                    if (ns + 1 > t->top || t->top == HC_LIGHT_NO_TOP)
+                        t->top = ns + 1;
                 }
             }
         }
     }
-    /* 갭 없는 컬럼 등록 확인 — propagateFromEmptySections(R3 §3.5) 를
-     * 미구현으로 남기는 전제. 깨지면 즉사. */
+}
+
+/* 갭 없는 컬럼 등록 확인 — propagateFromEmptySections(R3 §3.5) 를
+ * 미구현으로 남기는 전제. 깨지면 즉사. */
+static void check_contiguous(const hc_light_world_t *w) {
     for (int32_t i = 0; i < w->n * w->n; i++) {
         hc_light_chunk_t *s = &w->slots[i];
         if (!s->chunk || !s->registered)
@@ -441,6 +473,84 @@ void hc_light_solve(hc_light_world_t *w) {
             abort();
         }
     }
+}
+
+/* phase B 본체: 활성 청크 하나의 sky 직접 채움 + 확산 시드 */
+static void seed_sky_chunk(hc_light_world_t *w, bfs_t *q,
+                           hc_light_chunk_t *s) {
+    int32_t cx = s->chunk->cx, cz = s->chunk->cz;
+    assert(s->top != HC_LIGHT_NO_TOP);
+    for (int32_t sec = s->top - 1; sec >= HC_LIGHT_SEC_MIN; sec--) {
+        if (!sec_registered(s, sec))
+            continue;
+        int32_t y0 = sec * 16, y15 = y0 + 15;
+        int     any_lower = 0;
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                int32_t low = s->src_y[hc_col_idx(x, z)];
+                if (low > y15)
+                    continue; /* 이 컬럼의 소스는 전부 위쪽 */
+                int32_t lowN = (z == 0) ? nb_src(w, cx, cz - 1, x, 15)
+                                        : s->src_y[hc_col_idx(x, z - 1)];
+                int32_t lowS = (z == 15) ? nb_src(w, cx, cz + 1, x, 0)
+                                         : s->src_y[hc_col_idx(x, z + 1)];
+                int32_t lowW = (x == 0) ? nb_src(w, cx - 1, cz, 15, z)
+                                        : s->src_y[hc_col_idx(x - 1, z)];
+                int32_t lowE = (x == 15) ? nb_src(w, cx + 1, cz, 0, z)
+                                         : s->src_y[hc_col_idx(x + 1, z)];
+                int32_t ymin = low > y0 ? low : y0;
+                for (int32_t y = y15; y >= ymin; y--) {
+                    s->light[HC_LIGHT_SKY][cell_idx(sec, x, y, z)] = 15;
+                    unsigned mask = 0;
+                    if (y == low)
+                        mask |= 1u << DIR_D;
+                    if (y < lowN)
+                        mask |= 1u << DIR_N;
+                    if (y < lowS)
+                        mask |= 1u << DIR_S;
+                    if (y < lowW)
+                        mask |= 1u << DIR_W;
+                    if (y < lowE)
+                        mask |= 1u << DIR_E;
+                    if (mask)
+                        q_push(q, cx * 16 + x, y, cz * 16 + z, 15, mask, 0);
+                }
+                if (low < y0)
+                    any_lower = 1;
+            }
+        }
+        if (!any_lower)
+            break;
+    }
+}
+
+/* phase D 본체: 활성 청크 하나의 발광 블록 시드 (findBlockLightSources
+ * 의 섹션 오름차순/y,z,x 스캔 순서 — 큐 순서만 다르고 lfp 동일) */
+static void seed_block_chunk(hc_light_world_t *w, bfs_t *q,
+                             hc_light_chunk_t *s) {
+    int32_t cx = s->chunk->cx, cz = s->chunk->cz;
+    (void)w;
+    for (int32_t y = HC_MIN_Y; y <= HC_MAX_Y; y++) {
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                uint16_t st = s->chunk->states[hc_idx(x, y, z)];
+                if (g_emit[st] == 0)
+                    continue;
+                q_push(q, cx * 16 + x, y, cz * 16 + z, g_emit[st], MASK_ALL,
+                       1);
+            }
+        }
+    }
+}
+
+void hc_light_solve(hc_light_world_t *w) {
+    /* --- phase A: 등록 지오메트리 (현재 블록에서 재유도) --- */
+    for (int32_t i = 0; i < w->n * w->n; i++) {
+        hc_light_chunk_t *s = &w->slots[i];
+        if (s->chunk && s->in_r)
+            derive_geometry_chunk(w, s);
+    }
+    check_contiguous(w);
 
     /* --- phase A2: src_y (featured 청크 전부 — 이웃 시드 테이블로 쓰임) --- */
     for (int32_t i = 0; i < w->n * w->n; i++) {
@@ -451,79 +561,75 @@ void hc_light_solve(hc_light_world_t *w) {
 
     bfs_t q = {w, 0, 0};
 
-    /* --- phase B: sky 직접 채움 + 시드 (활성 청크; 순서는 lfp 라 무관) --- */
+    /* --- phase B: sky (활성 청크; 순서는 lfp 라 무관) --- */
     for (int32_t i = 0; i < w->n * w->n; i++) {
         hc_light_chunk_t *s = &w->slots[i];
-        if (!s->chunk || !s->enabled)
-            continue;
-        int32_t cx = s->chunk->cx, cz = s->chunk->cz;
-        assert(s->top != HC_LIGHT_NO_TOP);
-        for (int32_t sec = s->top - 1; sec >= HC_LIGHT_SEC_MIN; sec--) {
-            if (!sec_registered(s, sec))
-                continue;
-            int32_t y0 = sec * 16, y15 = y0 + 15;
-            int     any_lower = 0;
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    int32_t low = s->src_y[hc_col_idx(x, z)];
-                    if (low > y15)
-                        continue; /* 이 컬럼의 소스는 전부 위쪽 */
-                    int32_t lowN = (z == 0) ? nb_src(w, cx, cz - 1, x, 15)
-                                            : s->src_y[hc_col_idx(x, z - 1)];
-                    int32_t lowS = (z == 15) ? nb_src(w, cx, cz + 1, x, 0)
-                                             : s->src_y[hc_col_idx(x, z + 1)];
-                    int32_t lowW = (x == 0) ? nb_src(w, cx - 1, cz, 15, z)
-                                            : s->src_y[hc_col_idx(x - 1, z)];
-                    int32_t lowE = (x == 15) ? nb_src(w, cx + 1, cz, 0, z)
-                                             : s->src_y[hc_col_idx(x + 1, z)];
-                    int32_t ymin = low > y0 ? low : y0;
-                    for (int32_t y = y15; y >= ymin; y--) {
-                        s->light[HC_LIGHT_SKY][cell_idx(sec, x, y, z)] = 15;
-                        unsigned mask = 0;
-                        if (y == low)
-                            mask |= 1u << DIR_D;
-                        if (y < lowN)
-                            mask |= 1u << DIR_N;
-                        if (y < lowS)
-                            mask |= 1u << DIR_S;
-                        if (y < lowW)
-                            mask |= 1u << DIR_W;
-                        if (y < lowE)
-                            mask |= 1u << DIR_E;
-                        if (mask)
-                            q_push(&q, cx * 16 + x, y, cz * 16 + z, 15, mask,
-                                   0);
-                    }
-                    if (low < y0)
-                        any_lower = 1;
-                }
-            }
-            if (!any_lower)
-                break;
-        }
+        if (s->chunk && s->enabled)
+            seed_sky_chunk(w, &q, s);
     }
     bfs_run(&q, HC_LIGHT_SKY);
 
-    /* --- phase D: block 시드 (활성 청크의 발광 블록; findBlockLightSources
-     * 의 섹션 오름차순/y,z,x 스캔 순서 — 큐 순서만 다르고 lfp 동일) --- */
+    /* --- phase D: block 시드 --- */
     q.head = q.tail = 0;
     for (int32_t i = 0; i < w->n * w->n; i++) {
         hc_light_chunk_t *s = &w->slots[i];
-        if (!s->chunk || !s->enabled)
-            continue;
-        int32_t cx = s->chunk->cx, cz = s->chunk->cz;
-        for (int32_t y = HC_MIN_Y; y <= HC_MAX_Y; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    uint16_t st = s->chunk->states[hc_idx(x, y, z)];
-                    if (g_emit[st] == 0)
-                        continue;
-                    q_push(&q, cx * 16 + x, y, cz * 16 + z, g_emit[st],
-                           MASK_ALL, 1);
-                }
-            }
-        }
+        if (s->chunk && s->enabled)
+            seed_block_chunk(w, &q, s);
     }
+    bfs_run(&q, HC_LIGHT_BLOCK);
+}
+
+/* --- 누적 (increase-only 이력) 모드 — hc_light.h 헤더 주석 참조 --- */
+
+void hc_light_accum_prepare(hc_light_world_t *w) {
+    /* 지오메트리만 — src_y 는 각 청크 08 시점에 동결 (init_chunk).
+     * 실측 근거: c.2.26 — 3×3 이웃 데코 전부 09 완료 전인데 골든이
+     * 나중-배치 캐노피 아래 sky 15 = 09 직접 채움이 08 시점의 열린
+     * 컬럼(fillFrom)을 그대로 썼다. ProtoChunk 쓰기는 updateSectionStatus
+     * 만 갱신하고 skyLightSources 는 갱신하지 않는 클래스. */
+    for (int32_t i = 0; i < w->n * w->n; i++) {
+        hc_light_chunk_t *s = &w->slots[i];
+        if (s->chunk && s->in_r)
+            derive_geometry_chunk(w, s);
+    }
+    check_contiguous(w);
+}
+
+void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
+    hc_light_chunk_t *s = slot_must(w, cx, cz);
+    if (!s->feat_done) {
+        fprintf(stderr, "hc_light: accum 08 before featured (%d,%d)\n", cx,
+                cz);
+        abort();
+    }
+    if (s->in_r) {
+        fprintf(stderr, "hc_light: accum repeated 08 (%d,%d)\n", cx, cz);
+        abort();
+    }
+    s->in_r = 1;
+    derive_geometry_chunk(w, s);
+    check_contiguous(w);
+    fill_src_y(s); /* fillFrom — 이 시점 블록으로 동결 */
+}
+
+void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
+    hc_light_chunk_t *s = slot_must(w, cx, cz);
+    if (!s->in_r) {
+        fprintf(stderr, "hc_light: accum light before register (%d,%d)\n", cx,
+                cz);
+        abort();
+    }
+    if (s->seeded) {
+        fprintf(stderr, "hc_light: accum re-seed of (%d,%d)\n", cx, cz);
+        abort();
+    }
+    s->enabled = 1;
+    s->seeded = 1;
+    bfs_t q = {w, 0, 0};
+    seed_sky_chunk(w, &q, s);
+    bfs_run(&q, HC_LIGHT_SKY);
+    q.head = q.tail = 0;
+    seed_block_chunk(w, &q, s);
     bfs_run(&q, HC_LIGHT_BLOCK);
 }
 
