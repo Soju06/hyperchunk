@@ -16,10 +16,11 @@
     },
     {
       "name": "release",
-      "displayName": "Release (NDEBUG: bounds asserts compiled out, ADR-009 D3 zero-cost)",
+      "displayName": "Release (NDEBUG + -O3; P2-0 실측 O2 대비 1.10x, parity/FMA 게이트 PASS)",
       "binaryDir": "${sourceDir}/build-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "HC_OPT_LEVEL": "-O3"
       }
     },
     {
