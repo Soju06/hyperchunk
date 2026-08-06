@@ -133,6 +133,12 @@ typedef struct hc_feat_region {
                         int32_t cx, int32_t cz, int64_t deco_seed,
                         int32_t step);
     void *struct_ud;
+    /* Task 14: ProtoChunk.setBlockState 라이트 훅 등가 — 상태가 실제로
+     * 바뀐 set_block/set_block_ks 쓰기마다 호출 (ore 는 바닐라처럼
+     * BulkSectionAccess 우회 = 훅 없음). NULL = 없음 (기존 게이트 불변). */
+    void (*on_block_write)(void *ud, int32_t x, int32_t y, int32_t z,
+                           uint16_t old_id, uint16_t new_id);
+    void *light_ud;
 } hc_feat_region_t;
 
 hc_chunk_t *hc_feat_region_chunk(const hc_feat_region_t *rg, int32_t cx,

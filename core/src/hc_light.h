@@ -45,14 +45,25 @@ typedef struct {
     uint8_t     enabled;    /* 09 propagateLightSources 실행됨 (S) */
     uint8_t     seeded;     /* 누적 모드: propagateLightSources 시딩 완료
                              * (바닐라는 청크당 1회 — 재시딩 없음) */
+    uint8_t     geo_dirty;  /* 누적 모드: 라이브 쓰기 후 지오메트리 재유도
+                             * 대기 (dirty 목록 중복 방지) */
     int32_t     src_y[256]; /* ChunkSkyLightSources.getLowestSourceY; hc_col_idx */
 } hc_light_chunk_t;
 
 typedef struct {
     hc_light_chunk_t *slots; /* [ (cz-cz0)*n + (cx-cx0) ] */
     int32_t   cx0, cz0, n;
-    uint64_t *queue;         /* BFS FIFO 링 (2^qlog 엔트리) */
+    uint64_t *queue;         /* 증가 BFS FIFO 링 (2^qlog 엔트리) */
+    uint64_t *queue2;        /* 감소 큐 (checkBlock 기계 — 증가와 동시 활성) */
     uint32_t  qlog;
+    /* blockNodesToCheck 등가 (checkBlock 펜딩 셋; flush 가 소비).
+     * check[i] = q_push 패킹과 같은 좌표 인코딩 (level/mask 0). */
+    uint64_t *check;
+    int32_t   n_check;
+    /* 지오메트리 재유도 대기 청크 (라이브 쓰기 대상; flush 선두에서
+     * updateSectionStatus 등가 처리) — 슬롯 인덱스 목록 */
+    int32_t  *dirty;
+    int32_t   n_dirty;
 } hc_light_world_t;
 
 /* 슬롯/큐를 arena 에서 할당. 라이트 배열은 attach 시 할당. 실패 -1. */
@@ -81,30 +92,45 @@ void hc_light_solve(hc_light_world_t *w);
 int hc_light_get(const hc_light_world_t *w, int layer, int32_t x, int32_t y,
                  int32_t z);
 
-/* --- 누적 (increase-only 이력) 모드 (Task 14) ---
+/* --- 누적 이력 모드 (Task 14) ---
  *
- * 바닐라 .mca 저장 라이트는 어느 시점의 lfp 도 아니고, 증가-전용 이력의
- * 최종 상태다: 각 청크의 propagateLightSources(09) 는 그 시점 블록으로
- * 1회 시딩·flood 하고, 이후 데코 쓰기는 재조명하지 않는다 (ProtoChunk
- * setBlockState 는 updateSectionStatus/skyLightSources.update 만 —
- * checkBlock 없음). 나중 배치 이웃의 flood 증가 유입은 반영된다.
- * 재현: 배치 시간순으로 (블록 전진, 등록/지오메트리 재유도, 새 청크만
- * 시딩) 을 리셋 없이 반복 — 값은 단조 증가, 최종 상태가 저장분.
+ * 바닐라 .mca 저장 라이트는 어느 시점의 lfp 도 아니고, 증분 이력의 최종
+ * 상태다. 이벤트 시맨틱 (R1 §5.3/§6 + R3 §3.2/§4.4 + 잔차 실측 역산):
+ *
+ *  - fillFrom (src_y) 은 08 status 태스크 본체가 gen 워커에서 동기 실행
+ *    (제출 카운터 시점 블록). 그런데 chunk status 의 INITIALIZE_LIGHT
+ *    승격은 라이트 스레드가 08 큐 태스크를 처리한 뒤 (= 08 completion,
+ *    stages.log comp 라인) 다. 그 사이 "동결 창" 의 블록 쓰기는
+ *    ProtoChunk.setBlockState 라이트 훅 (status>=08 가드) 을 못 밟아
+ *    영구 미반영 — src_y 도 checkBlock 도 없다. (r2 실측: 08-동결만으로
+ *    최종-lfp 대비 sky 음수 잔차 18,237셀 전소.)
+ *  - 승격 후 (라이브) 라이트-속성 변경 쓰기는 skyLightSources.update
+ *    (§4.4 증분) + checkBlock (checkNode → 감소/PULL/재flood) 을 밟는다.
+ *    accum_write + accum_flush 가 이 경로다.
+ *  - 나중 배치 이웃 flood 의 증가 유입은 저장분에 반영된다 (배치-스냅샷
+ *    모델은 음수 잔차로 기각 — r3 실측 442 mismatch).
  *
  * prepare: 등록 지오메트리 (in_r 전체, 현재 블록) 재유도. 마스크/top 은
  *   단조 성장 (updateSectionStatus 등가 — ProtoChunk 쓰기에 라이브).
  *   새 섹션의 라이트는 0 (createDataLayer 등가 — repeatFirstLayer 가
  *   필요한 below-top 생성은 fail-loud; 이 지역은 등록 범위가 전부
  *   바닥-고정이라 구조적으로 상단 확장뿐).
- * init_chunk: 08 (initializeLight) 이벤트 — 등록 + src_y 동결 (fillFrom).
- *   src_y 는 이후 블록 쓰기로 갱신되지 않는다 (c.2.26 실측: 나중-배치
- *   캐노피 아래 골든 sky 15 — 09 직접 채움이 08 시점 컬럼을 썼다).
+ * init_chunk: 08 (initializeLight) 이벤트 — 등록 + src_y fillFrom.
  *   "등록은 제출 즉시 유효" (task13 §3) — 호출 시점 = 제출 카운터.
  * light_chunk: enable + 시딩 + flood 1회 (seeded 가드). 시딩은 현재
- *   블록/등록 + 08-동결 src_y (자신·이웃) 기준. */
+ *   블록/등록 + 현재 src_y (자신·이웃) 기준.
+ * write: 라이브 쓰기 1건 (호출자가 08-완료 카운터 게이트; 블록 배열은
+ *   이미 갱신된 뒤). 라이트-속성 (dampening/emission/USO) 이 다르면
+ *   src_y 증분 update + checkBlock 펜딩. 속성 동일이면 no-op.
+ * flush: 펜딩 checkBlock 처리 = 레이어별 checkNode 전체 → 감소 큐 완전
+ *   드레인 → 증가 큐 드레인 (runLightUpdates §3 순서). δ_wake 마이크로-
+ *   배치 등가 — 그룹핑은 국소 lfp 재구축이라 결과 불변 (R2 §10). */
 void hc_light_accum_prepare(hc_light_world_t *w);
 void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz);
 void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz);
+void hc_light_accum_write(hc_light_world_t *w, int32_t x, int32_t y, int32_t z,
+                          uint16_t old_id, uint16_t new_id);
+void hc_light_accum_flush(hc_light_world_t *w);
 
 /* 스테이지 진입점 (gen_light_stages.c) — 08 은 register 의 별칭 + 선행
  * 검사, 09 는 반경-1 피라미드 요건 검사 후 enable. */

@@ -28,6 +28,7 @@
 #include <string.h>
 
 enum { QLOG = 22 }; /* 4M 엔트리 × 8B = 32MB — 관측 최대의 수십 배 여유 */
+enum { CHECK_LOG = 17 }; /* checkBlock 펜딩 셋 128K — flush 주기당 수백 관측 */
 
 /* --- per-id 라이트 테이블 (지연 구축) --- */
 
@@ -173,6 +174,7 @@ static const uint8_t DIR_OPP[6] = {DIR_U, DIR_D, DIR_S, DIR_N, DIR_E, DIR_W};
 typedef struct {
     hc_light_world_t *w;
     uint64_t          head, tail; /* head==tail 비어 있음 */
+    uint64_t         *buf;        /* w->queue (증가) 또는 w->queue2 (감소) */
 } bfs_t;
 
 static inline void q_push(bfs_t *q, int32_t x, int32_t y, int32_t z, int level,
@@ -185,7 +187,7 @@ static inline void q_push(bfs_t *q, int32_t x, int32_t y, int32_t z, int level,
     uint64_t e = (uint64_t)(x + 4096) | ((uint64_t)(z + 4096) << 13) |
                  ((uint64_t)(y + 512) << 26) | ((uint64_t)level << 36) |
                  ((uint64_t)mask << 40) | ((uint64_t)(emission ? 1 : 0) << 46);
-    q->w->queue[q->tail++ & (cap - 1)] = e;
+    q->buf[q->tail++ & (cap - 1)] = e;
 }
 
 /* R2 §11: 증가 전용 릴랙세이션. 방향 마스크/stale 드롭은 바닐라 그대로
@@ -194,7 +196,7 @@ static void bfs_run(bfs_t *q, int layer) {
     hc_light_world_t *w = q->w;
     uint64_t          cap = 1ull << w->qlog;
     while (q->head != q->tail) {
-        uint64_t e = w->queue[q->head++ & (cap - 1)];
+        uint64_t e = q->buf[q->head++ & (cap - 1)];
         int32_t  x = (int32_t)(e & 0x1FFF) - 4096;
         int32_t  z = (int32_t)((e >> 13) & 0x1FFF) - 4096;
         int32_t  y = (int32_t)((e >> 26) & 0x3FF) - 512;
@@ -258,7 +260,12 @@ int hc_light_world_init(hc_light_world_t *w, hc_arena_t *a, int32_t cx0,
     w->slots = hc_arena_alloc(a, sizeof(hc_light_chunk_t) * (size_t)(n * n),
                               _Alignof(hc_light_chunk_t));
     w->queue = hc_arena_alloc(a, sizeof(uint64_t) << QLOG, 8);
-    if (!w->slots || !w->queue)
+    w->queue2 = hc_arena_alloc(a, sizeof(uint64_t) << QLOG, 8);
+    w->check = hc_arena_alloc(a, sizeof(uint64_t) << CHECK_LOG, 8);
+    w->dirty = hc_arena_alloc(a, sizeof(int32_t) * (size_t)(n * n), 4);
+    w->n_check = 0;
+    w->n_dirty = 0;
+    if (!w->slots || !w->queue || !w->queue2 || !w->check || !w->dirty)
         return -1;
     memset(w->slots, 0, sizeof(hc_light_chunk_t) * (size_t)(n * n));
     return 0;
@@ -345,6 +352,22 @@ static int section_has_data(const hc_chunk_t *c, int32_t sec) {
     return 0;
 }
 
+/* isEdgeOccluded(above, below) — R3 §4.2: below dampening != 0 이거나
+ * above.face(DOWN) ∪ below.face(UP) 이 풀 페이스 (USO 슬랩/스테어). */
+static inline int edge_occluded(uint16_t above, uint16_t below) {
+    if (damp_of(below) != 0)
+        return 1;
+    uint32_t tocc = hc_block_face_occlusion(above);
+    uint32_t bocc = hc_block_face_occlusion(below);
+    if (tocc | bocc) {
+        unsigned tm = (tocc >> (4 * DIR_D)) & 0xFu;
+        unsigned bm = (bocc >> (4 * DIR_U)) & 0xFu;
+        if ((tm | bm) == 0xFu)
+            return 1;
+    }
+    return 0;
+}
+
 /* ChunkSkyLightSources.fillFrom + findLowestSourceY (R3 §4.3 + Task 14):
  * 위에서 내려오며 isEdgeOccluded(top, bottom) — bottom dampening != 0
  * 이거나 top.face(DOWN) ∪ bottom.face(UP) 이 풀 페이스 (USO 슬랩/스테어,
@@ -369,19 +392,9 @@ static void fill_src_y(hc_light_chunk_t *s) {
                 }
                 for (int32_t y = sec * 16 + 15; y >= sec * 16; y--) {
                     uint16_t st = c->states[hc_idx(x, y, z)];
-                    if (damp_of(st) != 0) {
+                    if (edge_occluded(top_st, st)) {
                         floor_y = y + 1;
                         goto done;
-                    }
-                    uint32_t bocc = hc_block_face_occlusion(st);
-                    uint32_t tocc = hc_block_face_occlusion(top_st);
-                    if (bocc | tocc) {
-                        unsigned tm = (tocc >> (4 * 0 /*D*/)) & 0xFu;
-                        unsigned bm = (bocc >> (4 * 1 /*U*/)) & 0xFu;
-                        if ((tm | bm) == 0xFu) {
-                            floor_y = y + 1;
-                            goto done;
-                        }
                     }
                     top_st = st;
                 }
@@ -559,7 +572,7 @@ void hc_light_solve(hc_light_world_t *w) {
             fill_src_y(s);
     }
 
-    bfs_t q = {w, 0, 0};
+    bfs_t q = {w, 0, 0, w->queue};
 
     /* --- phase B: sky (활성 청크; 순서는 lfp 라 무관) --- */
     for (int32_t i = 0; i < w->n * w->n; i++) {
@@ -625,12 +638,258 @@ void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
     }
     s->enabled = 1;
     s->seeded = 1;
-    bfs_t q = {w, 0, 0};
+    bfs_t q = {w, 0, 0, w->queue};
     seed_sky_chunk(w, &q, s);
     bfs_run(&q, HC_LIGHT_SKY);
     q.head = q.tail = 0;
     seed_block_chunk(w, &q, s);
     bfs_run(&q, HC_LIGHT_BLOCK);
+}
+
+/* --- 라이브-창 증분 재조명 (checkBlock 기계, Task 14) ---
+ * hc_light.h 헤더 주석 + R2 §3/§4/§6, R3 §3.2/§3.4/§4.4 참조. */
+
+/* hasDifferentLightProperties (R2 §9): dampening/emission/USO. USO 플래그
+ * 근사 = 면 폐색 마스크 비-영 (마스크 전무 USO 상태는 팔레트에 없음). */
+static inline int light_props_differ(uint16_t a, uint16_t b) {
+    return g_damp[a] != g_damp[b] || g_emit[a] != g_emit[b] ||
+           (hc_block_face_occlusion(a) != 0) !=
+               (hc_block_face_occlusion(b) != 0);
+}
+
+/* ChunkSkyLightSources.findLowestSourceBelow (R3 §4.4): yb 에서 아래로
+ * (above,below) 페어 워크, 첫 폐색에서 above 의 y 반환; 없으면 센티널. */
+static int32_t find_lowest_source_below(const hc_light_world_t *w, int32_t x,
+                                        int32_t yb, int32_t z) {
+    uint16_t above = l_state(w, x, yb, z);
+    for (int32_t y = yb; y >= HC_MIN_Y; y--) {
+        uint16_t below = l_state(w, x, y - 1, z);
+        if (edge_occluded(above, below))
+            return y;
+        above = below;
+    }
+    return HC_LIGHT_OPEN;
+}
+
+/* ChunkSkyLightSources.updateEdge (R3 §4.4) — 페어 (ya, ya-1) */
+static int src_update_edge(hc_light_world_t *w, int32_t *cell, int32_t cur,
+                           int32_t x, int32_t ya, int32_t z) {
+    uint16_t sa = l_state(w, x, ya, z);
+    uint16_t sb = l_state(w, x, ya - 1, z);
+    if (edge_occluded(sa, sb)) {
+        if (ya > cur) {
+            *cell = ya;
+            return 1;
+        }
+    } else if (ya == cur) {
+        *cell = find_lowest_source_below(w, x, ya - 1, z);
+        return 1;
+    }
+    return 0;
+}
+
+/* ChunkSkyLightSources.update (R3 §4.4) — 쓰기 (x,y,z) 후 (새 블록 반영됨)
+ * 컬럼 소스 바닥 증분 갱신. 동결 창에 놓친 이벤트는 재스캔되지 않는다는
+ * 이력 의존성이 핵심 — fillFrom 재실행으로 대체 불가. */
+static void src_y_update(hc_light_world_t *w, hc_light_chunk_t *s, int32_t x,
+                         int32_t y, int32_t z) {
+    int32_t *cell = &s->src_y[hc_col_idx(x & 15, z & 15)];
+    int32_t  cur = *cell;
+    if (y + 1 < cur)
+        return; /* 바닥보다 엄격히 아래: 무효과 (cur==OPEN 이면 항상 통과) */
+    if (src_update_edge(w, cell, cur, x, y + 1, z))
+        return;
+    src_update_edge(w, cell, cur, x, y, z);
+}
+
+void hc_light_accum_write(hc_light_world_t *w, int32_t x, int32_t y, int32_t z,
+                          uint16_t old_id, uint16_t new_id) {
+    if (y < HC_MIN_Y || y > HC_MAX_Y || old_id == new_id)
+        return;
+    if (!light_props_differ(old_id, new_id))
+        return;
+    hc_light_chunk_t *s = slot_must(w, x >> 4, z >> 4);
+    if (!s->in_r) {
+        fprintf(stderr, "hc_light: live write into pre-08 chunk (%d,%d)\n",
+                x >> 4, z >> 4);
+        abort();
+    }
+    src_y_update(w, s, x, y, z);
+    if (w->n_check >= (1 << CHECK_LOG)) {
+        fprintf(stderr, "hc_light: checkBlock set overflow\n");
+        abort();
+    }
+    /* 중복 미제거 (바닐라는 해시셋) — 중복 checkNode 는 두 번째가 PULL 로
+     * 축약돼 결과 동일 (멱등) */
+    w->check[w->n_check++] = (uint64_t)(x + 4096) |
+                             ((uint64_t)(z + 4096) << 13) |
+                             ((uint64_t)(y + 512) << 26);
+    if (!s->geo_dirty) {
+        s->geo_dirty = 1;
+        w->dirty[w->n_dirty++] = (int32_t)(s - w->slots);
+    }
+}
+
+/* SkyLightEngine.updateSourcesInColumn (R3 §3.2) — 직접-채움 재동기.
+ * remove: low-1 부터 아래로 연속 15 런 클리어 (최상단 = REMOVE_TOP 전방향,
+ * 나머지 = REMOVE skip-UP). add: low 부터 top 까지 15 채움 + §3.1 시드. */
+static void sky_resync_column(hc_light_world_t *w, bfs_t *dq, bfs_t *iq,
+                              hc_light_chunk_t *s, int32_t x, int32_t z,
+                              int32_t low) {
+    int32_t cx = s->chunk->cx, cz = s->chunk->cz;
+    if (low != HC_LIGHT_OPEN) {
+        for (int32_t y = low - 1;; y--) {
+            if (!l_stored_section(w, x, y, z))
+                break;
+            if (l_stored_get(w, HC_LIGHT_SKY, x, y, z) != 15)
+                break;
+            l_stored_set(w, HC_LIGHT_SKY, x, y, z, 0);
+            q_push(dq, x, y, z, 15,
+                   y == low - 1 ? MASK_ALL : (MASK_ALL & ~(1u << DIR_U)), 0);
+        }
+    }
+    int32_t lx = x & 15, lz = z & 15;
+    int32_t lowN = (lz == 0) ? nb_src(w, cx, cz - 1, lx, 15)
+                             : s->src_y[hc_col_idx(lx, lz - 1)];
+    int32_t lowS = (lz == 15) ? nb_src(w, cx, cz + 1, lx, 0)
+                              : s->src_y[hc_col_idx(lx, lz + 1)];
+    int32_t lowW = (lx == 0) ? nb_src(w, cx - 1, cz, 15, lz)
+                             : s->src_y[hc_col_idx(lx - 1, lz)];
+    int32_t lowE = (lx == 15) ? nb_src(w, cx + 1, cz, 0, lz)
+                              : s->src_y[hc_col_idx(lx + 1, lz)];
+    int32_t start = low == HC_LIGHT_OPEN ? HC_LIGHT_SEC_MIN * 16 : low;
+    int32_t top_y = s->top == HC_LIGHT_NO_TOP ? start - 1 : s->top * 16 - 1;
+    for (int32_t y = start; y <= top_y; y++) {
+        if (!l_stored_section(w, x, y, z))
+            continue;
+        l_stored_set(w, HC_LIGHT_SKY, x, y, z, 15);
+        unsigned m = 0;
+        if (y == low)
+            m |= 1u << DIR_D;
+        if (y < lowN)
+            m |= 1u << DIR_N;
+        if (y < lowS)
+            m |= 1u << DIR_S;
+        if (y < lowW)
+            m |= 1u << DIR_W;
+        if (y < lowE)
+            m |= 1u << DIR_E;
+        if (m)
+            q_push(iq, x, y, z, 15, m, 0);
+    }
+}
+
+/* checkNode (R2 §4 block / R3 §3.2 sky) */
+static void check_node(hc_light_world_t *w, bfs_t *dq, bfs_t *iq, int layer,
+                       int32_t x, int32_t y, int32_t z) {
+    hc_light_chunk_t *s = slot(w, x >> 4, z >> 4);
+    if (layer == HC_LIGHT_SKY) {
+        int32_t low = (s && s->enabled)
+                          ? s->src_y[hc_col_idx(x & 15, z & 15)]
+                          : INT32_MAX;
+        if (low != INT32_MAX)
+            sky_resync_column(w, dq, iq, s, x, z, low);
+        if (!l_stored_section(w, x, y, z))
+            return;
+        if (y >= low) {
+            /* REMOVE_SKY_SOURCE + ADD_SKY_SOURCE (둘 다 skip-UP, 15) */
+            q_push(dq, x, y, z, 15, MASK_ALL & ~(1u << DIR_U), 0);
+            q_push(iq, x, y, z, 15, MASK_ALL & ~(1u << DIR_U), 0);
+        } else {
+            int lvl = l_stored_get(w, HC_LIGHT_SKY, x, y, z);
+            if (lvl > 0) {
+                l_stored_set(w, HC_LIGHT_SKY, x, y, z, 0);
+                q_push(dq, x, y, z, lvl, MASK_ALL, 0);
+            } else {
+                q_push(dq, x, y, z, 1, MASK_ALL, 0); /* PULL_LIGHT_IN */
+            }
+        }
+    } else {
+        if (!l_stored_section(w, x, y, z))
+            return;
+        uint16_t st = l_state(w, x, y, z);
+        int em = (s && s->enabled) ? g_emit[st] : 0; /* getEmission 게이트 */
+        int stored = l_stored_get(w, HC_LIGHT_BLOCK, x, y, z);
+        if (em < stored) {
+            l_stored_set(w, HC_LIGHT_BLOCK, x, y, z, 0);
+            q_push(dq, x, y, z, stored, MASK_ALL, 0);
+        } else {
+            q_push(dq, x, y, z, 1, MASK_ALL, 0); /* PULL_LIGHT_IN */
+        }
+        if (em > 0)
+            q_push(iq, x, y, z, em, MASK_ALL, 1);
+    }
+}
+
+/* propagateDecrease 드레인 (R2 §6 block / R3 §3.4 sky): 감소는 opacity/
+ * 폐색 무시 초과-클리어, 경계 생존자 (nl >= from) 는 재-flood 프론티어. */
+static void run_decreases(bfs_t *dq, bfs_t *iq, int layer) {
+    hc_light_world_t *w = dq->w;
+    uint64_t          cap = 1ull << w->qlog;
+    while (dq->head != dq->tail) {
+        uint64_t e = dq->buf[dq->head++ & (cap - 1)];
+        int32_t  x = (int32_t)(e & 0x1FFF) - 4096;
+        int32_t  z = (int32_t)((e >> 13) & 0x1FFF) - 4096;
+        int32_t  y = (int32_t)((e >> 26) & 0x3FF) - 512;
+        int      from = (int)((e >> 36) & 15);
+        unsigned mask = (unsigned)((e >> 40) & MASK_ALL);
+        for (int d = 0; d < 6; d++) {
+            if (!(mask & (1u << d)))
+                continue;
+            int32_t nx = x + DIR_DX[d], ny = y + DIR_DY[d],
+                    nz = z + DIR_DZ[d];
+            if (!l_stored_section(w, nx, ny, nz))
+                continue; /* propagateFromEmptySections — 연속 등록 가드 */
+            int nl = l_stored_get(w, layer, nx, ny, nz);
+            if (nl == 0)
+                continue;
+            if (nl <= from - 1) {
+                uint16_t          nst = l_state(w, nx, ny, nz);
+                hc_light_chunk_t *ns = slot(w, nx >> 4, nz >> 4);
+                int em = (layer == HC_LIGHT_BLOCK && ns && ns->enabled)
+                             ? g_emit[nst]
+                             : 0;
+                l_stored_set(w, layer, nx, ny, nz, 0);
+                if (em < nl)
+                    q_push(dq, nx, ny, nz, nl, MASK_ALL & ~(1u << DIR_OPP[d]),
+                           0);
+                if (em > 0)
+                    q_push(iq, nx, ny, nz, em, MASK_ALL, 1);
+            } else {
+                q_push(iq, nx, ny, nz, nl, 1u << DIR_OPP[d], 0);
+            }
+        }
+    }
+}
+
+void hc_light_accum_flush(hc_light_world_t *w) {
+    if (w->n_check == 0)
+        return;
+    /* updateSectionStatus 라이브 등가 — 쓰인 청크만 재유도 */
+    for (int32_t i = 0; i < w->n_dirty; i++) {
+        hc_light_chunk_t *s = &w->slots[w->dirty[i]];
+        s->geo_dirty = 0;
+        derive_geometry_chunk(w, s);
+    }
+    if (w->n_dirty)
+        check_contiguous(w);
+    w->n_dirty = 0;
+    /* LevelLightEngine.runLightUpdates: block 엔진 → sky 엔진; 각각
+     * checkNode 전체 → 감소 완전 드레인 → 증가 드레인 (R2 §3). */
+    for (int pass = 0; pass < 2; pass++) {
+        int   layer = pass == 0 ? HC_LIGHT_BLOCK : HC_LIGHT_SKY;
+        bfs_t dq = {w, 0, 0, w->queue2};
+        bfs_t iq = {w, 0, 0, w->queue};
+        for (int32_t i = 0; i < w->n_check; i++) {
+            uint64_t e = w->check[i];
+            check_node(w, &dq, &iq, layer, (int32_t)(e & 0x1FFF) - 4096,
+                       (int32_t)((e >> 26) & 0x3FF) - 512,
+                       (int32_t)((e >> 13) & 0x1FFF) - 4096);
+        }
+        run_decreases(&dq, &iq, layer);
+        bfs_run(&iq, layer);
+    }
+    w->n_check = 0;
 }
 
 int hc_light_get(const hc_light_world_t *w, int layer, int32_t x, int32_t y,

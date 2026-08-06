@@ -243,6 +243,26 @@ static int widx(int32_t cx, int32_t cz) {
     return (cz - WC0) * WN + (cx - WC0);
 }
 
+/* --- Task 14: ProtoChunk.setBlockState 라이트 훅 (라이브-창 게이트) ---
+ * 라이브 = 대상 청크의 08 completion 카운터 이후 (hc_light.h 누적 모드).
+ * 08 이 없는 청크 (라이트 파이프라인 밖) 는 바닐라도 훅이 없다. */
+static hc_light_world_t *g_lw_hook;
+static int32_t           g_cur_pos;               /* 현재 manifest 카운터 */
+static int32_t           g_live_at[WORLD_CHUNKS]; /* 08-완료 카운터 */
+static int64_t           g_n_live_writes;
+
+static void light_write_hook(void *ud, int32_t x, int32_t y, int32_t z,
+                             uint16_t old_id, uint16_t new_id) {
+    (void)ud;
+    if (!g_lw_hook)
+        return;
+    int32_t la = g_live_at[widx(x >> 4, z >> 4)];
+    if (la == INT32_MAX || g_cur_pos < la)
+        return; /* 동결 창 / 파이프라인 밖 */
+    hc_light_accum_write(g_lw_hook, x, y, z, old_id, new_id);
+    g_n_live_writes++;
+}
+
 static void fill_chunk_biomes_from_grid(hc_chunk_t *chunk) {
     for (int qy = HC_MIN_Y >> 2; qy <= HC_MAX_Y >> 2; qy++)
         for (int qz = 0; qz < 4; qz++)
@@ -1094,6 +1114,21 @@ int main(int argc, char **argv) {
         for (int32_t i = 0; i < WORLD_CHUNKS; i++)
             if (hc_light_attach(&lw, &g_arena, &g_chunks[i]) != 0)
                 die("arena exhausted (light chunks)", NULL);
+        /* 라이브 경계: 08 completion (stages.log comp 라인) = status 의
+         * INITIALIZE_LIGHT 승격 = ProtoChunk 라이트 훅 활성 시점. 그
+         * 카운터 이전 쓰기는 동결 창 (hc_light.h 누적 모드 주석). */
+        for (int32_t i = 0; i < WORLD_CHUNKS; i++)
+            g_live_at[i] = INT32_MAX;
+        for (int32_t k = 0; k < n_lt; k++) {
+            if (lt[k].kind != 0)
+                continue;
+            if (lt[k].comp_nanos < 0)
+                die("initialize_light task without completion", lpath);
+            g_live_at[widx(lt[k].cx, lt[k].cz)] =
+                counter_at(lt[k].comp_nanos);
+        }
+        g_lw_hook = &lw;
+        rg.on_block_write = light_write_hook;
         printf("[%6.1fs] light: %d batches, %d 08s; P range %d..%d\n",
                now_s() - t0, g_nbatch, n08, bat_P[0],
                g_nbatch ? bat_P[g_nbatch - 1] : -1);
@@ -1130,16 +1165,22 @@ int main(int argc, char **argv) {
         if (man[pos].cx < WC0 + 1 || man[pos].cx >= WC0 + WN - 1 ||
             man[pos].cz < WC0 + 1 || man[pos].cz >= WC0 + WN - 1)
             die("manifest entry outside decorable window", mpath);
+        g_cur_pos = pos;
         hc_gen_features_chunk(&rg, man[pos].cx, man[pos].cz, seed, freg,
                               &view, &g_reg, (int32_t)sea->num, 10, &g_sink);
-        if (light_on)
+        if (light_on) {
             hc_light_set_featured(&lw, man[pos].cx, man[pos].cz);
+            /* δ_wake 마이크로-배치: 이 데코 엔트리의 라이브 checkBlock 을
+             * 다음 카운터 이벤트 전에 처리 (그룹핑 불변 — R2 §10) */
+            hc_light_accum_flush(&lw);
+        }
     }
     if (light_on && next_b != g_nbatch)
         die("light batches beyond manifest counter", NULL);
     printf("[%6.1fs] replayed %d manifest entries; %d scheduled ticks; "
-           "%" PRId64 " 08 registrations, %" PRId64 " 09 seedings\n",
-           now_s() - t0, n_man, recorder.n, n_reg, n_lit);
+           "%" PRId64 " 08 registrations, %" PRId64 " 09 seedings, "
+           "%" PRId64 " live light writes\n",
+           now_s() - t0, n_man, recorder.n, n_reg, n_lit, g_n_live_writes);
     if (g_survey && g_n_gaps) {
         printf("== SURVEY: unimplemented feature fires ==\n");
         for (int32_t i = 0; i < g_n_gaps; i++) {
@@ -1159,6 +1200,7 @@ int main(int argc, char **argv) {
     }
 
     /* --- postProcessGeneration: 승격 순서 드레인 + 마킹 교차검증 --- */
+    g_cur_pos = INT32_MAX; /* 전 배치 이후 — 08 있는 청크는 전부 라이브 */
     for (int32_t i = 0; i < WORLD_CHUNKS; i++)
         g_ppg[i].frozen = 1;
     int32_t drained = 0, skipped_drain = 0, mark_bad_chunks = 0;
@@ -1252,6 +1294,10 @@ int main(int argc, char **argv) {
                 continue;
             }
             hc_postprocess_chunk(&rg, pm_cx[m], pm_cz[m], &g_ppg[wi]);
+            /* postProcess 라이브 쓰기 (LevelChunk.setBlockState 무조건 훅,
+             * R1 §5.4) 의 checkBlock — 승격 단위 마이크로-배치 */
+            if (light_on)
+                hc_light_accum_flush(&lw);
             drained++;
         }
         printf("[%6.1fs] postprocess: drained %d/%d (mark-mismatch chunks "
@@ -1260,11 +1306,13 @@ int main(int argc, char **argv) {
                hc_postprocess_unmodeled_veg_evals());
     }
 
-    /* --- 직렬화 (라이트 = 누적 이력의 최종 상태) --- */
+    /* --- 직렬화 (라이트 = 증분 이력의 최종 상태) --- */
     if (light_on) {
-        /* 최종 등록 지오메트리: 마지막 drain 이후 데코 + postProcess
-         * 라이브 쓰기의 updateSectionStatus 등가. 값 재조명은 없음 —
-         * 신규 섹션 라이트는 0 (nonzero 만 방출되므로 미방출) */
+        /* 최종 지오메트리: 잔여 라이브 쓰기 flush 후 전체 재유도 (동결-창
+         * 쓰기의 updateSectionStatus 는 바닐라도 놓치지만, 그 섹션은
+         * 26-이웃 규칙로 대부분 LIGHT_ONLY 등록이 이미 있다 — 잔차가
+         * 지목하면 이벤트-정밀 등록으로 교체). */
+        hc_light_accum_flush(&lw);
         hc_light_accum_prepare(&lw);
         for (int32_t idx = 0; idx < 1024; idx++) {
             int32_t cx = idx & 31, cz = idx >> 5;
@@ -1274,7 +1322,7 @@ int main(int argc, char **argv) {
                 die("r.0.0 chunk not lit by any batch", NULL);
             frozen[idx] = *sl;
         }
-        printf("[%6.1fs] light accumulated state finalized\n", now_s() - t0);
+        printf("[%6.1fs] light history final state ready\n", now_s() - t0);
         /* --- 직렬화 + 대조 + canonical 해시 --- */
         static hc_region_chunk_t region_chunks[1024];
         hc_arena_t               scratch;

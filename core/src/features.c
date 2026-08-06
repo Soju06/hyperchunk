@@ -139,6 +139,7 @@ int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
         return 0;
     hc_chunk_t *c = hc_feat_region_chunk(rg, cx, cz);
     int lx = x & 15, lz = z & 15;
+    uint16_t old_id = c->states[hc_idx(lx, y, lz)];
     c->states[hc_idx(lx, y, lz)] = id;
     /* ProtoChunk.setBlockState: 섹션 쓰기 뒤 없는 FINAL 맵 지연 프라임 +
      * 4종 전부 증분 update (*_WG 는 frozen — heightmapsAfter(CARVERS)) */
@@ -147,6 +148,9 @@ int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
             hm_prime_one(c, t);
     for (int t = 0; t < HC_HMF_COUNT; t++)
         hm_update(c, t, lx, y, lz, id);
+    /* ProtoChunk.setBlockState 라이트 훅 (Task 14; status 게이트는 수신자) */
+    if (rg->on_block_write && old_id != id)
+        rg->on_block_write(rg->light_ud, x, y, z, old_id, id);
     /* WorldGenRegion.setBlock 일반 마킹 (Task 13; @189-215): (flags&16)==0
      * && getPostProcessPos != null. 26.2 등록 4종 (Blocks.<clinit> 전수):
      * brown/red mushroom → 자기 pos, soul_sand/magma_block → pos.above().
@@ -172,12 +176,16 @@ int hc_feat_set_block_ks(hc_feat_region_t *rg, int32_t x, int32_t y,
         return 0;
     hc_chunk_t *c = hc_feat_region_chunk(rg, cx, cz);
     int lx = x & 15, lz = z & 15;
+    uint16_t old_id = c->states[hc_idx(lx, y, lz)];
     c->states[hc_idx(lx, y, lz)] = id;
     for (int t = 0; t < HC_HMF_COUNT; t++)
         if (!(c->hm_final_primed & (1u << t)))
             hm_prime_one(c, t);
     for (int t = 0; t < HC_HMF_COUNT; t++)
         hm_update(c, t, lx, y, lz, id);
+    /* 라이트 훅: flags&16 은 라이트 경로와 무관 (전 플래그 공통) */
+    if (rg->on_block_write && old_id != id)
+        rg->on_block_write(rg->light_ud, x, y, z, old_id, id);
     return 1;
 }
 
