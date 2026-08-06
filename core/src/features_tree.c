@@ -1621,18 +1621,15 @@ static uint16_t edge_update_state(feat_env_t *e, uint16_t s, int32_t x,
     /* 소형 버섯: MushroomBlock.canSurvive = below∈#mushroom_grow_block ||
      * (getRawBrightness(pos,0) < 13 && below.isSolidRender) — 라이트를
      * 라이브로 읽는다 (WorldGenRegion.getLightEngine @386 → ServerLevel).
-     * 월드젠 윈도우 분석 (Task 10 NOTES): 엣지 업데이트 시점에 버섯 청크
-     * 섹션은 그리드 08 인접-등록으로 존재(스카이 저장값 0)하고, 주변 링
-     * 청크의 09 는 아직 자격 미달 → rawBrightness = 0 < 13 → 생존.
-     * (버섯은 dampening/emission 0 이라 라이트 게이트에 비가시 — 잔차는
-     * 전이적 read 경유만 가능. 게이트가 이 근방을 지목하면 재검토.) */
+     * Task 14 실측 (풀 리전): 캐노피 근처 y=72 엣지 업데이트에서 실제
+     * visible rawBrightness 는 13 이상 — 바닐라 버섯이 죽는다 (골든
+     * (2,72,164)/(5,72,164)/(17,72,159) air/oak_leaves). "월드젠 중 0"
+     * 가정은 폐기 — rg->raw_brightness (라이브-창 visible 스냅샷) 로
+     * can_survive_state 와 같은 판정을 접는다. 콜백 부재 (기존 단계
+     * 게이트) 는 rb=0 등가로 기존 동작 불변. */
     if (s == HC_B_RED_MUSHROOM || s == HC_B_BROWN_MUSHROOM) {
-        uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
-        fprintf(stderr,
-                "hc_features note: mushroom edge-update at (%d,%d,%d) "
-                "below=%s -> modeled as rawBrightness 0 (survives)\n",
-                x, y, z, hc_block_name(below));
-        return s;
+        return hc_featx_can_survive(e->reg, e->rg, s, x, y, z) ? s
+                                                               : HC_B_AIR;
     }
     /* seagrass (SeagrassBlock.java:45-72): super(VegetationBlock) 결과
      * 비공기면 물 소스 틱 — 매 평가마다. mayPlaceOn = 아래 sturdy(UP) &&

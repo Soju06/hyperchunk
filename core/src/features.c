@@ -1123,9 +1123,11 @@ static int support_face_full(uint16_t id) {
 
 /* VineBlock.isAcceptableNeighbour = MultifaceBlock.canAttachTo:
  * isFaceFull(support) || isFaceFull(COLLISION) — 잎은 support 가 EMPTY
- * 지만 collision 이 완전 큐브라 부착 가능 (R1 §3 표 + R4 §2). */
+ * 지만 collision 이 완전 큐브라 부착 가능 (R1 §3 표 + R4 §2). Task 14:
+ * collision-full 일반화 (noOcclusion 풀-충돌: grate/spawner/유리 등 —
+ * features_lush.c mf_attach_ok 주석의 실측). */
 static int can_attach_to(uint16_t id) {
-    return hc_block_is_full_cube(id) || hc_block_is_leaves(id);
+    return hc_block_is_full_cube(id) || hc_block_collision_full(id);
 }
 
 /* state.canSurvive(level, pos) — 블록별 디스패치 (R1 §5).

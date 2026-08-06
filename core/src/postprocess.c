@@ -452,8 +452,10 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
         }
         int bit = LICHEN_BIT[dir];
         if ((mask >> bit) & 1) {
+            /* canAttachTo = 지지면 완전 || 충돌면 완전 (features_lush.c
+             * mf_attach_ok 와 동일 — Task 14 collision-full 일반화) */
             int attach =
-                hc_block_is_full_cube(ns) || hc_block_is_leaves(ns);
+                hc_block_is_full_cube(ns) || hc_block_collision_full(ns);
             if (!attach) {
                 mask &= ~(1 << bit);
                 if (mask == 0)
@@ -558,8 +560,37 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
         fl_t sf = fluid_of(s);
         if (sf.type == FL_WATER) {
             const char *nm = hc_block_name(s);
-            if (strncmp(nm, "minecraft:tall_seagrass", 23) == 0)
+            if (strncmp(nm, "minecraft:tall_seagrass", 23) == 0) {
+                /* TallSeagrass(DoublePlant).updateShape — 물 틱 없음.
+                 * lower: dir UP && 위가 upper 아님 → AIR; dir DOWN &&
+                 * !canSurvive (아래 UP 면 sturdy && !magma) → AIR.
+                 * upper: dir DOWN && 아래가 lower 아님 → AIR. 수평 불변.
+                 * 실측: c.22.6 (364,47,99) 마크된 lower 가 magma 위 —
+                 * 골든은 폴드로 lower 만 소거 (276 플래그라 위 upper 는
+                 * 부유 잔존). 드레인 경로는 AIR 를 그대로 setBlock (골든
+                 * air 일치); 라이브 경로는 update_or_destroy 가 유체
+                 * 복원 (destroyBlock 등가). */
+                int upper = strstr(nm, "half=upper") != NULL;
+                const char *nn = hc_block_name(ns);
+                int ns_lower =
+                    strncmp(nn, "minecraft:tall_seagrass", 23) == 0 &&
+                    strstr(nn, "half=lower") != NULL;
+                int ns_upper =
+                    strncmp(nn, "minecraft:tall_seagrass", 23) == 0 &&
+                    strstr(nn, "half=upper") != NULL;
+                if (!upper) {
+                    if (dir == 1 && !ns_upper)
+                        return HC_B_AIR;
+                    if (dir == 0 &&
+                        (!pp_face_sturdy(ns, 1 /* UP */) ||
+                         base_is(nn, "minecraft:magma_block")))
+                        return HC_B_AIR;
+                } else {
+                    if (dir == 0 && !ns_lower)
+                        return HC_B_AIR;
+                }
                 return s;
+            }
             fl_t wf = {FL_WATER, 8, 1, 0};
             if (s == HC_B_SEAGRASS) {
                 uint16_t below = ppget(pp, x, y - 1, z);

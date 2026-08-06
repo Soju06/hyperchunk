@@ -58,10 +58,13 @@ static int air_or_water(uint16_t s) {
     return hc_block_is_air(s) || s == HC_B_WATER;
 }
 
-/* MultifaceBlock.canAttachTo: 지지면 완전 || 충돌면 완전 — 완전 큐브와
- * 잎(충돌 완전) 이 통과 (R1 §2.5/§3) */
+/* MultifaceBlock.canAttachTo: 지지면 완전 || 충돌면 완전 — 완전 큐브,
+ * 잎(충돌 완전), noOcclusion 풀-충돌 (copper_grate/spawner/유리 등) 이
+ * 통과 (R1 §2.5/§3; Task 14 실측: c.16.11 (261,-19,191) 골든 lichen 이
+ * waxed_copper_grate 위 down 부착 — occlusion 판정만으로는 거부돼
+ * 스프레드가 발산했다). */
 static int mf_attach_ok(uint16_t s) {
-    return hc_block_is_full_cube(s) || hc_block_is_leaves(s);
+    return hc_block_is_full_cube(s) || hc_block_collision_full(s);
 }
 
 /* getStateForPlacement(current, pos, dir) — 부적합이면 MF_NULL (R3 §1.5) */
