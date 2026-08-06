@@ -84,6 +84,12 @@ add_test(NAME router_slots COMMAND test_router_slots
          ${CMAKE_SOURCE_DIR}/golden/rng/router_seed1234567890.txt
          ${CMAKE_SOURCE_DIR}/reference)
 
+# 라이브-콘 기계 등가 (P2-2). 콘/컷/분할 경로를 프리픽스 워크와 비트
+# 대조 — 창-밖 컬럼·음수 좌표·재방문 시퀀스 포함 (테스트 헤더 주석 참조).
+add_executable(test_df_cones parity/test_df_cones.c)
+target_link_libraries(test_df_cones PRIVATE hyperchunk)
+add_test(NAME df_cones COMMAND test_df_cones ${CMAKE_SOURCE_DIR}/reference)
+
 # 노이즈 스테이지 청크 패리티 (Task 6c). 셀 시맨틱 + aquifer + veins +
 # doFill → golden 스테이지 덤프와 라인 단위 0 diff.
 add_executable(test_noise_stage parity/test_noise_stage.c)
