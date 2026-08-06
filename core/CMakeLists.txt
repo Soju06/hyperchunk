@@ -44,8 +44,12 @@ add_library(hyperchunk STATIC
   src/structures.c
   src/structures_template.c
   src/structures_mineshaft.c
+  src/sched.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 # ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc
-# 2.34+ 에서는 libc 로 통합된 호환 스텁) — D1 위반 아님.
-target_link_libraries(hyperchunk PUBLIC m)
+# 2.34+ 에서는 libc 로 통합된 호환 스텁) — D1 위반 아님. pthread 는
+# P2-3 스케줄러(sched.c)가 소유 — "스레딩은 pthread 허용" (기존 체인
+# 병렬과 동일 기준), POSIX 스레드 런타임이라 D1 위반 아님.
+find_package(Threads REQUIRED)
+target_link_libraries(hyperchunk PUBLIC m Threads::Threads)

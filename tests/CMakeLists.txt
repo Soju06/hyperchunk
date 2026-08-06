@@ -7,6 +7,12 @@ add_executable(test_arena unit/test_arena.c)
 target_link_libraries(test_arena PRIVATE hyperchunk)
 add_test(NAME arena COMMAND test_arena)
 
+# P2-3 스케줄러 속성 게이트 (FREE 충돌쌍/배리어 순서 보존 + REPLAY 순차성).
+# TSan 게이트 (check_tsan.sh) 의 스케줄러 스트레스이기도 하다.
+add_executable(test_sched unit/test_sched.c)
+target_link_libraries(test_sched PRIVATE hyperchunk)
+add_test(NAME sched COMMAND test_sched)
+
 add_executable(test_chunk unit/test_chunk.c)
 target_link_libraries(test_chunk PRIVATE hyperchunk)
 add_test(NAME chunk COMMAND test_chunk)
