@@ -265,3 +265,35 @@ minecraft:chest[facing=east,type=left,waterlogged=true]	t	t	f	f	0	1	none	probe	f
 minecraft:chest[facing=east,type=left,waterlogged=false]	t	t	f	f	0	0	none	probe	f
 minecraft:chest[facing=east,type=right,waterlogged=true]	t	t	f	f	0	1	none	probe	f
 minecraft:chest[facing=east,type=right,waterlogged=false]	t	t	f	f	0	0	none	probe	f
+# oak_fence 연결-조합 폐포 (Task 14 RESUME-8) — postprocess PPG 폴드
+# (FenceBlock.updateShape 재계산) 가 임의 연결 비트 조합을 산출한다.
+# 값 = tsv1 oak_fence 6행(:82-87) 의 family 값 그대로 (연결 비트는
+# 속성 무영향: forceSolidOn, CrossCollisionBlock.propagatesSkylightDown
+# =!waterlogged, collision ysize=1.5). dark_oak_fence 전-조합 probe
+# 행 (:12-116) 과 교차검증 — 값 동일.
+minecraft:oak_fence[east=false,north=false,south=false,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=false,north=false,south=false,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=false,north=false,south=true,waterlogged=false,west=true]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=false,north=false,south=true,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=false,north=false,south=true,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=false,north=true,south=false,waterlogged=false,west=true]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=false,north=true,south=false,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=false,north=true,south=false,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=false,north=true,south=true,waterlogged=false,west=true]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=false,north=true,south=true,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=false,north=true,south=true,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=false,south=false,waterlogged=false,west=true]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=true,north=false,south=false,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=false,south=false,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=false,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=true,north=false,south=true,waterlogged=false,west=true]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=true,north=false,south=true,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=false,south=true,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=false,waterlogged=false,west=false]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=false,waterlogged=false,west=true]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=false,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=false,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=true,waterlogged=false,west=false]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=true,waterlogged=false,west=true]	t	t	f	f	0	0	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=true,waterlogged=true,west=false]	t	t	f	f	0	1	none	family-rule	f
+minecraft:oak_fence[east=true,north=true,south=true,waterlogged=true,west=true]	t	t	f	f	0	1	none	family-rule	f

@@ -1392,6 +1392,32 @@ static const char *const NAMES[HC_B_COUNT] = {
     "minecraft:chest[facing=east,type=left,waterlogged=false]",
     "minecraft:chest[facing=east,type=right,waterlogged=true]",
     "minecraft:chest[facing=east,type=right,waterlogged=false]",
+    "minecraft:oak_fence[east=false,north=false,south=false,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=false,north=false,south=false,waterlogged=true,west=true]",
+    "minecraft:oak_fence[east=false,north=false,south=true,waterlogged=false,west=true]",
+    "minecraft:oak_fence[east=false,north=false,south=true,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=false,north=false,south=true,waterlogged=true,west=true]",
+    "minecraft:oak_fence[east=false,north=true,south=false,waterlogged=false,west=true]",
+    "minecraft:oak_fence[east=false,north=true,south=false,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=false,north=true,south=false,waterlogged=true,west=true]",
+    "minecraft:oak_fence[east=false,north=true,south=true,waterlogged=false,west=true]",
+    "minecraft:oak_fence[east=false,north=true,south=true,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=false,north=true,south=true,waterlogged=true,west=true]",
+    "minecraft:oak_fence[east=true,north=false,south=false,waterlogged=false,west=true]",
+    "minecraft:oak_fence[east=true,north=false,south=false,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=true,north=false,south=false,waterlogged=true,west=true]",
+    "minecraft:oak_fence[east=true,north=false,south=true,waterlogged=false,west=false]",
+    "minecraft:oak_fence[east=true,north=false,south=true,waterlogged=false,west=true]",
+    "minecraft:oak_fence[east=true,north=false,south=true,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=true,north=false,south=true,waterlogged=true,west=true]",
+    "minecraft:oak_fence[east=true,north=true,south=false,waterlogged=false,west=false]",
+    "minecraft:oak_fence[east=true,north=true,south=false,waterlogged=false,west=true]",
+    "minecraft:oak_fence[east=true,north=true,south=false,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=true,north=true,south=false,waterlogged=true,west=true]",
+    "minecraft:oak_fence[east=true,north=true,south=true,waterlogged=false,west=false]",
+    "minecraft:oak_fence[east=true,north=true,south=true,waterlogged=false,west=true]",
+    "minecraft:oak_fence[east=true,north=true,south=true,waterlogged=true,west=false]",
+    "minecraft:oak_fence[east=true,north=true,south=true,waterlogged=true,west=true]",
 /* T14-GEN END names */
 };
 
@@ -2516,6 +2542,32 @@ static const uint8_t FLAGS[HC_B_COUNT] = {
     F_MOTION|F_SOLID,
     F_MOTION|F_SOLID|F_WLOG,
     F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID,
+    F_MOTION|F_SOLID|F_WLOG,
+    F_MOTION|F_SOLID|F_WLOG,
 /* T14-GEN END flags */
 };
 
@@ -2641,7 +2693,9 @@ static const uint8_t T14_DAMP[HC_B_T14_COUNT] = {
     0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
     0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
     0, 1, 0, 15, 15, 15, 1, 0, 1, 0, 1, 0,
-    1, 0,
+    1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1,
+    1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1,
+    0, 0, 1, 1,
 /* T14-GEN END damp */
 };
 static const uint8_t T14_EMIT[HC_B_T14_COUNT] = {
@@ -2722,7 +2776,9 @@ static const uint8_t T14_EMIT[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0,
 /* T14-GEN END emit */
 };
 static const uint32_t T14_OCC[HC_B_T14_COUNT] = {
@@ -2879,7 +2935,11 @@ static const uint32_t T14_OCC[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0,
     0, 0xccccf0, 0xccccf0, 0, 0, 0,
     0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0,
 /* T14-GEN END occ */
 };
 static const uint8_t T14_CFULL[HC_B_T14_COUNT] = {
@@ -2922,7 +2982,8 @@ static const uint8_t T14_CFULL[HC_B_T14_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0,
 /* T14-GEN END cfull */
 };
 
