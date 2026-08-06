@@ -860,8 +860,22 @@ static int ms_is_falling_block(uint16_t s) {
  * 위로 최대 50칸을 훑으므로 난파선 슬랩 밑을 지나는 극단 케이스에서
  * 갈릴 수 있다 — 골든 게이트에서 확인 필요. */
 static int ms_can_hang_chain_below(uint16_t s) {
-    return hc_featx_face_sturdy_full(s, 0 /* DOWN */) &&
-           !ms_is_falling_block(s);
+    /* canHangChainBelow = Block.canSupportCenter(DOWN) && !FallingBlock
+     * (:553-555). canSupportCenter 는 isFaceSturdy(DOWN, SupportType.
+     * CENTER) — FULL 이 아니다. CENTER 는 풀큐브 외에 바닥면 중앙
+     * (7..9px) 을 덮는 중앙-포스트 형상도 통과: fence 포스트 (6..10px),
+     * chain (6.5..9.5px). 실측 c.31.1 (508,21..23,23): 판자 위 지지
+     * 펜스에서 dist=1 행잉 즉시 종료 (체인 구간 공집합 = no-op) 가
+     * 바닐라 — FULL 판정은 아래로 계속 내려가 잘못된 wood 기둥을 만든다.
+     * UNSTABLE_BOTTOM_CENTER(fence gate) 는 이 월드젠 경로에 부재.
+     * 이 외 CENTER≠FULL 상태 (판/벽/모루 등) 는 리전 팔레트의 탐색
+     * 경로에 등장하지 않는다 (완료 노트 커버리지 경계). */
+    if (ms_is_falling_block(s))
+        return 0;
+    if (hc_featx_face_sturdy_full(s, 0 /* DOWN */))
+        return 1;
+    return ms_base_is(s, "minecraft:oak_fence") ||
+           ms_base_is(s, "minecraft:iron_chain");
 }
 
 /* isInInvalidLocation (MineshaftPieces.java:1038-1087) — §A.4 공통 선행.

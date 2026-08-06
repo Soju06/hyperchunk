@@ -43,6 +43,14 @@ static int32_t fdiv16(int32_t v) {
     return v >> 4;
 }
 
+/* 상태명 base 일치 (프로퍼티 무시) — structures_mineshaft.c ms_base_is
+ * 와 같은 산식 */
+static int base_is(const char *name, const char *base) {
+    size_t l = strlen(base);
+    return strncmp(name, base, l) == 0 &&
+           (name[l] == '\0' || name[l] == '[');
+}
+
 /* ---------- 유체 상태 (FluidState) ---------- */
 
 enum { FL_NONE = 0, FL_WATER = 1, FL_LAVA = 2 };
@@ -447,6 +455,64 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
             }
         }
         return s;
+    }
+    {
+        /* FenceBlock.updateShape (26.2 javap, Task 14): waterlogged →
+         * 물 틱; 수평 dir 는 그 방향 연결 비트만 재계산, 수직은 super
+         * (상태 불변). connectsTo(ns, sideSolid, opp) = isSameFence(ns)
+         * || (!isExceptionForConnection(ns) && sideSolid[FULL]).
+         * 실측 클래스: 마인샤프트 지지 펜스의 구운 연결
+         * (fence[west/east=true] 회전 배치) 은 placeBlock 이
+         * SHAPE_CHECK_BLOCKS 마킹 → 승격 폴드가 이웃(cave_air) 기준
+         * all-false 로 재계산해 저장한다 (26셀). 이 리전 팔레트의
+         * 펜스는 oak 뿐 (isSameFence: wooden 상호 연결;
+         * nether_brick_fence 는 비-wooden — 부재). fence gate 부재. */
+        const char *nm = hc_block_name(s);
+        if (strncmp(nm, "minecraft:oak_fence[", 20) == 0) {
+            if (strstr(nm, "waterlogged=true") != NULL) {
+                fl_t wf = {FL_WATER, 8, 1, 0};
+                sched_fluid(pp, x, y, z, wf, 5);
+            }
+            if (dir < 2)
+                return s;
+            const char *nn = hc_block_name(ns);
+            int         connect;
+            if (strstr(nn, "_fence[") != NULL &&
+                strncmp(nn, "minecraft:nether_brick_fence", 28) != 0) {
+                connect = 1;
+            } else if (hc_block_is_leaves(ns) ||
+                       base_is(nn, "minecraft:barrier") ||
+                       base_is(nn, "minecraft:carved_pumpkin") ||
+                       base_is(nn, "minecraft:jack_o_lantern") ||
+                       base_is(nn, "minecraft:melon") ||
+                       base_is(nn, "minecraft:pumpkin")) {
+                connect = 0; /* isExceptionForConnection */
+            } else {
+                connect = hc_featx_face_sturdy_full(ns, dir ^ 1);
+            }
+            int e_ = strstr(nm, "east=true") != NULL;
+            int n_ = strstr(nm, "north=true") != NULL;
+            int s_ = strstr(nm, "south=true") != NULL;
+            int wl = strstr(nm, "waterlogged=true") != NULL;
+            int w_ = strstr(nm, "west=true") != NULL;
+            switch (dir) {
+            case 2: n_ = connect; break;
+            case 3: s_ = connect; break;
+            case 4: w_ = connect; break;
+            default: e_ = connect; break;
+            }
+            char nb[128];
+            snprintf(nb, sizeof nb,
+                     "minecraft:oak_fence[east=%s,north=%s,south=%s,"
+                     "waterlogged=%s,west=%s]",
+                     e_ ? "true" : "false", n_ ? "true" : "false",
+                     s_ ? "true" : "false", wl ? "true" : "false",
+                     w_ ? "true" : "false");
+            int32_t id = hc_block_by_name(nb, (int32_t)strlen(nb));
+            if (id < 0)
+                pp_die("oak_fence state missing in table", x, y, z);
+            return (uint16_t)id;
+        }
     }
     {
         /* 수생 식물/워터로그 일반 — updateShape 물 틱 (26.2 디컴파일 핀,
