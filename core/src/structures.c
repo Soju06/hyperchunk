@@ -700,7 +700,11 @@ static void lcg_large_feature_seed(hc_lcg_t *r, int64_t seed, int32_t cx,
     hc_lcg_init(r, seed);
     int64_t a = hc_lcg_next_long(r);
     int64_t b = hc_lcg_next_long(r);
-    hc_lcg_init(r, (int64_t)cx * a ^ (int64_t)cz * b ^ seed);
+    /* Java long 곱은 래핑 — C signed 곱 UB 를 무부호 래핑으로 우회
+     * (2의 보수 비트 동일, XOR 은 비트 연산이라 무관) */
+    uint64_t mix = (uint64_t)(int64_t)cx * (uint64_t)a ^
+                   (uint64_t)(int64_t)cz * (uint64_t)b ^ (uint64_t)seed;
+    hc_lcg_init(r, (int64_t)mix);
 }
 
 /* legacy_type_3 (C.2): nextDouble < (double)0.004F */
