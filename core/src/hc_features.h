@@ -153,6 +153,11 @@ typedef struct hc_feat_region {
     /* Task 14: postProcess updateShape 의 canSurvive 폴드용 레지스트리
      * (#supports_vegetation 등). NULL = 기존 지지-상실 근사만. */
     const struct hc_feat_reg *survive_reg;
+    /* P2-3: FREE 스케줄러 읽기-반경 가드 (debug assert). 데코/pp 의 읽기
+     * 풋프린트는 코드-유도상 center±2 청크 안이고 스케줄러 셀 신고도
+     * ±2 다 — 이 전제가 깨지면 (미래 데이터팩의 원거리 읽기) 무음
+     * 오염이 아니라 즉사해야 한다. 0 = 끔 (REPLAY 기본). */
+    int free_read_guard;
 } hc_feat_region_t;
 
 hc_chunk_t *hc_feat_region_chunk(const hc_feat_region_t *rg, int32_t cx,

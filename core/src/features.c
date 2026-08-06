@@ -47,6 +47,13 @@ uint16_t hc_feat_get_block(const hc_feat_region_t *rg, int32_t x, int32_t y,
      * 쓰는 술어(isAir/유체/태그/isSolid)에서 결과 동일) */
     if (y < HC_MIN_Y || y > HC_MAX_Y)
         return HC_B_AIR;
+#ifndef NDEBUG
+    if (rg->free_read_guard) { /* hc_features.h 필드 주석 (P2-3) */
+        int32_t dcx = floor_div16(x) - rg->center_cx;
+        int32_t dcz = floor_div16(z) - rg->center_cz;
+        assert(dcx >= -2 && dcx <= 2 && dcz >= -2 && dcz <= 2);
+    }
+#endif
     hc_chunk_t *c = hc_feat_region_chunk(rg, floor_div16(x), floor_div16(z));
     return c->states[hc_idx(x & 15, y, z & 15)];
 }
@@ -330,6 +337,13 @@ static void wg_prime_one(hc_chunk_t *c, int wg) {
 
 int32_t hc_feat_height(hc_feat_region_t *rg, int hm_type, int32_t x,
                        int32_t z) {
+#ifndef NDEBUG
+    if (rg->free_read_guard) { /* hc_features.h 필드 주석 (P2-3) */
+        int32_t dcx = floor_div16(x) - rg->center_cx;
+        int32_t dcz = floor_div16(z) - rg->center_cz;
+        assert(dcx >= -2 && dcx <= 2 && dcz >= -2 && dcz <= 2);
+    }
+#endif
     hc_chunk_t *c = hc_feat_region_chunk(rg, floor_div16(x), floor_div16(z));
     size_t col = hc_col_idx(x & 15, z & 15);
     switch (hm_type) {

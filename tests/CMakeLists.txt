@@ -223,3 +223,30 @@ add_test(NAME full_region COMMAND test_full_region
          a59632059bab42d808a24c27091d4b8786b5615405263a84ec1ba9a193223c24
          ${CMAKE_BINARY_DIR}/full_region_r.0.0.mca)
 set_tests_properties(full_region PROPERTIES TIMEOUT 5400)
+
+# P2-3: FREE 스케줄러 게이트 2종 (ADR-008 D1 + 신규 게이트).
+#  free_region_golden — 골든 이력 (σ_g,Λ_g) 을 FREE 정책으로 실행해도
+#    canonical 이 골든 상수와 동일 = FREE-vs-REPLAY 동일성 (REPLAY==상수는
+#    full_region 이 증명). pp 마킹 교차검증 포함.
+#  free_region_own — 자체 이력 (σ*=체스판, Λ*=버킷 경계, π*=행우선) 을
+#    REPLAY 와 FREE 로 두 번 실행, canonical 동일성을 러너가 판정.
+add_executable(test_free_region parity/test_free_region.c)
+target_link_libraries(test_free_region PRIVATE hyperchunk pthread)
+add_test(NAME free_region_golden COMMAND test_free_region
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_region_seed1234567890.txt
+         1234567890
+         ${CMAKE_SOURCE_DIR}/golden/region-ref
+         a59632059bab42d808a24c27091d4b8786b5615405263a84ec1ba9a193223c24
+         golden-free)
+set_tests_properties(free_region_golden PROPERTIES TIMEOUT 5400)
+add_test(NAME free_region_own COMMAND bash
+         ${CMAKE_SOURCE_DIR}/scripts/check_free_vs_replay.sh
+         $<TARGET_FILE:test_free_region>
+         ${CMAKE_SOURCE_DIR}/reference
+         ${CMAKE_SOURCE_DIR}/golden/stages/seed1234567890
+         ${CMAKE_SOURCE_DIR}/golden/rng/biome_band_region_seed1234567890.txt
+         1234567890
+         ${CMAKE_SOURCE_DIR}/golden/region-ref)
+set_tests_properties(free_region_own PROPERTIES TIMEOUT 5400)
