@@ -21,6 +21,26 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "bench-o2",
+      "displayName": "Bench -O2 (Release + -g for perf symbolization; P2-0)",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build-bench-o2",
+      "cacheVariables": {
+        "HC_OPT_LEVEL": "-O2",
+        "CMAKE_C_FLAGS": "-g"
+      }
+    },
+    {
+      "name": "bench-o3",
+      "displayName": "Bench -O3 (Release + -g; FP 플래그는 동일 — parity_gate 로 판정)",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build-bench-o3",
+      "cacheVariables": {
+        "HC_OPT_LEVEL": "-O3",
+        "CMAKE_C_FLAGS": "-g"
+      }
     }
   ]
 }

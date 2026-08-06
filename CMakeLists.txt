@@ -8,8 +8,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ADR-004 D3: FMA 전면 금지. 패리티 불변식.
 # -ffp-contract=off 가 핵심. mul+add 를 FMA 로 접는 것을 막는다.
+# HC_OPT_LEVEL 은 O-레벨만 바꾼다 (P2-0 -O2/-O3 비교용, bench-o2/o3 프리셋).
+# FP 플래그는 협상 불가라 캐시 변수로 노출하지 않는다.
+set(HC_OPT_LEVEL "-O2" CACHE STRING "Optimization level flag (-O2/-O3)")
 add_compile_options(
-  -O2
+  ${HC_OPT_LEVEL}
   -ffp-contract=off
   -fno-fast-math
   -Wall -Wextra -Werror
@@ -30,5 +33,6 @@ endif()
 
 add_subdirectory(core)
 add_subdirectory(cli)
+add_subdirectory(bench)
 enable_testing()
 add_subdirectory(tests)

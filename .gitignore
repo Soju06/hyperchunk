@@ -56,3 +56,6 @@ __pycache__/
 # vanilla server debris if a jar is ever launched from repo root
 logs/
 build-release/
+
+# P2-0 bench raw results — local-only
+bench/results/
