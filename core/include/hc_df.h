@@ -159,4 +159,48 @@ typedef struct {
 double hc_df_eval_ex(const hc_df_graph_t *g, double x, double y, double z,
                      double *scratch, const hc_df_cellctx_t *cc);
 
+/* --- (root×mode) 라이브-콘 평가 (P2-1) ---
+ *
+ * 프리픽스 [0..root] 워크는 root 의 실제 의존 콘 대비 수십~수백 배의
+ * 죽은 노드를 평가한다 (P2-0 §5). 콘 리스트(오름차순 노드 인덱스 ==
+ * 위상 순서)를 IR 빌드 시 1회 산출해 두고 eval 은 콘만 방문한다.
+ * 값-불변 최적화다: 평가 경로에 RNG 가 없고 (시딩은 전부 컴파일 타임)
+ * eval_node 는 순수라 죽은 값 생략은 관측 불가. 남는 노드의 연산
+ * 순서는 프리픽스 워크와 동일하다 (둘 다 인덱스 오름차순).
+ *
+ * 모드별 컷 규칙 (hc_df_cellctx_t 모드 시맨틱과 1:1):
+ *  - INTERPOLATED: CELL/BLOCK 은 셀 상태(lerp3/점진 lerp)만 읽는다 —
+ *    자식 컷. SP 는 pass-through — 자식 포함.
+ *  - FLAT_CACHE: CELL/BLOCK 평가 좌표는 청크 안(쿼트 창 안) 보장이라
+ *    테이블 히트만 발생 — 자식 컷. SP 는 창-밖 폴백(aquifer 의 청크 밖
+ *    컬럼 조회)이 실재하므로 자식을 '보수적으로 포함'하고, eval 의
+ *    폴백 경로 mask assert 가 두 가정 모두를 감시한다.
+ *  - FIND_TOP_SURFACE: density(a) 는 자체 ipool 콘이 sc2 로 자족
+ *    평가된다 — b(upper_bound)만 포함. FTS 는 SP 콘 전용 (바닐라가
+ *    fresh SinglePointContext 로 평가) — 비-SP 도달은 -1 fail-loud.
+ *
+ * 전제: 그래프의 모든 INTERPOLATED/FLAT_CACHE 마커가 셀 상태를 갖는
+ * 문맥(cc)에서 쓴다 — hc_nc_init 이 전 마커에 상태를 부여한다 (바닐라
+ * mapAll 과 동형). cc == NULL 문맥은 콘을 쓰지 말 것 (마커가 전부
+ * pass-through 라 SP 규칙 외 컷이 성립하지 않는다). */
+
+/* roots 의 mode 별 의존 콘을 mark ([g->n], 호출자 0-초기화) 에 마크하고
+ * 콘 크기를 돌려준다. -1 = FTS 가 비-SP 콘에 도달 (지원 밖). */
+int32_t hc_df_cone_mark(const hc_df_graph_t *g, hc_df_mode_t mode,
+                        const int32_t *roots, int32_t n_roots, uint8_t *mark);
+
+/* mark 를 오름차순 리스트로 수집. out 용량 = hc_df_cone_mark 반환값 */
+void hc_df_cone_collect(const hc_df_graph_t *g, const uint8_t *mark,
+                        int32_t *out);
+
+/* 콘 평가. cone 은 오름차순 (== 위상 순서), scratch 요건은 hc_df_eval
+ * 과 동일 (2*n — 뒤 절반은 FTS 용). root < 0 이면 scratch 만 채운다
+ * (다중-루트 단일-워크: 호출자가 scratch[각 root] 를 읽는다 —
+ * fill_slice). mask 는 debug assert 전용 (NULL 허용): 마커 폴백이 콘
+ * 밖 노드(스테일 scratch)를 읽으면 발화한다. */
+double hc_df_eval_cone(const hc_df_graph_t *g, const int32_t *cone,
+                       int32_t n_cone, int32_t root, double x, double y,
+                       double z, double *scratch, const hc_df_cellctx_t *cc,
+                       const uint8_t *mask);
+
 #endif /* HC_DF_H */

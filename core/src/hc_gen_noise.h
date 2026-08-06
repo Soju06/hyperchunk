@@ -59,11 +59,32 @@ typedef struct {
     int should_schedule_fluid_update;
 } hc_aquifer_t;
 
+/* (root×mode) 라이브 콘 — hc_nc_init 이 IR 위에서 1회 산출 (P2-1).
+ * list 는 오름차순 노드 인덱스, mask 는 eval 의 debug assert 용 멤버십. */
+typedef struct {
+    int32_t        root; /* 디스패치 키 (노드 인덱스), 다중-루트 콘은 -1 */
+    int32_t        len;
+    const int32_t *list;
+    const uint8_t *mask; /* [g->n] */
+} hc_nc_cone_t;
+
+enum { HC_NC_N_SP_CONES = 6, HC_NC_N_BLOCK_CONES = 4 };
+
 /* NoiseChunk — 셀 상태 기계 + flat_cache 테이블 + psl 메모 + aquifer. */
 typedef struct hc_noise_chunk_s {
     const hc_df_graph_t *g;
     hc_noise_roots_t     roots;
     double              *scratch; /* 2 * g->n */
+
+    /* 라이브 콘 (P2-1). 고정 슬롯×모드 조합만 — 디스패치 미스는 종전
+     * 프리픽스 워크 폴백 (항상 옳고 느릴 뿐). */
+    hc_nc_cone_t cones_sp[HC_NC_N_SP_CONES]; /* psl, erosion, depth,
+                                              * floodedness, spread, lava */
+    hc_nc_cone_t cones_block[HC_NC_N_BLOCK_CONES]; /* barrier, vein_toggle,
+                                                    * vein_ridged, vein_gap */
+    hc_nc_cone_t  cone_cell;   /* final_density (CELL) */
+    hc_nc_cone_t  cone_slice;  /* interp 자식 union (SP) — fill_slice */
+    hc_nc_cone_t *cones_flat;  /* [n_flat] flat_cache 자식 (SP) — 테이블 */
 
     /* wrapNew 디스패치 (hc_df_cellctx_t 가 참조) */
     hc_df_cellctx_t cc;

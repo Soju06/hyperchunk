@@ -25,22 +25,49 @@ static const hc_df_cellctx_t *nc_cc(hc_noise_chunk_t *nc, hc_df_mode_t mode) {
     return &nc->cc;
 }
 
-static double nc_eval(hc_noise_chunk_t *nc, int32_t root, double x, double y,
-                      double z, hc_df_mode_t mode) {
+/* 프리픽스 워크 폴백 — 콘 디스패치 미스 전용 (항상 옳고 느릴 뿐) */
+static double nc_eval_prefix(hc_noise_chunk_t *nc, int32_t root, double x,
+                             double y, double z, hc_df_mode_t mode) {
     hc_df_graph_t g = *nc->g; /* root 만 바꾼 얕은 사본 */
     g.root = root;
     return hc_df_eval_ex(&g, x, y, z, nc->scratch, nc_cc(nc, mode));
 }
 
+/* root 디스패치 (엔트리 ≤ 6 선형 탐색 — eval 비용 대비 무시 가능) */
+static const hc_nc_cone_t *find_cone(const hc_nc_cone_t *arr, int32_t n,
+                                     int32_t root) {
+    for (int32_t i = 0; i < n; i++)
+        if (arr[i].root == root)
+            return &arr[i];
+    return NULL;
+}
+
+static double nc_eval_cone(hc_noise_chunk_t *nc, const hc_nc_cone_t *co,
+                           int32_t root, double x, double y, double z,
+                           hc_df_mode_t mode) {
+    return hc_df_eval_cone(nc->g, co->list, co->len, root, x, y, z,
+                           nc->scratch, nc_cc(nc, mode), co->mask);
+}
+
 double hc_nc_eval_sp(hc_noise_chunk_t *nc, int32_t root, int32_t x, int32_t y,
                      int32_t z) {
-    return nc_eval(nc, root, (double)x, (double)y, (double)z, HC_DF_MODE_SP);
+    const hc_nc_cone_t *co = find_cone(nc->cones_sp, HC_NC_N_SP_CONES, root);
+    if (co)
+        return nc_eval_cone(nc, co, root, (double)x, (double)y, (double)z,
+                            HC_DF_MODE_SP);
+    return nc_eval_prefix(nc, root, (double)x, (double)y, (double)z,
+                          HC_DF_MODE_SP);
 }
 
 double hc_nc_eval_block(hc_noise_chunk_t *nc, int32_t root, int32_t x,
                         int32_t y, int32_t z) {
-    return nc_eval(nc, root, (double)x, (double)y, (double)z,
-                   HC_DF_MODE_BLOCK);
+    const hc_nc_cone_t *co =
+        find_cone(nc->cones_block, HC_NC_N_BLOCK_CONES, root);
+    if (co)
+        return nc_eval_cone(nc, co, root, (double)x, (double)y, (double)z,
+                            HC_DF_MODE_BLOCK);
+    return nc_eval_prefix(nc, root, (double)x, (double)y, (double)z,
+                          HC_DF_MODE_BLOCK);
 }
 
 /* Mth.floor: (int)Math.floor(d) — Java d2i 는 saturating, NaN → 0 */
@@ -103,20 +130,27 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
                           int32_t abs_cell_x) {
     /* fillSlice(boolean, cellX): cellStartBlockX = cellX*cellWidth.
      * 슬라이스 포인트는 전부 청크 쿼트 창 안이라 flat_cache 는 항상
-     * 테이블 히트다 — SP 모드 평가가 바닐라와 좌표 단위로 일치한다. */
+     * 테이블 히트다 — SP 모드 평가가 바닐라와 좌표 단위로 일치한다.
+     *
+     * 다중-루트 단일-워크 (P2-1): 점당 interp 자식 union 콘을 한 번만
+     * 걷고 각 자식 값을 scratch 에서 회수한다 (hc_df.h 의 의도된 다중-
+     * 루트 읽기). 평가는 순수라 (RNG 없음) 자식별 개별 워크와 값이
+     * 비트 동일하다 — 공유 서브트리 중복 평가만 사라진다. */
     nc->cell_start_x = abs_cell_x * nc->cell_width;
     int32_t stride = nc->cell_count_y + 1;
     for (int32_t j = 0; j <= nc->cell_count_xz; j++) {
         int32_t bz = (nc->first_cell_z + j) * nc->cell_width;
-        for (int32_t k = 0; k < nc->n_interp; k++) {
-            hc_df_interp_t *it = &nc->interp[k];
-            double *slice = which == 0 ? it->slice0 : it->slice1;
-            int32_t child = nc->g->nodes[it->node].a;
-            for (int32_t i = 0; i <= nc->cell_count_y; i++) {
-                int32_t by = (i + nc->cell_noise_min_y) * nc->cell_height;
+        for (int32_t i = 0; i <= nc->cell_count_y; i++) {
+            int32_t by = (i + nc->cell_noise_min_y) * nc->cell_height;
+            hc_df_eval_cone(nc->g, nc->cone_slice.list, nc->cone_slice.len,
+                            -1, (double)nc->cell_start_x, (double)by,
+                            (double)bz, nc->scratch,
+                            nc_cc(nc, HC_DF_MODE_SP), nc->cone_slice.mask);
+            for (int32_t k = 0; k < nc->n_interp; k++) {
+                hc_df_interp_t *it = &nc->interp[k];
+                double *slice = which == 0 ? it->slice0 : it->slice1;
                 slice[j * stride + i] =
-                    nc_eval(nc, child, (double)nc->cell_start_x, (double)by,
-                            (double)bz, HC_DF_MODE_SP);
+                    nc->scratch[nc->g->nodes[it->node].a];
             }
         }
     }
@@ -165,9 +199,10 @@ void hc_nc_select_cell_yz(hc_noise_chunk_t *nc, int32_t cell_y,
                 int32_t bx = nc->cell_start_x + ix;
                 int32_t by = nc->cell_start_y + iy;
                 int32_t bz = nc->cell_start_z + iz;
-                double  d = nc_eval(nc, nc->roots.final_density, (double)bx,
-                                    (double)by, (double)bz,
-                                    HC_DF_MODE_CELL);
+                double  d = nc_eval_cone(nc, &nc->cone_cell,
+                                         nc->roots.final_density, (double)bx,
+                                         (double)by, (double)bz,
+                                         HC_DF_MODE_CELL);
                 /* Ap2 ADD fillArray 의 원소별 덧셈 — beardifier 부재/
                  * EMPTY/affectedBox 밖은 정확히 +0.0 (-0.0 정규화 동일) */
                 nc->density_cell[ai++] =
@@ -214,6 +249,30 @@ void hc_nc_swap_slices(hc_noise_chunk_t *nc) {
         nc->interp[k].slice0 = nc->interp[k].slice1;
         nc->interp[k].slice1 = tmp;
     }
+}
+
+/* 콘 1개 산출 — mark 버퍼가 그대로 eval assert 용 mask 가 된다 (P2-1) */
+static int cone_build(hc_noise_chunk_t *nc, hc_arena_t *arena,
+                      hc_df_mode_t mode, const int32_t *roots,
+                      int32_t n_roots, int32_t dispatch_root,
+                      hc_nc_cone_t *out) {
+    const hc_df_graph_t *g = nc->g;
+    uint8_t             *mark = hc_arena_alloc(arena, (size_t)g->n, 1);
+    if (!mark)
+        return -1;
+    memset(mark, 0, (size_t)g->n);
+    int32_t len = hc_df_cone_mark(g, mode, roots, n_roots, mark);
+    if (len < 0)
+        return -1; /* FTS 가 비-SP 콘에 등장 — 콘 규칙 위반 (fail-loud) */
+    int32_t *list = hc_arena_alloc(arena, sizeof(int32_t) * (size_t)len, 4);
+    if (len > 0 && !list)
+        return -1;
+    hc_df_cone_collect(g, mark, list);
+    out->root = dispatch_root;
+    out->len = len;
+    out->list = list;
+    out->mask = mark;
+    return 0;
 }
 
 int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
@@ -313,19 +372,71 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
     nc->cc.interp = nc->interp;
     nc->cc.flat = nc->flat;
 
+    /* --- (root×mode) 라이브 콘 산출 (P2-1) — 첫 평가 전 1회.
+     * 노이즈 스테이지의 root×모드 조합은 고정이다: final_density 는
+     * CELL(selectCellYZ), barrier/vein_* 은 BLOCK(블록 루프),
+     * 나머지(psl/erosion/depth/floodedness/spread/lava)는 SP. */
+    {
+        const int32_t sp_roots[HC_NC_N_SP_CONES] = {
+            roots->preliminary_surface_level, roots->erosion, roots->depth,
+            roots->fluid_level_floodedness,   roots->fluid_level_spread,
+            roots->lava,
+        };
+        const int32_t block_roots[HC_NC_N_BLOCK_CONES] = {
+            roots->barrier, roots->vein_toggle, roots->vein_ridged,
+            roots->vein_gap,
+        };
+        for (int32_t i = 0; i < HC_NC_N_SP_CONES; i++)
+            if (cone_build(nc, arena, HC_DF_MODE_SP, &sp_roots[i], 1,
+                           sp_roots[i], &nc->cones_sp[i]))
+                return -1;
+        for (int32_t i = 0; i < HC_NC_N_BLOCK_CONES; i++)
+            if (cone_build(nc, arena, HC_DF_MODE_BLOCK, &block_roots[i], 1,
+                           block_roots[i], &nc->cones_block[i]))
+                return -1;
+        if (cone_build(nc, arena, HC_DF_MODE_CELL, &roots->final_density, 1,
+                       roots->final_density, &nc->cone_cell))
+            return -1;
+
+        /* fill_slice 단일-워크용 interp 자식 union (SP) */
+        int32_t *slice_roots = hc_arena_alloc(
+            arena, sizeof(int32_t) * (size_t)(nc->n_interp + 1), 4);
+        if (!slice_roots)
+            return -1;
+        for (int32_t k = 0; k < nc->n_interp; k++)
+            slice_roots[k] = g->nodes[nc->interp[k].node].a;
+        if (cone_build(nc, arena, HC_DF_MODE_SP, slice_roots, nc->n_interp,
+                       -1, &nc->cone_slice))
+            return -1;
+
+        /* flat_cache 테이블 구축용 자식 콘 (SP) */
+        nc->cones_flat = hc_arena_alloc(
+            arena, sizeof(hc_nc_cone_t) * (size_t)(nc->n_flat + 1),
+            _Alignof(hc_nc_cone_t));
+        if (!nc->cones_flat)
+            return -1;
+        for (int32_t f = 0; f < nc->n_flat; f++) {
+            int32_t child = g->nodes[nc->flat[f].node].a;
+            if (cone_build(nc, arena, HC_DF_MODE_SP, &child, 1, child,
+                           &nc->cones_flat[f]))
+                return -1;
+        }
+    }
+
     /* flat_cache 테이블 구축 — 노드 인덱스 오름차순 == 바닐라 mapAll 의
      * bottom-up 생성 순서 (자식 테이블이 부모 구축 시점에 준비됨).
      * FlatCache 생성자: SinglePointContext(quart<<2, 0, quart<<2) 로
      * wrapped 를 25점 평가. */
     for (int32_t f = 0; f < nc->n_flat; f++) {
-        hc_df_flat_t *fl = &nc->flat[f];
-        int32_t       child = g->nodes[fl->node].a;
+        hc_df_flat_t       *fl = &nc->flat[f];
+        const hc_nc_cone_t *co = &nc->cones_flat[f];
         for (int32_t qi = 0; qi <= nc->noise_size_xz; qi++) {
             int32_t bx = (int32_t)((uint32_t)(nc->first_noise_x + qi) << 2);
             for (int32_t qj = 0; qj <= nc->noise_size_xz; qj++) {
                 int32_t bz = (int32_t)((uint32_t)(nc->first_noise_z + qj) << 2);
-                fl->values[qi + qj * flat_size] = nc_eval(
-                    nc, child, (double)bx, 0.0, (double)bz, HC_DF_MODE_SP);
+                fl->values[qi + qj * flat_size] =
+                    nc_eval_cone(nc, co, co->root, (double)bx, 0.0,
+                                 (double)bz, HC_DF_MODE_SP);
             }
         }
     }

@@ -137,26 +137,30 @@ static double interp_lerp3(const hc_df_cellctx_t *cc,
 
 /* 노드 하나 평가. sc 는 활성 scratch (피연산자 값). sc2 는
  * FIND_TOP_SURFACE 전용 보조 버퍼 — NULL 이면 FTS 금지 문맥(콘 내부)이다.
- * 컴파일러가 FTS 콘 안에 FTS 가 없음을 보장한다. */
+ * 컴파일러가 FTS 콘 안에 FTS 가 없음을 보장한다. mask 는 라이브-콘
+ * 멤버십 (debug assert 전용, NULL 허용) — 마커 폴백이 콘 밖 노드를
+ * 읽으면 스테일 scratch 이므로 발화한다. */
 static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
                         double y, double z, double *sc, double *sc2,
-                        const hc_df_cellctx_t *cc);
+                        const hc_df_cellctx_t *cc, const uint8_t *mask);
 
 /* FTS density 콘 재평가: ipool[off..off+len) 은 오름차순 노드 인덱스라
- * 위상 순서가 보존된다. 콘 밖 노드는 건드리지 않는다. */
+ * 위상 순서가 보존된다. 콘 밖 노드는 건드리지 않는다. mark_deps 가 전
+ * 의존을 담아 자족적이므로 mask 검사는 불필요 (NULL). */
 static double eval_cone(const hc_df_graph_t *g, int32_t off, int32_t len,
                         int32_t root, double x, double y, double z,
                         double *sc2, const hc_df_cellctx_t *cc) {
     for (int32_t j = 0; j < len; j++) {
         int32_t idx = g->ipool[off + j];
-        sc2[idx] = eval_node(g, idx, x, y, z, sc2, NULL, cc);
+        sc2[idx] = eval_node(g, idx, x, y, z, sc2, NULL, cc, NULL);
     }
     return sc2[root];
 }
 
 static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
                         double y, double z, double *sc, double *sc2,
-                        const hc_df_cellctx_t *cc) {
+                        const hc_df_cellctx_t *cc, const uint8_t *mask) {
+    (void)mask; /* NDEBUG 에서는 assert 전용 */
     const hc_df_node_t *nd = &g->nodes[idx];
     switch (nd->op) {
     case HC_DF_CONST:
@@ -321,6 +325,8 @@ static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
             if (cc->mode == HC_DF_MODE_BLOCK)
                 return it->value;
         }
+        /* SP pass-through — 콘 평가라면 자식이 콘에 있어야 한다 */
+        assert(!mask || mask[nd->a]);
         return sc[nd->a];
 
     case HC_DF_FLAT_CACHE: {
@@ -338,6 +344,9 @@ static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
             if (i >= 0 && j >= 0 && i < size && j < size)
                 return cc->flat[cc->flat_of[idx]].values[i + j * size];
         }
+        /* 창-밖 폴백 — SP 콘은 자식을 보수 포함한다. CELL/BLOCK 콘은
+         * 자식을 컷했으므로 여기 도달하면 콘 계산 버그 (즉시 발화). */
+        assert(!mask || mask[nd->a]);
         return sc[nd->a];
     }
 
@@ -367,7 +376,7 @@ double hc_df_eval_ex(const hc_df_graph_t *g, double x, double y, double z,
      * 한 그래프를 공유할 때 root 만 바꿔 불필요한 꼬리를 건너뛴다. */
     for (int32_t i = 0; i <= g->root; i++) {
         assert(g->nodes[i].a < i && g->nodes[i].b < i && g->nodes[i].c < i);
-        scratch[i] = eval_node(g, i, x, y, z, scratch, sc2, cc);
+        scratch[i] = eval_node(g, i, x, y, z, scratch, sc2, cc, NULL);
     }
     return scratch[g->root];
 }
@@ -375,4 +384,100 @@ double hc_df_eval_ex(const hc_df_graph_t *g, double x, double y, double z,
 double hc_df_eval(const hc_df_graph_t *g, double x, double y, double z,
                   double *scratch) {
     return hc_df_eval_ex(g, x, y, z, scratch, NULL);
+}
+
+/* --- (root×mode) 라이브-콘 산출 + 평가 (P2-1, 규칙은 hc_df.h 주석) --- */
+
+/* spline_sample 은 coord 를 sc 에서 읽는다 — 중첩 스플라인까지 마크.
+ * coord/중첩 val 은 스플라인을 참조하는 노드보다 먼저 컴파일되므로
+ * (compile_spline_spec 순서) 하향 스윕이 이후에 그 의존을 확장한다. */
+static void cone_mark_spline(const hc_df_graph_t *g, int32_t si,
+                             uint8_t *mark) {
+    const hc_df_spline_t *s = &g->splines[si];
+    if (s->n == 0)
+        return;
+    mark[s->coord] = 1;
+    for (int32_t j = 0; j < s->n; j++)
+        cone_mark_spline(g, s->val[j], mark);
+}
+
+int32_t hc_df_cone_mark(const hc_df_graph_t *g, hc_df_mode_t mode,
+                        const int32_t *roots, int32_t n_roots,
+                        uint8_t *mark) {
+    /* 하향 스윕: 위상 정렬(피연산자 인덱스 < 노드 인덱스)이라 i 를
+     * 내림차순으로 지나며 마크된 노드의 피연산자를 마크하면 전이 닫힘이
+     * 완성된다 — 재귀 없음, O(top). */
+    int32_t top = -1;
+    for (int32_t r = 0; r < n_roots; r++) {
+        assert(roots[r] >= 0 && roots[r] < g->n);
+        mark[roots[r]] = 1;
+        if (roots[r] > top)
+            top = roots[r];
+    }
+    int32_t len = 0;
+    for (int32_t i = top; i >= 0; i--) {
+        if (!mark[i])
+            continue;
+        len++;
+        const hc_df_node_t *nd = &g->nodes[i];
+        switch (nd->op) {
+        case HC_DF_INTERPOLATED:
+        case HC_DF_FLAT_CACHE:
+            /* CELL/BLOCK: 셀 상태/테이블만 읽는다 — 자식 컷.
+             * SP: pass-through/창-밖 폴백 — 자식 보수 포함. */
+            if (mode == HC_DF_MODE_SP)
+                mark[nd->a] = 1;
+            break;
+        case HC_DF_FIND_TOP_SURFACE:
+            /* density(a) 는 자체 ipool 콘이 sc2 로 자족 — b 만.
+             * FTS 는 fresh SinglePointContext 시맨틱이라 SP 콘 전용. */
+            if (mode != HC_DF_MODE_SP) {
+                assert(!"find_top_surface in non-SP cone");
+                return -1;
+            }
+            mark[nd->b] = 1;
+            break;
+        case HC_DF_INTERVAL_SELECT: {
+            /* 선택은 런타임 값 — 함수 전부 포함 (FTS build_cone 동형) */
+            mark[nd->a] = 1;
+            int32_t nf = g->ipool[nd->aux];
+            for (int32_t k = 0; k < nf; k++)
+                mark[g->ipool[nd->aux + 1 + k]] = 1;
+            break;
+        }
+        case HC_DF_SPLINE:
+            cone_mark_spline(g, nd->aux, mark);
+            break;
+        default:
+            if (nd->a >= 0)
+                mark[nd->a] = 1;
+            if (nd->b >= 0)
+                mark[nd->b] = 1;
+            if (nd->c >= 0)
+                mark[nd->c] = 1;
+        }
+    }
+    return len;
+}
+
+void hc_df_cone_collect(const hc_df_graph_t *g, const uint8_t *mark,
+                        int32_t *out) {
+    int32_t k = 0;
+    for (int32_t i = 0; i < g->n; i++)
+        if (mark[i])
+            out[k++] = i;
+}
+
+double hc_df_eval_cone(const hc_df_graph_t *g, const int32_t *cone,
+                       int32_t n_cone, int32_t root, double x, double y,
+                       double z, double *scratch, const hc_df_cellctx_t *cc,
+                       const uint8_t *mask) {
+    double *sc2 = scratch + g->n;
+    for (int32_t j = 0; j < n_cone; j++) {
+        int32_t i = cone[j];
+        assert(j == 0 || cone[j - 1] < i); /* 오름차순 == 위상 순서 */
+        scratch[i] = eval_node(g, i, x, y, z, scratch, sc2, cc, mask);
+    }
+    assert(root < 0 || !mask || mask[root]);
+    return root >= 0 ? scratch[root] : 0.0;
 }

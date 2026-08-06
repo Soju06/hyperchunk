@@ -24,6 +24,15 @@ static double clamped_map(double v, double a, double b, double c, double d) {
 }
 
 int hc_ore_vein_block(hc_noise_chunk_t *nc, int32_t x, int32_t y, int32_t z) {
+    /* y-범위 선가드 (P2-1, 값-불변): 두 VeinType 의 y-범위 합집합
+     * [-60,-8]∪[0,50] 밖이면 toggle 부호와 무관하게 below_top 또는
+     * above_bottom 이 음수라 항상 -1 이다 (y>50: copper 50-y<0 /
+     * iron -8-y<0; y<-60: copper y-0<0 / iron y+60<0; -8<y<0:
+     * copper y-0<0 / iron -8-y<0). toggle 평가는 순수, RNG(oreRandom.at)
+     * 는 positional 이고 threshold 통과 후에만 소비 — 관측 불가. */
+    if (y > 50 || y < -60 || (y > -8 && y < 0))
+        return -1;
+
     double toggle = hc_nc_eval_block(nc, nc->roots.vein_toggle, x, y, z);
     int    is_copper = toggle > 0.0; /* dcmpl ifle — NaN → IRON */
     double abs_toggle = fabs(toggle);
