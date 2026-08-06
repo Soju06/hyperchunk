@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "hc_blocks.h"
+#include "features_internal.h" /* hc_featx_can_survive (Task 14) */
 
 static _Noreturn void pp_die(const char *what, int32_t x, int32_t y,
                              int32_t z) {
@@ -495,6 +496,18 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
         }
     }
     if (is_plantish(s)) {
+        /* VegetationBlock/MushroomBlock.updateShape (26.2 javap): 방향
+         * 무관 canSurvive 폴드 — 실패 시 AIR. 실측 클래스 (Task 14):
+         * 이웃 disk 가 아래를 sand/gravel 로 치환한 마크 셀의 초지 42+9
+         * 셀 (supports_vegetation 탈락). 매핑 패밀리만 정확 평가. */
+        if (pp->rg->survive_reg &&
+            (s == HC_B_SHORT_GRASS || s == HC_B_FERN ||
+             s == HC_B_BROWN_MUSHROOM || s == HC_B_RED_MUSHROOM)) {
+            if (!hc_featx_can_survive(pp->rg->survive_reg, pp->rg, s, x, y,
+                                      z))
+                return HC_B_AIR;
+            return s;
+        }
         /* 지지 상실 근사 (완료 노트 참조): 아래가 공기/유체가 되면 파괴
          * (스프레드 유발 지지 제거를 정확히 커버); 그 외엔 생존 no-op.
          * 측면 규칙(수련잎 등) 미모델 — 진단 카운트. */

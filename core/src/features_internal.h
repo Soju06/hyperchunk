@@ -24,6 +24,10 @@ typedef struct feat_env {
 
 _Noreturn void hc_featx_die(const char *what, const char *detail);
 int      hc_featx_mask_test(const uint64_t *mask, uint16_t id);
+/* postProcess updateShape canSurvive 폴드 (Task 14) — 매핑 상태 한정 */
+int      hc_featx_can_survive(const struct hc_feat_reg *reg,
+                              hc_feat_region_t *rg, uint16_t s, int32_t x,
+                              int32_t y, int32_t z);
 int32_t  hc_featx_iprov_sample(hc_wgr_t *r, const hc_iprov_t *p);
 uint16_t hc_featx_sprov_sample(hc_wgr_t *r, const hc_sprov_t *p);
 /* 위치 인자 버전 — noise_threshold_provider (Task 14) 만 위치를 쓴다 */

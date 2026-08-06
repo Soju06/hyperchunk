@@ -1,3 +1,4 @@
+#include "hc_light.h" /* 데코-시점 getRawBrightness (Task 14) */
 #include "hc_carvers.h" /* hc_mth_sin (Mth 테이블) */
 #include "features_internal.h"
 #include "hc_jdk_trig.h" /* ore 각도 sin/cos (JDK 스텁 이식) */
@@ -1171,11 +1172,16 @@ static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
         /* MushroomBlock.canSurvive (26.2 javap, Task 14): below 가
          * #overrides_mushroom_light_requirement (mycelium/podzol/nylium —
          * nylium 미등재) 이면 true; 아니면 getRawBrightness < 13 &&
-         * mayPlaceOn(below) = below.isSolidRender(). 월드젠 중 브라이트니스
-         * 는 0 (라이트 엔진 미가동) — 항상 통과. */
+         * mayPlaceOn(below) = below.isSolidRender(). 데코 중 라이트는
+         * 이웃 배치 flood 유입으로 0 이 아닐 수 있다 (풀-리전 실측:
+         * 버섯 단방향 초과 8셀 + PPG 마크 초과의 원인 — rg->light 로
+         * 누적 라이트 월드의 visible 스냅샷을 읽는다). */
         uint16_t below = hc_feat_get_block(e->rg, x, y - 1, z);
         if (below == HC_B_MYCELIUM || below == HC_B_PODZOL)
             return 1;
+        if (e->rg->raw_brightness &&
+            e->rg->raw_brightness(e->rg->light_ud, x, y, z) >= 13)
+            return 0;
         return hc_block_is_full_cube(below);
     }
     if (s == HC_B_PUMPKIN)
@@ -1204,6 +1210,18 @@ static int can_survive_state(feat_env_t *e, uint16_t s, int32_t x, int32_t y,
     }
     die("canSurvive unmapped block state", hc_block_name(s));
     return 0;
+}
+
+/* postProcess updateShape 의 canSurvive 폴드 (Task 14) — 호출자는 매핑
+ * 보장 상태만 넘긴다 (grass/fern/mushroom 등; can_survive_state 디스패치).
+ * env 는 reg/rg 만 쓰는 경로로 한정. */
+int hc_featx_can_survive(const hc_feat_reg_t *reg, hc_feat_region_t *rg,
+                         uint16_t s, int32_t x, int32_t y, int32_t z) {
+    feat_env_t e;
+    memset(&e, 0, sizeof e);
+    e.reg = reg;
+    e.rg = rg;
+    return can_survive_state(&e, s, x, y, z);
 }
 
 static int would_survive(feat_env_t *e, const char *name, int32_t x,

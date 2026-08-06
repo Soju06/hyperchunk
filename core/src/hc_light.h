@@ -50,7 +50,7 @@ typedef struct {
     int32_t     src_y[256]; /* ChunkSkyLightSources.getLowestSourceY; hc_col_idx */
 } hc_light_chunk_t;
 
-typedef struct {
+typedef struct hc_light_world {
     hc_light_chunk_t *slots; /* [ (cz-cz0)*n + (cx-cx0) ] */
     int32_t   cx0, cz0, n;
     uint64_t *queue;         /* 증가 BFS FIFO 링 (2^qlog 엔트리) */

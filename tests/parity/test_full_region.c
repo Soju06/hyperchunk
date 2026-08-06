@@ -263,6 +263,29 @@ static void light_write_hook(void *ud, int32_t x, int32_t y, int32_t z,
     g_n_live_writes++;
 }
 
+/* getRawBrightness(pos,0) — "visible" 읽기: 등록(topSections) 의 가시화는
+ * 08 배치 완료(스왑) 이후다. 3×3 이웃 08 이 하나도 완료 전이면 이 청크-
+ * 컬럼에 가시 스토리지가 없어 스토리지-위 규칙으로 sky 15 (c.2.6 실측:
+ * 데코 ctr 88 < 08 완료 ctr 102 — 바닐라 버섯 배치 실패의 원인). */
+static int raw_brightness_cb(void *ud, int32_t x, int32_t y, int32_t z) {
+    (void)ud;
+    if (!g_lw_hook)
+        return 0;
+    int32_t cx = x >> 4, cz = z >> 4;
+    int     vis = 0;
+    for (int dz = -1; dz <= 1 && !vis; dz++)
+        for (int dx = -1; dx <= 1 && !vis; dx++) {
+            int32_t la = g_live_at[widx(cx + dx, cz + dz)];
+            if (la != INT32_MAX && la <= g_cur_pos)
+                vis = 1;
+        }
+    if (!vis)
+        return 15;
+    int sky = hc_light_get(g_lw_hook, HC_LIGHT_SKY, x, y, z);
+    int blk = hc_light_get(g_lw_hook, HC_LIGHT_BLOCK, x, y, z);
+    return sky > blk ? sky : blk;
+}
+
 static void fill_chunk_biomes_from_grid(hc_chunk_t *chunk) {
     for (int qy = HC_MIN_Y >> 2; qy <= HC_MAX_Y >> 2; qy++)
         for (int qz = 0; qz < 4; qz++)
@@ -415,20 +438,40 @@ static struct {
 } g_gaps[MAX_GAP_NAMES];
 static int32_t g_n_gaps = 0;
 
+/* 진단 (Task 14): HC_TRACE_NEAR="targets.txt out.txt" — targets 의 각
+ * "x y z" 근방 (|dx|,|dz|<=12, |dy|<=20) leaf 배치 이벤트와 해당 피처
+ * 이름을 로그 (잔차 셀 → 피처 소속 규명) */
+static FILE   *g_near_f;
+static int32_t g_near_xyz[512][3];
+static int32_t g_n_near;
+static int     g_near_fired;
+
 static void sink_pos_nop(void *ud, int32_t step, int32_t index, int32_t x,
                          int32_t y, int32_t z, int32_t placed) {
     (void)ud;
-    (void)step;
-    (void)index;
-    (void)x;
-    (void)y;
-    (void)z;
-    (void)placed;
+    if (!g_near_f)
+        return;
+    for (int32_t i = 0; i < g_n_near; i++) {
+        int32_t dx = x - g_near_xyz[i][0], dy = y - g_near_xyz[i][1],
+                dz = z - g_near_xyz[i][2];
+        if (dx >= -12 && dx <= 12 && dz >= -12 && dz <= 12 && dy >= -20 &&
+            dy <= 20) {
+            fprintf(g_near_f, "pos step=%d idx=%d (%d,%d,%d) placed=%d\n",
+                    step, index, x, y, z, placed);
+            g_near_fired = 1;
+            return;
+        }
+    }
 }
 
 static void sink_feature(void *ud, int32_t step, int32_t index,
                          const char *name, int32_t npos, int32_t placed) {
     (void)ud;
+    if (g_near_f && g_near_fired) {
+        fprintf(g_near_f, "feat step=%d idx=%d %s npos=%d placed=%d\n", step,
+                index, name, npos, placed);
+        g_near_fired = 0;
+    }
     if (npos <= 0 || placed >= 0)
         return;
     if (!g_survey) {
@@ -823,6 +866,22 @@ int main(int argc, char **argv) {
     if (focus_env)
         sscanf(focus_env, "%d %d %d %d", &fx0, &fz0, &fx1, &fz1);
     {
+        const char *tn = getenv("HC_TRACE_NEAR");
+        char        tpath[512], opath[512];
+        if (tn && sscanf(tn, "%511s %511s", tpath, opath) == 2) {
+            FILE *tf = fopen(tpath, "r");
+            if (tf) {
+                while (g_n_near < 512 &&
+                       fscanf(tf, "%d %d %d", &g_near_xyz[g_n_near][0],
+                              &g_near_xyz[g_n_near][1],
+                              &g_near_xyz[g_n_near][2]) == 3)
+                    g_n_near++;
+                fclose(tf);
+                g_near_f = fopen(opath, "w");
+            }
+        }
+    }
+    {
         const char *de = getenv("HC_DIAG_STAGE_DUMP");
         if (de && sscanf(de, "%d %d %d %d %511s", &g_diag_x0, &g_diag_z0,
                          &g_diag_x1, &g_diag_z1, g_diag_dir) == 5)
@@ -1069,6 +1128,7 @@ int main(int argc, char **argv) {
     if (hc_tick_recorder_init(&recorder, &g_arena, 1 << 19) != 0)
         die("arena exhausted (tick recorder)", NULL);
     rg.ticks = &recorder;
+    rg.survive_reg = freg; /* postProcess updateShape canSurvive 폴드 */
     if (g_sctx) {
         rg.struct_step = struct_step_cb;
         rg.struct_ud = g_sctx;
@@ -1129,6 +1189,7 @@ int main(int argc, char **argv) {
         }
         g_lw_hook = &lw;
         rg.on_block_write = light_write_hook;
+        rg.raw_brightness = raw_brightness_cb;
         printf("[%6.1fs] light: %d batches, %d 08s; P range %d..%d\n",
                now_s() - t0, g_nbatch, n08, bat_P[0],
                g_nbatch ? bat_P[g_nbatch - 1] : -1);

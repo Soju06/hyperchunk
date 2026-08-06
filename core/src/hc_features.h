@@ -139,6 +139,15 @@ typedef struct hc_feat_region {
     void (*on_block_write)(void *ud, int32_t x, int32_t y, int32_t z,
                            uint16_t old_id, uint16_t new_id);
     void *light_ud;
+    /* Task 14: getRawBrightness(pos,0) (MushroomBlock.canSurvive) —
+     * 라이트 엔진 "visible" 스냅샷 읽기. 등록(topSections) 의 가시화는
+     * 스왑(08 배치 완료) 이후라, 가시 등록이 없는 청크-컬럼은 스토리지-위
+     * 규칙으로 sky 15 를 읽는다 (c.2.6 실측: 데코 ctr 88 < 3×3 08 완료
+     * ctr 102 → 바닐라 15 → 버섯 배치 실패). NULL = 0 (기존 게이트 불변). */
+    int (*raw_brightness)(void *ud, int32_t x, int32_t y, int32_t z);
+    /* Task 14: postProcess updateShape 의 canSurvive 폴드용 레지스트리
+     * (#supports_vegetation 등). NULL = 기존 지지-상실 근사만. */
+    const struct hc_feat_reg *survive_reg;
 } hc_feat_region_t;
 
 hc_chunk_t *hc_feat_region_chunk(const hc_feat_region_t *rg, int32_t cx,
