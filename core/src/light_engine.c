@@ -424,6 +424,22 @@ static inline int32_t nb_src(const hc_light_world_t *w, int32_t cx, int32_t cz,
  * 비트는 항상 상단 확장 = 제로 생성. 전제가 깨지면 die (미구현 관측). */
 static void derive_geometry_chunk(hc_light_world_t *w, hc_light_chunk_t *s) {
     int32_t cx = s->chunk->cx, cz = s->chunk->cz;
+    /* 이미 등록 이력이 있는 청크의 사전-톱 스냅샷: 이번 재유도가 그 위로
+     * 새 비트를 만들면 (상단 확장 — 늦은 트리/이웃 스필), 바닐라는
+     * SkyLightSectionStorage.createDataLayer 의 isAboveData 경로로 그
+     * 레이어를 15 로 채워 생성한다 (이후 checkBlock 감소가 값을 재조정;
+     * 일시 쓰기여도 레이어는 저장에 남는다 — Task 14 실측: c.3.17/
+     * c.12.31/c.7.0 골든의 최상단 all-15 SkyLight 섹션). 08 첫 등록
+     * (pre_reg==0) 은 시딩이 채우므로 제외. */
+    int32_t pre_top[3][3];
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dx = -1; dx <= 1; dx++) {
+            hc_light_chunk_t *t = slot(w, cx + dx, cz + dz);
+            pre_top[dz + 1][dx + 1] =
+                (t && t->registered)
+                    ? 31 - __builtin_clz(t->registered) + HC_LIGHT_SEC_MIN
+                    : INT32_MIN;
+        }
     for (int32_t sec = -4; sec <= 19; sec++) {
         if (!section_has_data(s->chunk, sec))
             continue;
@@ -460,6 +476,17 @@ static void derive_geometry_chunk(hc_light_world_t *w, hc_light_chunk_t *s) {
                                 }
                         }
                         t->registered |= bit;
+                        /* 09 시딩이 끝난 청크만 — 시딩 전 등록 (08~09
+                         * 사이 라이브 트리, c.21.27 실측) 은 시딩+BFS 가
+                         * 값을 채우므로 선채움하면 캐노피 음영 (14/0) 을
+                         * 15 로 덮는다. */
+                        if (t->seeded &&
+                            pre_top[dz + 1][dx + 1] != INT32_MIN &&
+                            ns > pre_top[dz + 1][dx + 1])
+                            memset(t->light[HC_LIGHT_SKY] +
+                                       (size_t)(ns - HC_LIGHT_SEC_MIN) *
+                                           4096,
+                                   15, 4096);
                     }
                     if (ns + 1 > t->top || t->top == HC_LIGHT_NO_TOP)
                         t->top = ns + 1;
