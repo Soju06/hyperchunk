@@ -48,6 +48,12 @@ static uint16_t g_barrier, g_susp_sand, g_chest_n, g_chest_n_wl,
     g_netherrack, g_magma, g_cracked_sb, g_mossy_sb, g_crying_obsidian;
 static int g_ids_ready = 0;
 
+static void ids_init(void);
+
+void hc_template_prewarm(void) { /* P2-3: 워커 스폰 전 지연-초기화 소진 */
+    ids_init();
+}
+
 static void ids_init(void) {
     if (g_ids_ready)
         return;
@@ -295,8 +301,17 @@ static const hc_tblock_t *ensure_palette(const hc_template_t *tc,
     hc_template_t *t = (hc_template_t *)tc;
     assert(p >= 0 && p < t->n_palettes);
     hc_tblock_t *dst = t->blocks + (size_t)p * (size_t)t->n_blocks;
-    if (t->pal_resolved[p])
+    /* P2-3: 지연 해석 가드 — 같은 템플릿+팔레트를 서로 무관한 이벤트가
+     * 동시에 첫 사용할 수 있다 (결과는 순수 함수라 동일; 락은 이중 해석
+     * 의 찢긴 쓰기 방지). static 스크래치 full/other/bes 도 이 락이
+     * 보호한다. 비선택 팔레트는 레지스트리에 없을 수 있어 eager 해석
+     * 불가 (아래 원주석) — lazy 유지가 강제다. */
+    static hc_spin_t g_pal_mu = HC_SPIN_INIT;
+    hc_spin_lock(&g_pal_mu);
+    if (t->pal_resolved[p]) {
+        hc_spin_unlock(&g_pal_mu);
         return dst;
+    }
     int32_t  np = hc_nbt_list_count(t->pal_nbt[p]);
     uint16_t ids[256];
     assert(np <= 256);
@@ -325,6 +340,7 @@ static const hc_tblock_t *ensure_palette(const hc_template_t *tc,
     memcpy(dst + nf, other, sizeof other[0] * (size_t)no);
     memcpy(dst + nf + no, bes, sizeof bes[0] * (size_t)ne);
     t->pal_resolved[p] = 1;
+    hc_spin_unlock(&g_pal_mu);
     return dst;
 }
 
@@ -654,7 +670,7 @@ static void capped_finalize(tpl_env_t *e) {
                         factory);
     int32_t max_repl = 5 < n ? 5 : n; /* ConstantInt(5).sample — 0드로우 */
     /* Util.toShuffledList(0..n-1): Fisher-Yates 하강 (U:967-998) */
-    static int32_t idx[HC_MAX_PROCESSED];
+    static _Thread_local int32_t idx[HC_MAX_PROCESSED];
     for (int32_t i = 0; i < n; i++)
         idx[i] = i;
     for (int32_t i = n; i > 1; i--) {
@@ -719,7 +735,7 @@ static void tpl_update_shape_at_edge(tpl_env_t *e) {
     enum { SMAX = 48 };
     if (sx > SMAX || sy > SMAX || sz > SMAX)
         die("edge shape too large", NULL);
-    static uint8_t fillv[SMAX][SMAX][SMAX]; /* [y][x][z] */
+    static _Thread_local uint8_t fillv[SMAX][SMAX][SMAX]; /* [y][x][z] */
     memset(fillv, 0, sizeof fillv);
     for (int32_t i = 0; i < e->n_placed; i++)
         fillv[e->placed[i][1] - e->mn[1]][e->placed[i][0] - e->mn[0]]
@@ -813,12 +829,12 @@ static int place_in_world(tpl_env_t *e) {
         return 0;
     const hc_tblock_t *blocks = ensure_palette(t, pal);
 
-    static pb_t processed[HC_MAX_PROCESSED];
+    static _Thread_local pb_t processed[HC_MAX_PROCESSED];
     build_processed(e, blocks, t->n_blocks, processed);
 
     /* 워터로깅 리스트 */
     enum { WLMAX = 4096 };
-    static int32_t locked[WLMAX][3], tofill[WLMAX][3];
+    static _Thread_local int32_t locked[WLMAX][3], tofill[WLMAX][3];
     int32_t        n_locked = 0, n_tofill = 0;
 
     e->n_placed = 0;
@@ -1011,18 +1027,23 @@ static void shipwreck_marker(tpl_env_t *e, const char *meta, int32_t x,
         loot = "minecraft:chests/shipwreck_supply";
     if (!loot)
         return;
-    /* pos.below() 의 라이브 BE — 레코더에서 조회 (배치 순서 불변 갱신) */
+    /* pos.below() 의 라이브 BE — 레코더에서 조회 (배치 순서 불변 갱신).
+     * 같은 pos 의 레코드 생산자는 같은 청크(같은 컬럼)의 배치 = 같은/
+     * 충돌 이벤트라 스케줄러가 직렬화 — 락은 무관 이벤트의 동시 append
+     * 대비 물리 보호만 (hc_sync.h). */
     hc_be_recorder_t *rec = &e->sc->be;
+    hc_spin_lock(&rec->mu);
     for (int32_t i = 0; i < rec->n; i++) {
         hc_be_rec_t *r = &rec->recs[i];
         if (r->dead || r->x != x || r->y != y - 1 || r->z != z)
             continue;
         if (!is_randomizable(r->state))
-            return;
+            break;
         r->loot = loot;
         r->loot_seed = hc_wgr_next_long(e->rng); /* RC:44-50 */
-        return;
+        break;
     }
+    hc_spin_unlock(&rec->mu);
 }
 
 /* ocean ruin 마커 (O:334-358) */
@@ -1067,7 +1088,7 @@ static void tsp_post_process(tpl_env_t *e, marker_fn fn) {
     template_bb(e->p->tmpl, e->p->mir, e->p->rot, e->pvx, e->pvz, e->p->tpx,
                 e->p->tpy, e->p->tpz, nbb);
     if (memcmp(nbb, e->p->bb, sizeof nbb) != 0) {
-        static char msg[256];
+        static _Thread_local char msg[256];
         snprintf(msg, sizeof msg,
                  "recomputed [%d,%d,%d,%d,%d,%d] golden [%d,%d,%d,%d,%d,%d]",
                  nbb[0], nbb[1], nbb[2], nbb[3], nbb[4], nbb[5], e->p->bb[0],
@@ -1114,7 +1135,7 @@ static void shipwreck_post(tpl_env_t *e) {
                 : mean;
         p->height_adjusted = 1;
         if (newy != p->tpy) {
-            static char msg[128];
+            static _Thread_local char msg[128];
             snprintf(msg, sizeof msg, "recomputed %d golden %d", newy,
                      p->tpy);
             die("shipwreck height adjust mismatch vs golden TPY", msg);
@@ -1167,7 +1188,7 @@ static void ruin_post(tpl_env_t *e) {
     if (top_y - min_floor > 2 && area > width - 2)
         newy = min_floor + 1;
     if (newy != p->tpy) {
-        static char msg[128];
+        static _Thread_local char msg[128];
         snprintf(msg, sizeof msg, "recomputed %d golden %d", newy, p->tpy);
         die("ocean ruin reposition mismatch vs golden TPY", msg);
     }

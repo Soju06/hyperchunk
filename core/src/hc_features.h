@@ -5,6 +5,7 @@
 #include "hc_blocks.h"
 #include "hc_df_compile.h" /* hc_df_source_t (이름→JSON 테이블 규약) */
 #include "hc_json.h"
+#include "hc_sync.h"     /* hc_spin_t (레코더 append 물리 보호, P2-3) */
 
 #include "../include/hc_chunk.h"
 #include "../include/hc_noise.h" /* hc_perlin_t (noise_threshold_provider) */
@@ -101,6 +102,10 @@ typedef struct {
     int32_t        n, cap;
     int32_t       *hset; /* open addressing: recs 인덱스, -1 = 빈 슬롯 */
     uint32_t       hcap; /* 2^k */
+    /* P2-3: FREE 스케줄러의 무관-이벤트 동시 append 물리 보호. 같은 키
+     * (pos) 접근은 충돌쌍이라 스케줄러가 이미 직렬화 — 청크별 프로젝션
+     * (직렬화가 읽는 유일한 관측면) 은 REPLAY 와 동일하게 결정된다. */
+    hc_spin_t      mu;
 } hc_tick_recorder_t;
 
 /* cap 개 기록 + 2^k >= 4*cap 해시를 arena 에서 할당. 실패 -1. */
@@ -698,6 +703,12 @@ void hc_gen_features_chunk(hc_feat_region_t *rg, int32_t cx, int32_t cz,
                            const hc_biome_reg_t *biomes, int32_t sea_level,
                            int32_t walk_max_step,
                            const hc_feat_trace_t *trace);
+
+/* P2-3: 피처 본문 지연-초기화 전역(Mth sin, biome_temp 노이즈, geode
+ * 노이즈(시드), acacia base id) 을 워커 스폰 전 단일 스레드에서 소진.
+ * FREE 스케줄러 드라이버 전용 — REPLAY 경로는 호출 불필요 (무해). */
+void hc_features_prewarm(int64_t level_seed);
+void hc_featx_geode_prewarm(int64_t level_seed); /* features_ring.c */
 
 /* --- 10_spawn / 11_full 스테이지 (Task 11, gen_spawn_full_stages.c) ---
  *

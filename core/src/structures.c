@@ -266,32 +266,38 @@ int hc_be_recorder_init(hc_be_recorder_t *r, hc_arena_t *a, int32_t cap) {
         return -1;
     r->n = 0;
     r->cap = cap;
+    hc_spin_init(&r->mu);
     return 0;
 }
 
 hc_be_rec_t *hc_be_record(hc_be_recorder_t *r, int32_t x, int32_t y,
                           int32_t z, uint8_t kind, uint16_t state) {
+    hc_spin_lock(&r->mu);
     for (int32_t i = 0; i < r->n; i++)
         if (!r->recs[i].dead && r->recs[i].x == x && r->recs[i].y == y &&
             r->recs[i].z == z)
             r->recs[i].dead = 1; /* 덮어쓰기 */
     if (r->n >= r->cap)
         die("BE recorder capacity exceeded", NULL);
-    hc_be_rec_t *e = &r->recs[r->n++];
+    hc_be_rec_t *e = &r->recs[r->n];
     memset(e, 0, sizeof *e);
     e->x = x;
     e->y = y;
     e->z = z;
     e->kind = kind;
     e->state = state;
+    r->n++; /* 필드 초기화 후 발행 — 동시 스캔이 미완 슬롯을 못 본다 */
+    hc_spin_unlock(&r->mu);
     return e;
 }
 
 void hc_be_remove(hc_be_recorder_t *r, int32_t x, int32_t y, int32_t z) {
+    hc_spin_lock(&r->mu);
     for (int32_t i = 0; i < r->n; i++)
         if (!r->recs[i].dead && r->recs[i].x == x && r->recs[i].y == y &&
             r->recs[i].z == z)
             r->recs[i].dead = 1;
+    hc_spin_unlock(&r->mu);
 }
 
 /* ================= fastutil 에뮬 (R-fastutil, 8.5.18) ================= */
@@ -348,7 +354,7 @@ int32_t hc_longset_to_array(const int64_t *added, int32_t n, int64_t *out) {
 int32_t hc_o2omap_key_order(const int32_t (*pos)[3], int32_t n,
                             int32_t *order_out) {
     enum { NMAX = 4096 };
-    static int32_t slot_of[NMAX]; /* 엔트리 인덱스 저장 */
+    static _Thread_local int32_t slot_of[NMAX]; /* 엔트리 인덱스 저장 */
     int32_t        cap = 16;      /* 기본 */
     while (n > cap * 3 / 4)
         cap <<= 1;
@@ -733,6 +739,10 @@ int hc_structures_init(hc_sctx_t *sc, hc_arena_t *a, int64_t seed,
         *err = "arena exhausted (be recorder)";
         return -1;
     }
+    /* P2-3: 배치 경로의 지연-초기화 정적 테이블을 여기(단일 스레드)서
+     * 소진 — FREE 워커의 최초-사용 레이스 제거. 값은 순수 해석이라 불변. */
+    hc_template_prewarm();
+    hc_mineshaft_prewarm();
     /* features_cannot_replace 마스크 (블록 태그 테이블에서) */
     for (int32_t i = 0; i < n_tags; i++)
         if (strcmp(tags[i].name, "minecraft:features_cannot_replace") == 0) {
@@ -973,7 +983,6 @@ int32_t hc_structures_references(const hc_sctx_t *sc, hc_arena_t *scratch,
                                  int32_t cx, int32_t cz, const char **names,
                                  const int64_t **arrays, int32_t *lens,
                                  int32_t cap) {
-    (void)scratch;
     /* 구조물별 삽입 리스트 (스캔 순서: sx 외측, sz 내측 — C.6) */
     enum { MAX_PER = 24 };
     struct {
@@ -1021,7 +1030,10 @@ int32_t hc_structures_references(const hc_sctx_t *sc, hc_arena_t *scratch,
     int32_t out = 0;
     for (int32_t j = 0; j < n_acc && out < cap; j++, out++) {
         names[out] = acc[j].name;
-        int64_t *arr = hc_arena_alloc(sc->arena, sizeof(int64_t) * MAX_PER,
+        /* P2-3: sc->arena(전역) → scratch(호출자 청크-스크래치) — 병렬
+         * 직렬화에서 전역 arena 범프가 레이스였다. 배열 수명은 호출자의
+         * NBT 방출까지 = scratch 수명 안. */
+        int64_t *arr = hc_arena_alloc(scratch, sizeof(int64_t) * MAX_PER,
                                       _Alignof(int64_t));
         int32_t  m = hc_longset_to_array(acc[j].added, acc[j].n, arr);
         arrays[out] = arr;

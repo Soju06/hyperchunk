@@ -90,4 +90,7 @@ int hc_biome_should_melt_iceberg(const hc_biome_reg_t *r, int32_t id,
  * 옥타브 {0}; biome_temp.c 의 g_info_noise 재사용) */
 double hc_biome_info_noise(double x, double z);
 
+/* P2-3: 온도/frozen/info 정적 노이즈 지연 초기화 소진 (FREE 워커 스폰 전) */
+void hc_biome_temp_prewarm(void);
+
 #endif /* HC_BIOME_H */

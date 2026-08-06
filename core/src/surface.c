@@ -142,6 +142,12 @@ typedef struct {
 
     int64_t steep_stamp; /* 컨텍스트 싱글턴 LazyXZ memo (파일 헤더 참조) */
     uint8_t steep_val;
+
+    /* noise_threshold 샘플러 memo (Context$1/$2) — 바닐라 Context 소속
+     * 그대로 청크-로컬 (P2-3: 공유 hc_ssampler_t 에서 이동. 값-불변 —
+     * ctx_init 리셋과 스탬프 규약 동일). */
+    int64_t sam_stamp[HC_SURF_MAX_SAMPLERS];
+    double  sam_val[HC_SURF_MAX_SAMPLERS];
 } hc_sctx_t;
 
 static void ctx_init(hc_sctx_t *c, hc_surface_t *s, hc_chunk_t *chunk,
@@ -168,7 +174,7 @@ static void ctx_init(hc_sctx_t *c, hc_surface_t *s, hc_chunk_t *chunk,
     c->steep_val = 0;
     /* 샘플러 memo 리셋 — 청크당 새 Context 의 IdentityHashMap 과 동형 */
     for (int32_t i = 0; i < s->n_samplers; i++)
-        s->samplers[i].memo_stamp = INT64_MIN;
+        c->sam_stamp[i] = INT64_MIN;
 }
 
 static void ctx_update_xz(hc_sctx_t *c, int32_t x, int32_t z) {
@@ -243,15 +249,15 @@ static int32_t ctx_min_surface_level(hc_sctx_t *c) {
 /* Context$1/$2 노이즈 샘플러: 2d 는 (x,0,z)/lastUpdateXZ, 3d 는
  * (x,y,z)/lastUpdateY memo (A2 §2-3) */
 static double sampler_value(hc_sctx_t *c, int32_t si) {
-    hc_ssampler_t *sp = &c->s->samplers[si];
-    int64_t        stamp = sp->is3d ? c->last_y : c->last_xz;
-    if (sp->memo_stamp != stamp) {
-        sp->memo_val = hc_normal_noise_value(
+    const hc_ssampler_t *sp = &c->s->samplers[si];
+    int64_t              stamp = sp->is3d ? c->last_y : c->last_xz;
+    if (c->sam_stamp[si] != stamp) {
+        c->sam_val[si] = hc_normal_noise_value(
             &sp->noise, (double)c->block_x,
             sp->is3d ? (double)c->block_y : 0.0, (double)c->block_z);
-        sp->memo_stamp = stamp;
+        c->sam_stamp[si] = stamp;
     }
-    return sp->memo_val;
+    return c->sam_val[si];
 }
 
 /* SteepMaterialCondition (A2 §7): WORLD_SURFACE_WG, 청크-로컬 클램프.

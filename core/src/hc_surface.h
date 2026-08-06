@@ -108,15 +108,14 @@ typedef struct {
 } hc_srule_t;
 
 /* noise_threshold 의 공유 샘플러 (Context$1/$2 대응): (키, is_3d) 로
- * dedup, memo 는 2d=lastUpdateXZ / 3d=lastUpdateY 스탬프 (A2 §0.5).
- * memo 필드는 buildSurface 진입 시 리셋된다 — 청크당 새 Context 와 동형.
- * Phase 2 스레딩 시 memo 를 컨텍스트로 옮겨야 한다. */
+ * dedup. memo (2d=lastUpdateXZ / 3d=lastUpdateY 스탬프, A2 §0.5) 는
+ * 청크별 hc_sctx_t 로 옮겼다 (P2-3) — 바닐라도 Context (청크당 새 객체)
+ * 소속이라 동형이고, 공유 구조체에 두면 체인 20스레드가 스탬프를 교차
+ * 오염시키는 실제 레이스였다. 이 구조체는 컴파일 후 읽기 전용. */
 typedef struct {
     hc_normal_noise_t noise;
     const char       *key;
     uint8_t           is3d;
-    int64_t           memo_stamp;
-    double            memo_val;
 } hc_ssampler_t;
 
 /* --- SurfaceSystem + 컴파일된 룰 트리 --- */

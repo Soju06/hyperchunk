@@ -231,8 +231,6 @@ static int32_t sampler_index(sc_ctx_t *c, const char *ref, int32_t len,
         return -1;
     sp->key = key;
     sp->is3d = (uint8_t)(is3d != 0);
-    sp->memo_stamp = 0;
-    sp->memo_val = 0.0;
     return s->n_samplers++;
 }
 

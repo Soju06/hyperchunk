@@ -335,7 +335,7 @@ int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t ox,
         }
     }
 
-    static hc_jset_t ground, water;
+    static _Thread_local hc_jset_t ground, water;
     hc_jset_init(&ground);
 
     /* placeGroundPatch — x 외측/z 내측 오름차순 (R3 §3.1) */

@@ -5,6 +5,7 @@
 #include "hc_biome.h"
 #include "hc_features.h"
 #include "hc_nbt.h"
+#include "hc_sync.h" /* hc_spin_t (P2-3) */
 
 /* Task 14 구조물 파이프라인 — 내부 전용 (core/src).
  *
@@ -54,6 +55,11 @@ typedef struct {
 } hc_template_t;
 
 /* reference/structure/<path>.nbt (무압축) 로드 + 버킷 정렬. 실패 NULL. */
+/* P2-3: 지연-초기화 전역 테이블 소진 (FREE 워커 스폰 전 1회 — REPLAY 는
+ * 불필요하지만 무해). hc_structures_init 이 호출한다. */
+void hc_template_prewarm(void);
+void hc_mineshaft_prewarm(void);
+
 const hc_template_t *hc_template_load(hc_arena_t *a, const char *dir,
                                       const char *name /* mc id */);
 
@@ -112,6 +118,10 @@ typedef struct {
 typedef struct hc_be_recorder {
     hc_be_rec_t *recs;
     int32_t      n, cap;
+    /* P2-3: FREE 스케줄러 물리 보호 (hc_tick_recorder_t.mu 와 동일 논리
+     * — 같은 pos 접근자는 충돌쌍이라 스케줄러가 직렬화; 직렬화가 읽는
+     * 청크별 프로젝션은 상대순서만 사용, bes_for_chunk). */
+    hc_spin_t    mu;
 } hc_be_recorder_t;
 
 int  hc_be_recorder_init(hc_be_recorder_t *r, hc_arena_t *a, int32_t cap);

@@ -355,6 +355,12 @@ static void geode_octaves_fill(hc_octaves_t *o, hc_perlin_t **arr,
     o->lowest_freq_value = ldexp(1.0, 0) / (ldexp(1.0, 1) - 1.0);
 }
 
+static const hc_normal_noise_t *geode_noise(int64_t level_seed);
+
+void hc_featx_geode_prewarm(int64_t level_seed) { /* P2-3 */
+    (void)geode_noise(level_seed);
+}
+
 static const hc_normal_noise_t *geode_noise(int64_t level_seed) {
     if (g_geode_noise.ready && g_geode_noise.seed == level_seed)
         return &g_geode_noise.nn;
@@ -461,7 +467,7 @@ int hc_featx_geode_place(feat_env_t *e, const hc_geode_cfg_t *c, int32_t ox,
         n_cp = 3;
     }
     /* 셀 스캔 (place@667-1237) — x 최속 (§5.1) */
-    static int32_t pot[GEODE_POT_MAX][3];
+    static _Thread_local int32_t pot[GEODE_POT_MAX][3];
     int32_t n_pot = 0;
     for (int32_t z = oz + c->min_gen; z <= oz + c->max_gen; z++)
         for (int32_t y = oy + c->min_gen; y <= oy + c->max_gen; y++)

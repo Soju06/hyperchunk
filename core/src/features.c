@@ -214,6 +214,13 @@ void hc_feat_mark_pos(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z) {
         hc_ppg_mark(c->ppg, x, y, z);
 }
 
+void hc_features_prewarm(int64_t level_seed) {
+    hc_mth_trig_init();
+    hc_biome_temp_prewarm();
+    hc_featx_geode_prewarm(level_seed);
+    (void)hc_block_acacia_leaves_base();
+}
+
 /* --- Task 12: 스케줄-틱 레코더 (hc_features.h 주석 참조) --- */
 
 int hc_tick_recorder_init(hc_tick_recorder_t *tr, hc_arena_t *a,
@@ -232,6 +239,7 @@ int hc_tick_recorder_init(hc_tick_recorder_t *tr, hc_arena_t *a,
     tr->n = 0;
     tr->cap = cap;
     tr->hcap = hcap;
+    hc_spin_init(&tr->mu);
     return 0;
 }
 
@@ -271,6 +279,7 @@ void hc_feat_schedule_tick(hc_feat_region_t *rg, int32_t x, int32_t y,
     h ^= h >> 29;
     uint32_t mask = tr->hcap - 1;
     uint32_t slot = (uint32_t)h & mask;
+    hc_spin_lock(&tr->mu);
     for (;;) {
         int32_t idx = tr->hset[slot];
         if (idx < 0)
@@ -280,8 +289,10 @@ void hc_feat_schedule_tick(hc_feat_region_t *rg, int32_t x, int32_t y,
             (r->kind == HC_TICK_BLOCK) == (kind == HC_TICK_BLOCK) &&
             (kind == HC_TICK_BLOCK
                  ? tick_base_name_eq(r->block, block_state)
-                 : r->kind == kind))
+                 : r->kind == kind)) {
+            hc_spin_unlock(&tr->mu);
             return; /* first-wins */
+        }
         slot = (slot + 1) & mask;
     }
     if (tr->n >= tr->cap)
@@ -294,6 +305,7 @@ void hc_feat_schedule_tick(hc_feat_region_t *rg, int32_t x, int32_t y,
     r->kind = (uint8_t)kind;
     r->t = t;
     tr->hset[slot] = tr->n++;
+    hc_spin_unlock(&tr->mu);
 }
 
 /* *_WG 리프라임 (rg->wg_dropped 이후): OF_WG 는 blocksMotion, WS_WG 는

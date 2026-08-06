@@ -148,6 +148,12 @@ static double psn_value(const hc_psn_t *n, double x, double y) {
 static hc_psn_t g_temp_noise, g_frozen_noise, g_info_noise;
 static int      g_noises_ready = 0;
 
+static void ensure_noises(void);
+
+void hc_biome_temp_prewarm(void) { /* P2-3: 워커 스폰 전 소진 */
+    ensure_noises();
+}
+
 static void ensure_noises(void) {
     if (g_noises_ready)
         return;

@@ -570,6 +570,12 @@ static uint16_t ms_resolve(const char *name) {
     return (uint16_t)id;
 }
 
+static void ms_blocks_init(void);
+
+void hc_mineshaft_prewarm(void) { /* P2-3: 워커 스폰 전 지연-초기화 소진 */
+    ms_blocks_init();
+}
+
 static void ms_blocks_init(void) {
     if (g_msb.inited)
         return;

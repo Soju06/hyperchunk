@@ -406,7 +406,7 @@ static int32_t trunk_fancy(tree_ctx_t *t, int32_t x, int32_t y, int32_t z,
     place_below_trunk(t, x, y - 1, z);
     /* clusters = min(1, floor(1.382 + (j/13)^2)) ≡ 1 (floor 인자 >= 1.382) */
     int32_t i1 = y + k;
-    static fancy_fc_t fcs[128];
+    static _Thread_local fancy_fc_t fcs[128];
     int32_t n_fc = 0;
     fcs[n_fc++] = (fancy_fc_t){{x, y + (j - 5), z, 0, 0}, i1};
     for (int32_t j1 = j - 5; j1 >= 0; j1--) {
@@ -825,7 +825,8 @@ static void run_decorators(tree_ctx_t *t, const hc_tdec_t *decs, int32_t n_dec,
                            jset_t *logs, jset_t *leaves, jset_t *deco) {
     if (n_dec == 0)
         return;
-    static cpos_t log_arr[JSET_MAX_ENTRIES], leaf_arr[JSET_MAX_ENTRIES];
+    static _Thread_local cpos_t log_arr[JSET_MAX_ENTRIES],
+        leaf_arr[JSET_MAX_ENTRIES];
     int32_t n_logs = ctx_list(logs, log_arr, JSET_MAX_ENTRIES);
     int32_t n_leaves = ctx_list(leaves, leaf_arr, JSET_MAX_ENTRIES);
     for (int32_t i = 0; i < n_dec; i++) {
@@ -951,7 +952,7 @@ static uint16_t leaf_with_distance(uint16_t s, int32_t d) {
 static shape_t *update_leaves(tree_ctx_t *t) {
     feat_env_t *e = t->e;
     shape_t    *box;
-    static shape_t box_storage;
+    static _Thread_local shape_t box_storage;
     box = &box_storage;
     memset(box->bits, 0, sizeof box->bits);
     int any = 0;
@@ -979,7 +980,7 @@ static shape_t *update_leaves(tree_ctx_t *t) {
             shape_fill(box, en->x, en->y, en->z);
     }
 
-    static jset_t levels[7];
+    static _Thread_local jset_t levels[7];
     for (int i = 0; i < 7; i++)
         jset_init(&levels[i]);
     /* lists.get(0).addAll(logs) — logs 셋 순회 순서 */
@@ -1819,7 +1820,7 @@ static int32_t two_layers_size(const hc_tree_cfg_t *c, int32_t y) {
 
 int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
     const hc_tree_cfg_t *cfg = e->pf->cf.tree;
-    static tree_ctx_t t_storage;
+    static _Thread_local tree_ctx_t t_storage;
     tree_ctx_t *t = &t_storage;
     t->e = e;
     t->cfg = cfg;
@@ -1862,7 +1863,7 @@ int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
         (cfg->ts_min_clipped < 0 || max_free < cfg->ts_min_clipped))
         return 0;
 
-    static attach_t atts[MAX_ATTACH];
+    static _Thread_local attach_t atts[MAX_ATTACH];
     int32_t n_att;
     switch (cfg->trunk_kind) {
     case HC_TRUNK_STRAIGHT:
@@ -1904,9 +1905,9 @@ int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
 
 int hc_featx_ftree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
     const hc_ftree_cfg_t *cfg = e->pf->cf.ftree;
-    static tree_ctx_t t_storage;
+    static _Thread_local tree_ctx_t t_storage;
     tree_ctx_t *t = &t_storage;
-    static hc_tree_cfg_t fake_cfg; /* run_decorators 는 t->cfg 를 안 읽는다 */
+    static const hc_tree_cfg_t fake_cfg; /* run_decorators 는 t->cfg 를 안 읽는다 */
     t->e = e;
     t->cfg = &fake_cfg;
     jset_init(&t->logs);
