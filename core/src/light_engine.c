@@ -81,6 +81,11 @@ static void build_tables(void) {
         for (int i = 0; i < 12; i++)
             g_emit[HC_B_AMETHYST_BUD_BASE + size * 12 + i] = AME_EM[size];
     g_emit[HC_B_FIREFLY_BUSH] = 2; /* R4 §4 lambda$static$410 */
+    /* brown_mushroom: lightLevel(s->1) (26.2 Blocks.java:820 디컴파일 핀
+     * — Task 14 실측: c.4.9 sec4 골든 니블 1 두 개가 버섯 자기-셀 발광,
+     * c.4.10 sec4 all-0 레이어는 배치-발광 후 엣지-사멸 감쇠 잔재).
+     * red_mushroom 은 발광 없음. */
+    g_emit[HC_B_BROWN_MUSHROOM] = 1;
 
     /* Task 14 확장 블록: damp/emit 는 실측 테이블 (blocks.c T14_*,
      * 26.2 getLightDampening/LIGHT_EMISSION 바이트코드 핀 —
@@ -152,6 +157,8 @@ static inline void l_stored_set(hc_light_world_t *w, int layer, int32_t x,
     hc_light_chunk_t *s = slot(w, x >> 4, z >> 4);
     assert(s);
     s->light[layer][cell_idx(y >> 4, x, y, z)] = (uint8_t)v;
+    if (layer == HC_LIGHT_BLOCK && v)
+        s->blk_written |= 1u << ((y >> 4) - HC_LIGHT_SEC_MIN);
 }
 
 /* 전파 목적지 게이트: storingLightForSection (R2 §5 @#62) */
@@ -301,6 +308,7 @@ void hc_light_reset(hc_light_world_t *w) {
         memset(s->light[0], 0, (size_t)HC_LIGHT_NSEC * 4096);
         memset(s->light[1], 0, (size_t)HC_LIGHT_NSEC * 4096);
         s->registered = 0;
+        s->blk_written = 0;
         s->top = HC_LIGHT_NO_TOP;
         s->feat_done = 0;
         s->in_r = 0;

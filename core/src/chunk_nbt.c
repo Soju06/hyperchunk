@@ -138,22 +138,29 @@ static hc_nbt_t *packed_container(hc_arena_t *a, const uint16_t *cells,
     return cont;
 }
 
-/* 라이트 레이어 방출 (R-E §7f): 등록 && 최종값>0 존재 (월드젠 증분
- * 이력은 increase 뿐 — materialized ⇔ 값>0 존재; 전부-0 로 감쇠한
- * 레이어는 재현 불가 이력이라 미방출 = 실측 게이트 커버리지 경계). */
+/* 라이트 레이어 방출 (R-E §7f + Task 14):
+ *  - sky: 등록 && 최종값>0 존재 (등록 시 생성 — createDataLayer).
+ *  - block: 실체화 = >0 쓰기 이력 (blk_written) — 바닐라는 쓰기 시
+ *    getDataLayer(create) 로 생성하고, 감쇠로 all-0 이 돼도 저장에
+ *    남긴다 (실측 c.4.10: 버섯 배치-발광 후 엣지-사멸의 all-0 레이어). */
 static hc_nbt_t *light_layer(hc_arena_t *a, const hc_light_chunk_t *ls,
                              int layer, int32_t sy) {
     if (!((ls->registered >> (sy - HC_LIGHT_SEC_MIN)) & 1u))
         return NULL;
     const uint8_t *cell = ls->light[layer] + (sy - HC_LIGHT_SEC_MIN) * 4096;
-    int nonzero = 0;
-    for (int i = 0; i < 4096; i++)
-        if (cell[i]) {
-            nonzero = 1;
-            break;
-        }
-    if (!nonzero)
-        return NULL;
+    if (layer == HC_LIGHT_BLOCK) {
+        if (!((ls->blk_written >> (sy - HC_LIGHT_SEC_MIN)) & 1u))
+            return NULL;
+    } else {
+        int nonzero = 0;
+        for (int i = 0; i < 4096; i++)
+            if (cell[i]) {
+                nonzero = 1;
+                break;
+            }
+        if (!nonzero)
+            return NULL;
+    }
     uint8_t *nib = hc_arena_alloc(a, 2048, 1);
     if (!nib)
         return NULL;

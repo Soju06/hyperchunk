@@ -951,13 +951,18 @@ static void spread_to(pp_t *pp, int32_t x, int32_t y, int32_t z, uint16_t qs,
     if (nf.type != FL_WATER)
         pp_die("non-water spreadTo in postprocess", x, y, z);
     if (is_container(qs) && can_hold_specific(qs, FL_WATER)) {
-        /* LiquidBlockContainer.placeLiquid — waterlogged=true 로 전환 */
+        /* LiquidBlockContainer.placeLiquid (SimpleWaterloggedBlock:24-36)
+         * — waterlogged=true 전환 + scheduleTick(pos, WATER,
+         * getTickDelay=5). 실측: c.4.21 (64,-18,350) 골든 t=5 — PP 물
+         * 스프레드가 dripleaf 줄기를 워터로깅하며 건 틱. */
         if (!g_wl_ready)
             build_wl_table();
         int32_t wl = g_wl_true_of[qs];
         if (wl < 0)
             pp_die("placeLiquid target without wl=true state", x, y, z);
         pp_set_block(pp, x, y, z, (uint16_t)wl, 3);
+        fl_t wf = {FL_WATER, 8, 1, 0};
+        sched_fluid(pp, x, y, z, wf, 5);
         return;
     }
     /* beforeDestroyingBlock (drops) 는 관측 무영향 */

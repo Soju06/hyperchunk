@@ -39,6 +39,10 @@ typedef struct {
     hc_chunk_t *chunk;      /* NULL = 슬롯 비어 있음 */
     uint8_t    *light[2];   /* [ (sec-SEC_MIN)*4096 + ((y&15)<<8|(z&15)<<4|(x&15)) ] */
     uint32_t    registered; /* bit (sec - SEC_MIN): DataLayer 존재 (LIGHT_ONLY 포함) */
+    uint32_t    blk_written; /* bit (sec - SEC_MIN): block 레이어에 >0 쓰기가
+                              * 있었음 = 바닐라 DataLayer 실체화 (감쇠로
+                              * all-0 이 돼도 저장에 남는다 — Task 14 실측
+                              * c.4.10: 버섯 배치-발광 후 엣지-사멸) */
     int32_t     top;        /* topSections: max 등록 섹션 y + 1; HC_LIGHT_NO_TOP */
     uint8_t     feat_done;  /* getChunkForLighting 가시성 (status >= FEATURES) */
     uint8_t     in_r;       /* 08 initializeLight 실행됨 (섹션 등록 주체) */
