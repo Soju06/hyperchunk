@@ -39,6 +39,7 @@
 
 int hc_state_parse(const char *name, char *base, size_t base_cap,
                    hc_skv_t *kv, int cap) {
+    (void)cap; /* assert 전용 — NDEBUG 에서 미참조 */
     const char *br = strchr(name, '[');
     if (!br) {
         snprintf(base, base_cap, "%s", name);
@@ -662,7 +663,9 @@ static void resolve_biome_tag(hc_arena_t *a, const hc_biome_reg_t *reg,
     if (depth > 4)
         die("biome tag recursion too deep", tag_name);
     char path[512];
-    snprintf(path, sizeof path, "%s/%s.json", tags_dir, tag_name);
+    if ((size_t)snprintf(path, sizeof path, "%s/%s.json", tags_dir,
+                         tag_name) >= sizeof path)
+        die("biome tag path too long", tag_name);
     size_t len = 0;
     char  *buf = read_whole(a, path, &len);
     if (!buf)

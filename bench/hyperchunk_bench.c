@@ -172,14 +172,18 @@ static void load_tree(hc_df_source_t *tab, int32_t *n, int32_t cap,
         if (e->d_name[0] == '.')
             continue;
         char sub[1024];
-        snprintf(sub, sizeof sub, "%s/%s", dir, e->d_name);
+        if ((size_t)snprintf(sub, sizeof sub, "%s/%s", dir, e->d_name) >=
+            sizeof sub)
+            die("reference path too long", dir);
         DIR *probe = opendir(sub);
         if (probe) {
             closedir(probe);
             if (depth >= 2)
                 die("reference tree deeper than expected", sub);
             char pref[512];
-            snprintf(pref, sizeof pref, "%s%s/", rel_prefix, e->d_name);
+            if ((size_t)snprintf(pref, sizeof pref, "%s%s/", rel_prefix,
+                                 e->d_name) >= sizeof pref)
+                die("reference prefix too long", rel_prefix);
             load_tree(tab, n, cap, sub, pref, depth + 1);
         } else if (has_suffix(e->d_name, ".json")) {
             add_source(tab, n, cap, dir, rel_prefix, e->d_name);
