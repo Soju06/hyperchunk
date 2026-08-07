@@ -22,6 +22,7 @@ add_library(hyperchunk STATIC
   src/biome_zoom.c
   src/biome_temp.c
   src/sha256.c
+  src/sha256_ni.c
   src/surface_compile.c
   src/surface.c
   src/carvers.c
@@ -57,6 +58,10 @@ target_include_directories(hyperchunk PUBLIC include)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-6]86")
   set_source_files_properties(src/df_simd_avx2.c PROPERTIES
     COMPILE_OPTIONS "-mavx2")
+  # SHA-NI 백엔드 TU (P2-5) — 동일 격리 정책. -msha 는 FMA 와 무관
+  # (check_no_fma 패턴은 vfmadd 계열만 — sha256rnds2 는 비대상).
+  set_source_files_properties(src/sha256_ni.c PROPERTIES
+    COMPILE_OPTIONS "-msha;-msse4.1")
 endif()
 # ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc
 # 2.34+ 에서는 libc 로 통합된 호환 스텁) — D1 위반 아님. pthread 는

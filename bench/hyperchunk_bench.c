@@ -972,10 +972,23 @@ int main(int argc, char **argv) {
                     die("--isa avx2: host lacks AVX2", NULL);
             } else if (strcmp(p, "auto") != 0)
                 die("--isa must be scalar|avx2|auto", p);
+        } else if (strcmp(argv[i], "--sha") == 0 && i + 1 < argc) {
+            /* P2-5: sha256 백엔드 강제 — sw-vs-ni canonical 동일 게이트
+             * (scripts/check_sha_equiv.sh) 가 두 값으로 부른다. ni 강제는
+             * cpuid 통과 시에만 반영 (--isa avx2 와 동일 규약). */
+            const char *p = argv[++i];
+            if (strcmp(p, "sw") == 0)
+                hc_sha256_force(0);
+            else if (strcmp(p, "ni") == 0) {
+                hc_sha256_force(1);
+                if (!hc_sha256_ni_active())
+                    die("--sha ni: host lacks SHA-NI", NULL);
+            } else if (strcmp(p, "auto") != 0)
+                die("--sha must be sw|ni|auto", p);
         } else {
             die("usage: hyperchunk-bench --seed <s> --region <x> <z> "
                 "[--repo <root>] [--threads <n>] [--policy replay|free] "
-                "[--isa scalar|avx2|auto]",
+                "[--isa scalar|avx2|auto] [--sha sw|ni|auto]",
                 argv[i]);
         }
     }
@@ -1670,7 +1683,8 @@ int main(int argc, char **argv) {
     getrusage(RUSAGE_SELF, &ru);
 
     fprintf(stderr,
-            "== hyperchunk-bench seed=%" PRId64 " threads=%d isa=%s ==\n"
+            "== hyperchunk-bench seed=%" PRId64 " threads=%d isa=%s"
+            " sha=%s ==\n"
             "   (이 VM은 토폴로지 오보고 — 절대치는 참고치, 비중/배율만 유효)\n"
             "setup                 %8.1f ms  (참조 로드+컴파일, 생성 비용 아님)\n"
             "replay-input parse    %8.1f ms  (하네스 오버헤드)\n"
@@ -1697,6 +1711,7 @@ int main(int argc, char **argv) {
             "%s\n",
             seed, nthreads,
             hc_isa_active() == HC_ISA_AVX2 ? "avx2" : "scalar",
+            hc_sha256_ni_active() ? "ni" : "sw",
             setup_ns / 1e6, B_replay_load / 1e6, nthreads,
             chain_wall / 1e6, cc.nc_init / 1e6, cc.beard / 1e6,
             cc.noise / 1e6, cc.surface / 1e6, cc.carvers / 1e6,
@@ -1718,7 +1733,7 @@ int main(int argc, char **argv) {
                 D_l08 / 1e6, D_l09 / 1e6, D_prep / 1e6);
 
     printf("{\"seed\":%" PRId64 ",\"threads\":%d,\"policy\":\"%s\","
-           "\"isa\":\"%s\","
+           "\"isa\":\"%s\",\"sha\":\"%s\","
            "\"pass\":%s,"
            "\"canonical\":\"%s\","
            "\"chunks\":{\"chain\":%d,\"decorated\":%d,\"postprocessed\":%d,"
@@ -1745,6 +1760,7 @@ int main(int argc, char **argv) {
            ",\"proc_wall_ns\":%" PRIu64 ",\"maxrss_kib\":%ld}\n",
            seed, nthreads, free_mode ? "free" : "replay",
            hc_isa_active() == HC_ISA_AVX2 ? "avx2" : "scalar",
+           hc_sha256_ni_active() ? "ni" : "sw",
            pass ? "true" : "false", hex, WORLD_CHUNKS, n_man,
            n_pm_out, setup_ns, B_replay_load, chain_wall, cc.nc_init,
            cc.beard, cc.noise, cc.surface, cc.carvers, cw.nc_init, cw.beard,

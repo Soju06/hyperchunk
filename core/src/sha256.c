@@ -1,5 +1,6 @@
 #include "hc_sha256.h"
 
+#include <stdatomic.h>
 #include <string.h>
 
 /* FIPS 180-4 상수 (fractional parts of cube roots of primes 2..311) */
@@ -44,15 +45,59 @@ static void sha256_block(uint32_t h[8], const uint8_t p[64]) {
     h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
 }
 
+void hc_sha256_blocks_sw(uint32_t h[8], const uint8_t *p, size_t nblocks) {
+    while (nblocks--) {
+        sha256_block(h, p);
+        p += 64;
+    }
+}
+
+/* ---- 백엔드 디스패치 (P2-5) — df_isa.c 와 동일 패턴: 검출은 멱등이라
+ * 중복 실행 무해, relaxed 원자 접근만 보장 (TSan 클린). ---- */
+
+#if defined(__x86_64__) || defined(__i386__)
+static int detect_sha_ni(void) {
+    /* 커널 구조: shuffle_epi8/alignr(SSSE3) + blend_epi16(SSE4.1) 사용 —
+     * sha 지원 CPU 는 전부 갖지만 검출은 보수적으로 둘 다 본다. */
+    return __builtin_cpu_supports("sha") && __builtin_cpu_supports("sse4.1");
+}
+#else
+static int detect_sha_ni(void) { return 0; }
+#endif
+
+static _Atomic int g_sha_ni = -1; /* -1 = 미검출/auto */
+
+int hc_sha256_ni_active(void) {
+    int v = atomic_load_explicit(&g_sha_ni, memory_order_relaxed);
+    if (v < 0) {
+        v = detect_sha_ni();
+        atomic_store_explicit(&g_sha_ni, v, memory_order_relaxed);
+    }
+    return v;
+}
+
+void hc_sha256_force(int backend) {
+    if (backend < 0) {
+        atomic_store_explicit(&g_sha_ni, -1, memory_order_relaxed);
+        return;
+    }
+    if (backend && !detect_sha_ni())
+        backend = 0; /* SIGILL 방지 강등 (hc_isa_force 규약) */
+    atomic_store_explicit(&g_sha_ni, backend, memory_order_relaxed);
+}
+
 void hc_sha256(const void *data, size_t len, uint8_t out[32]) {
     uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
                      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    void (*blocks)(uint32_t[8], const uint8_t *, size_t) =
+        hc_sha256_ni_active() ? hc_sha256_blocks_ni : hc_sha256_blocks_sw;
     const uint8_t *p = data;
     size_t         rem = len;
-    while (rem >= 64) {
-        sha256_block(h, p);
-        p += 64;
-        rem -= 64;
+    size_t         nb = rem / 64;
+    if (nb) {
+        blocks(h, p, nb);
+        p += nb * 64;
+        rem -= nb * 64;
     }
     uint8_t tail[128];
     memcpy(tail, p, rem);
@@ -62,9 +107,7 @@ void hc_sha256(const void *data, size_t len, uint8_t out[32]) {
     uint64_t bits = (uint64_t)len * 8;
     for (int i = 0; i < 8; i++)
         tail[pad - 1 - i] = (uint8_t)(bits >> (8 * i));
-    sha256_block(h, tail);
-    if (pad == 128)
-        sha256_block(h, tail + 64);
+    blocks(h, tail, pad / 64);
     for (int i = 0; i < 8; i++) {
         out[4 * i] = (uint8_t)(h[i] >> 24);
         out[4 * i + 1] = (uint8_t)(h[i] >> 16);

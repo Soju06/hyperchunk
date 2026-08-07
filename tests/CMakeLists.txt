@@ -258,3 +258,9 @@ add_test(NAME free_region_own COMMAND bash
          1234567890
          ${CMAKE_SOURCE_DIR}/golden/region-ref)
 set_tests_properties(free_region_own PROPERTIES TIMEOUT 5400)
+
+# P2-5: sha256 KAT + 백엔드 이중 대조 (SHA-NI 부재 호스트에서도 sw KAT
+# 는 유효 — SKIP 아님, ni 파트만 내부 생략)
+add_executable(test_sha256 unit/test_sha256.c)
+target_link_libraries(test_sha256 PRIVATE hyperchunk)
+add_test(NAME sha256 COMMAND test_sha256)
