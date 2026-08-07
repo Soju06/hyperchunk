@@ -237,4 +237,51 @@ double hc_df_eval_cone(const hc_df_graph_t *g, const int32_t *cone,
                        double z, double *scratch, const hc_df_cellctx_t *cc,
                        const uint8_t *mask);
 
+/* --- 콘 프로그램: lazy 브랜치 평가 (P2-4) ---
+ *
+ * 바닐라 RangeChoice/WeirdScaledSampler(interval_select)는 트리 워크라
+ * '선택된 브랜치만' 평가한다. 콘 리스트의 선형 워크는 전 브랜치를 eager
+ * 평가한다 — 26.2 슬라이스 콘 실측으로 펄린 샘플의 ~40% 가 죽은-브랜치
+ * 값이다. 콘 프로그램은 콘을 세그먼트 구조로 재배열해 그 낭비를 없앤다:
+ *
+ *  - 브랜치-배타 서브콘 = "choice→branch 엣지 하나를 지우면 루트들에서
+ *    도달 불가해지는 콘 노드들". 배타 노드는 그 브랜치가 선택될 때만
+ *    평가하면 되고, 비-배타 노드(다른 경로로도 읽힘)는 무조건 평가한다.
+ *  - 중첩 (한 배타 집합 안의 choice) 은 집합 포함 관계가 되므로, 각
+ *    노드를 '가장 작은 배타 집합' (innermost) 세그먼트에 귀속시키면
+ *    세그먼트가 트리로 짜인다. 세그먼트 내부는 노드 오름차순 (위상 순서).
+ *  - 값-불변 근거: eval_node 는 순수 (평가 경로 RNG 0회) 이고, 스킵되는
+ *    노드의 값은 이 점에서 아무도 읽지 않는다 (도달성 정의). 읽는 노드가
+ *    하나라도 있으면 그 노드는 배타가 아니므로 평가된다. 도달성 엣지는
+ *    eval_node 가 읽는 엣지의 상위집합 (마커 pass-through 포함 — 과대
+ *    연결은 배타 집합을 줄일 뿐, 보수 방향).
+ *
+ * 스트림 인코딩 (i32):
+ *   v >= 0                          : 노드 v 평가
+ *   [-1, ch, wt, we][then][else]    : RANGE_CHOICE ch — 선택 세그먼트만
+ *                                     실행 후 ch 평가 (wt/we = 워드 수)
+ *   [-2, ch, nf, w0..w_{nf-1}][seg0]..[seg_{nf-1}]
+ *                                   : INTERVAL_SELECT ch — 동일
+ * 선택 판정은 eval_node 의 해당 케이스와 동일 식이다 (같은 d, 같은 경계
+ * → 같은 선택). 세그먼트 실행 후 ch 평가가 선택된 값 sc[브랜치] 를 읽고,
+ * 비선택 브랜치의 sc 는 스테일이지만 정의상 읽히지 않는다. */
+
+/* 프로그램 산출. cone/roots 는 hc_df_cone_mark(_ex) 산출물과 그 루트.
+ * 브랜치 구조가 없거나 이득이 없으면 *prog_out = NULL (플레인 콘 워크
+ * 사용). 실패(-1)는 arena 소진뿐. b==c 인 range_choice, 함수표에 같은
+ * 노드가 중복 등장하는 interval_select 는 세그먼트화하지 않는다 (엣지
+ * 삭제 모델이 성립하지 않는 케이스 — eager 로 두면 항상 옳다). */
+int hc_df_cone_program(const hc_df_graph_t *g, const int32_t *roots,
+                       int32_t n_roots, const int32_t *cone, int32_t len,
+                       hc_arena_t *arena, const int32_t **prog_out,
+                       int32_t *words_out);
+
+/* 프로그램 평가 — hc_df_eval_cone 과 같은 계약 (scratch 2*n, root < 0
+ * 이면 scratch 만 채움, mask 는 debug assert 전용). 결과는 같은 콘의
+ * 플레인 워크와 비트 동일 (df_cones 게이트가 판정). */
+double hc_df_eval_prog(const hc_df_graph_t *g, const int32_t *prog,
+                       int32_t words, int32_t root, double x, double y,
+                       double z, double *scratch, const hc_df_cellctx_t *cc,
+                       const uint8_t *mask);
+
 #endif /* HC_DF_H */

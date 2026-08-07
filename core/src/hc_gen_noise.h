@@ -60,12 +60,16 @@ typedef struct {
 } hc_aquifer_t;
 
 /* (root×mode) 라이브 콘 — hc_nc_init 이 IR 위에서 1회 산출 (P2-1).
- * list 는 오름차순 노드 인덱스, mask 는 eval 의 debug assert 용 멤버십. */
+ * list 는 오름차순 노드 인덱스, mask 는 eval 의 debug assert 용 멤버십.
+ * prog != NULL 이면 lazy 브랜치 프로그램 (P2-4, hc_df_cone_program) —
+ * 평가 경로가 hc_df_eval_prog 로 바뀌고 결과는 플레인 워크와 비트 동일. */
 typedef struct {
     int32_t        root; /* 디스패치 키 (노드 인덱스), 다중-루트 콘은 -1 */
     int32_t        len;
     const int32_t *list;
     const uint8_t *mask; /* [g->n] */
+    const int32_t *prog; /* NULL = 플레인 콘 워크 */
+    int32_t        prog_words;
 } hc_nc_cone_t;
 
 enum { HC_NC_N_SP_CONES = 6, HC_NC_N_BLOCK_CONES = 4 };

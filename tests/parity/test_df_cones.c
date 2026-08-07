@@ -168,6 +168,7 @@ enum { N_SP_ROOTS = 6, N_BLOCK_ROOTS = 4 };
 #define WANT_REVISIT (2 * 3 * N_SP_ROOTS)           /* A,B,A 인터리브 */
 #define WANT_BLOCK (2 * N_BLOCK_ROOTS * N_XZ * N_Y) /* BLOCK 모드 */
 #define WANT_CELL (2 * 5 * 3)                       /* 셀 3점 × 5셀 */
+#define WANT_CELL_PROG (2 * 5 * 3) /* 같은 점의 lazy 프로그램 경로 (P2-4) */
 #define WANT_SLICE (2 * 5 * 49 * 8) /* 슬라이스 5컬럼 × 49y × interp 8 */
 
 int main(int argc, char **argv) {
@@ -280,6 +281,11 @@ int main(int argc, char **argv) {
 
         /* --- 셀 상태 준비: fill_slice 등가를 먼저 검사 (slice0 이 첫
          * 슬라이스 상태를 유지하는 동안), 그 뒤 BLOCK/CELL --- */
+        /* fill_slice 는 slice_var 의 lazy 프로그램 경로를 탄다 (P2-4) —
+         * 26.2 슬라이스 콘은 range_choice/interval_select 를 포함하므로
+         * 프로그램 부재는 산출 회귀다. 아래 slice 배터리가 그 경로의
+         * 전 값 (5컬럼 × 49y × interp 8) 을 프리픽스와 대조한다. */
+        assert(nc->cone_slice_var.prog != NULL);
         hc_nc_initialize_first_cell_x(nc);
         {
             int32_t stride = nc->cell_count_y + 1;
@@ -323,6 +329,17 @@ int main(int argc, char **argv) {
                                        HC_DF_MODE_CELL, (double)x, (double)y,
                                        (double)z);
                 check_bits("cell", roots.final_density, x, y, z, got, want);
+                /* lazy 프로그램 경로 (P2-4) — 프로덕션 select_cell_yz 가
+                 * 타는 경로. 26.2 final_density 는 range_choice 를 포함
+                 * 하므로 프로그램 부재는 산출 회귀다 (fail-loud). */
+                assert(nc->cone_cell.prog != NULL);
+                nc->cc.mode = HC_DF_MODE_CELL;
+                double got_p = hc_df_eval_prog(
+                    &graph, nc->cone_cell.prog, nc->cone_cell.prog_words,
+                    roots.final_density, (double)x, (double)y, (double)z,
+                    nc->scratch, &nc->cc, nc->cone_cell.mask);
+                check_bits("cell-prog", roots.final_density, x, y, z, got_p,
+                           want);
             }
         }
 
@@ -345,8 +362,8 @@ int main(int argc, char **argv) {
                 }
     }
 
-    int want_total =
-        WANT_SP + WANT_REVISIT + WANT_BLOCK + WANT_CELL + WANT_SLICE;
+    int want_total = WANT_SP + WANT_REVISIT + WANT_BLOCK + WANT_CELL +
+                     WANT_CELL_PROG + WANT_SLICE;
     if (g_checks != want_total) {
         fprintf(stderr, "BATTERY SIZE MISMATCH: ran %d checks, want %d\n",
                 g_checks, want_total);

@@ -45,6 +45,9 @@ static const hc_nc_cone_t *find_cone(const hc_nc_cone_t *arr, int32_t n,
 static double nc_eval_cone(hc_noise_chunk_t *nc, const hc_nc_cone_t *co,
                            int32_t root, double x, double y, double z,
                            hc_df_mode_t mode) {
+    if (co->prog)
+        return hc_df_eval_prog(nc->g, co->prog, co->prog_words, root, x, y, z,
+                               nc->scratch, nc_cc(nc, mode), co->mask);
     return hc_df_eval_cone(nc->g, co->list, co->len, root, x, y, z,
                            nc->scratch, nc_cc(nc, mode), co->mask);
 }
@@ -154,12 +157,20 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
                         nc->cone_slice_inv.mask);
         for (int32_t i = 0; i <= nc->cell_count_y; i++) {
             int32_t by = (i + nc->cell_noise_min_y) * nc->cell_height;
-            hc_df_eval_cone(nc->g, nc->cone_slice_var.list,
-                            nc->cone_slice_var.len, -1,
-                            (double)nc->cell_start_x, (double)by,
-                            (double)bz, nc->scratch,
-                            nc_cc(nc, HC_DF_MODE_SP),
-                            nc->cone_slice_var.mask);
+            if (nc->cone_slice_var.prog)
+                hc_df_eval_prog(nc->g, nc->cone_slice_var.prog,
+                                nc->cone_slice_var.prog_words, -1,
+                                (double)nc->cell_start_x, (double)by,
+                                (double)bz, nc->scratch,
+                                nc_cc(nc, HC_DF_MODE_SP),
+                                nc->cone_slice_var.mask);
+            else
+                hc_df_eval_cone(nc->g, nc->cone_slice_var.list,
+                                nc->cone_slice_var.len, -1,
+                                (double)nc->cell_start_x, (double)by,
+                                (double)bz, nc->scratch,
+                                nc_cc(nc, HC_DF_MODE_SP),
+                                nc->cone_slice_var.mask);
             for (int32_t k = 0; k < nc->n_interp; k++) {
                 hc_df_interp_t *it = &nc->interp[k];
                 double *slice = which == 0 ? it->slice0 : it->slice1;
@@ -265,11 +276,13 @@ void hc_nc_swap_slices(hc_noise_chunk_t *nc) {
     }
 }
 
-/* 콘 1개 산출 — mark 버퍼가 그대로 eval assert 용 mask 가 된다 (P2-1) */
+/* 콘 1개 산출 — mark 버퍼가 그대로 eval assert 용 mask 가 된다 (P2-1).
+ * want_prog: lazy 브랜치 프로그램 (P2-4) 산출 여부 — 평가에 쓰이지 않는
+ * 중간 콘 (slice union) 은 끈다. */
 static int cone_build_ex(hc_noise_chunk_t *nc, hc_arena_t *arena,
                          hc_df_mode_t mode, const int32_t *roots,
                          int32_t n_roots, int32_t dispatch_root,
-                         uint32_t flags, hc_nc_cone_t *out) {
+                         uint32_t flags, int want_prog, hc_nc_cone_t *out) {
     const hc_df_graph_t *g = nc->g;
     uint8_t             *mark = hc_arena_alloc(arena, (size_t)g->n, 1);
     if (!mark)
@@ -286,6 +299,14 @@ static int cone_build_ex(hc_noise_chunk_t *nc, hc_arena_t *arena,
     out->len = len;
     out->list = list;
     out->mask = mark;
+    /* lazy 브랜치 프로그램 (P2-4) — 브랜치 구조가 없는 콘은 NULL 로
+     * 남고 플레인 워크를 쓴다. df_cones 게이트가 두 경로 모두 판정. */
+    out->prog = NULL;
+    out->prog_words = 0;
+    if (want_prog &&
+        hc_df_cone_program(g, roots, n_roots, list, len, arena, &out->prog,
+                           &out->prog_words))
+        return -1;
     return 0;
 }
 
@@ -293,7 +314,7 @@ static int cone_build(hc_noise_chunk_t *nc, hc_arena_t *arena,
                       hc_df_mode_t mode, const int32_t *roots,
                       int32_t n_roots, int32_t dispatch_root,
                       hc_nc_cone_t *out) {
-    return cone_build_ex(nc, arena, mode, roots, n_roots, dispatch_root, 0,
+    return cone_build_ex(nc, arena, mode, roots, n_roots, dispatch_root, 0, 1,
                          out);
 }
 
@@ -435,7 +456,7 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
             slice_roots[k] = g->nodes[nc->interp[k].node].a;
         hc_nc_cone_t slice_all;
         if (cone_build_ex(nc, arena, HC_DF_MODE_SP, slice_roots, nc->n_interp,
-                          -1, HC_DF_CONE_WINDOW_SAFE, &slice_all))
+                          -1, HC_DF_CONE_WINDOW_SAFE, 0, &slice_all))
             return -1;
         hc_df_mark_y_variant(g, yv);
         {
@@ -458,9 +479,17 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
                     inv[ni++] = node;
             }
             nc->cone_slice_inv =
-                (hc_nc_cone_t){-1, ni, inv, slice_all.mask};
+                (hc_nc_cone_t){-1, ni, inv, slice_all.mask, NULL, 0};
             nc->cone_slice_var =
-                (hc_nc_cone_t){-1, nv, var, slice_all.mask};
+                (hc_nc_cone_t){-1, nv, var, slice_all.mask, NULL, 0};
+            /* var 부분의 lazy 브랜치 프로그램 (P2-4). 루트 = interp 자식
+             * (전부 y-가변이라 var 콘 소속). var-내부 도달성은 var 안에
+             * 닫힌다 — y-분산 전파가 단조라 가변 노드에서 가변 노드로
+             * 가는 읽기 경로가 불변 노드를 경유할 수 없다. */
+            if (hc_df_cone_program(g, slice_roots, nc->n_interp, var, nv,
+                                   arena, &nc->cone_slice_var.prog,
+                                   &nc->cone_slice_var.prog_words))
+                return -1;
         }
 
         /* flat_cache 테이블 구축용 자식 콘 (SP). 구축 포인트는 정의상 창
@@ -474,7 +503,7 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
         for (int32_t f = 0; f < nc->n_flat; f++) {
             int32_t child = g->nodes[nc->flat[f].node].a;
             if (cone_build_ex(nc, arena, HC_DF_MODE_SP, &child, 1, child,
-                              HC_DF_CONE_WINDOW_SAFE, &nc->cones_flat[f]))
+                              HC_DF_CONE_WINDOW_SAFE, 1, &nc->cones_flat[f]))
                 return -1;
         }
     }
