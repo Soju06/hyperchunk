@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,21 @@
 /* TreeFeature + trunk/foliage placer + decorator + FallenTreeFeature —
  * 전부 26.2 바이트코드 재구성 (.hermes/notes/task9b-features/R2). 드로우
  * 순서/반복 순서/자바 HashSet 순회 순서가 비트 정확성의 전부다. */
+
+/* HC_TREE_DEBUG / HC_TREE_DEBUG_CELL 스냅샷 (P2-7): env 는 프로세스
+ * 불변인데 종전엔 vine 블록/데코마다 getenv(environ 선형 워크)를 탔다.
+ * pthread_once — FREE 워커 최초-사용 경합에서도 TSan 클린. */
+static pthread_once_t g_tdbg_once = PTHREAD_ONCE_INIT;
+static const char    *g_tdbg;            /* HC_TREE_DEBUG (플래그) */
+static int            g_tdbg_cell_on;    /* HC_TREE_DEBUG_CELL 파스 성공 */
+static int32_t        g_tdbg_cell[3];
+static void tdbg_init(void) {
+    g_tdbg = getenv("HC_TREE_DEBUG");
+    const char *dbg = getenv("HC_TREE_DEBUG_CELL");
+    g_tdbg_cell_on =
+        dbg && sscanf(dbg, "%d,%d,%d", &g_tdbg_cell[0], &g_tdbg_cell[1],
+                      &g_tdbg_cell[2]) == 3;
+}
 
 #define die hc_featx_die
 #define mask_test hc_featx_mask_test
@@ -491,14 +507,11 @@ static int ctx_is_air(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
 /* Context.placeVine — deco 셋 + flag 19. face_off: E=0,N=1,S=2,U=3,W=4 */
 static void ctx_place_vine(tree_ctx_t *t, jset_t *deco, int32_t x, int32_t y,
                            int32_t z, int face_off) {
-    const char *dbg = getenv("HC_TREE_DEBUG_CELL");
-    if (dbg) {
-        int32_t dx, dy, dz;
-        if (sscanf(dbg, "%d,%d,%d", &dx, &dy, &dz) == 3 && x == dx &&
-            y == dy && z == dz)
-            fprintf(stderr, "placeVine HIT (%d,%d,%d) face %d\n", x, y, z,
-                    face_off);
-    }
+    pthread_once(&g_tdbg_once, tdbg_init);
+    if (g_tdbg_cell_on && x == g_tdbg_cell[0] && y == g_tdbg_cell[1] &&
+        z == g_tdbg_cell[2])
+        fprintf(stderr, "placeVine HIT (%d,%d,%d) face %d\n", x, y, z,
+                face_off);
     jset_add(deco, x, y, z);
     hc_feat_set_block_ks(t->e->rg, x, y, z, /* flag 19 */
                          (uint16_t)(HC_B_VINE_BASE + face_off));
@@ -671,7 +684,8 @@ static void dec_hanging_vine(tree_ctx_t *t, jset_t *deco, int32_t x, int32_t y,
 static void dec_leave_vine(tree_ctx_t *t, jset_t *deco, const cpos_t *leaves,
                            int32_t n_leaves, float prob) {
     feat_env_t *e = t->e;
-    const char *dbg = getenv("HC_TREE_DEBUG");
+    pthread_once(&g_tdbg_once, tdbg_init);
+    const char *dbg = g_tdbg;
     for (int32_t i = 0; i < n_leaves; i++) {
         int32_t x = leaves[i].x, y = leaves[i].y, z = leaves[i].z;
         float f1 = hc_wgr_next_float(e->rng);

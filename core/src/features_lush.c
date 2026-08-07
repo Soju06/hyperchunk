@@ -1,8 +1,20 @@
 #include "features_internal.h"
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* HC_VPATCH_DEBUG 스냅샷 (P2-7): vegetation_patch 배치마다 getenv 를
+ * 타던 것을 1회 캐시. pthread_once = FREE 워커 경합에서 TSan 클린. */
+static pthread_once_t g_vdbg_once = PTHREAD_ONCE_INIT;
+static int            g_vdbg_on;
+static int32_t        g_vdbg[3];
+static void vdbg_init(void) {
+    const char *dv = getenv("HC_VPATCH_DEBUG");
+    g_vdbg_on = dv && sscanf(dv, "%d,%d,%d", &g_vdbg[0], &g_vdbg[1],
+                             &g_vdbg[2]) == 3;
+}
 
 /* R3 본문: multiface_growth(glow_lichen) / block_column / vegetation_patch
  * (+waterlogged) — 전부 26.2 바이트코드 재구성
@@ -309,14 +321,9 @@ static int wv_exposed(feat_env_t *e, int32_t x, int32_t y, int32_t z) {
 int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t ox,
                           int32_t oy, int32_t oz) {
     /* 디버그: HC_VPATCH_DEBUG="ox,oy,oz" 인 호출의 컬럼 이벤트 로그 */
-    int dbg = 0;
-    {
-        const char *dv = getenv("HC_VPATCH_DEBUG");
-        int32_t     dx_, dy_, dz_;
-        if (dv && sscanf(dv, "%d,%d,%d", &dx_, &dy_, &dz_) == 3 &&
-            dx_ == ox && dy_ == oy && dz_ == oz)
-            dbg = 1;
-    }
+    pthread_once(&g_vdbg_once, vdbg_init);
+    int dbg = g_vdbg_on && g_vdbg[0] == ox && g_vdbg[1] == oy &&
+              g_vdbg[2] == oz;
     int32_t xr = iprov_sample(e->rng, &c->xz_radius) + 1; /* X 먼저 */
     int32_t zr = iprov_sample(e->rng, &c->xz_radius) + 1;
     int32_t dir = c->surface_ceiling ? 1 : -1; /* surface 방향의 dy */

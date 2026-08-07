@@ -26,12 +26,21 @@
 
 #include "hc_postprocess.h"
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "hc_blocks.h"
 #include "features_internal.h" /* hc_featx_can_survive (Task 14) */
+
+/* HC_PP_DEBUG_VEG 스냅샷 (P2-7): veg-kill 이벤트마다 getenv 를 타던 것을
+ * 1회 캐시. pthread_once = 워커 경합에서 TSan 클린. */
+static pthread_once_t g_ppveg_once = PTHREAD_ONCE_INIT;
+static int            g_ppveg_dbg;
+static void ppveg_init(void) {
+    g_ppveg_dbg = getenv("HC_PP_DEBUG_VEG") != NULL;
+}
 
 static _Noreturn void pp_die(const char *what, int32_t x, int32_t y,
                              int32_t z) {
@@ -718,7 +727,8 @@ static uint16_t update_shape(pp_t *pp, uint16_t s, int32_t x, int32_t y,
         g_unmodeled_veg_eval++;
         if (dir == 0) {
             if (hc_block_is_air(ns) || fluid_of(ns).type != FL_NONE) {
-                if (getenv("HC_PP_DEBUG_VEG"))
+                pthread_once(&g_ppveg_once, ppveg_init);
+                if (g_ppveg_dbg)
                     fprintf(stderr, "PPVEGKILL (%d,%d,%d) %s below=%s\n", x,
                             y, z, hc_block_name(s), hc_block_name(ns));
                 return HC_B_AIR; /* updateOrDestroy 가 유체 복원 처리 */
