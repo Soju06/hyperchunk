@@ -5,9 +5,6 @@
  * golden/rng/octaves_seed*.txt 의 .valueFactor / .getValue 벡터로
  * 비트단위 검증된다 (tests/unit/test_noise.c). */
 
-/* NormalNoise.INPUT_FACTOR — second 좌표 스케일 */
-#define HC_NORMAL_INPUT_FACTOR 1.0181268882175227
-
 /* expectedDeviation(n) = 0.1 * (1 + 1/(n+1)) — 결합 순서 그대로.
  * n+1 도 Java iadd 래핑으로 계산한다 (C signed 오버플로 UB 회피). */
 static double expected_deviation(int32_t n) {

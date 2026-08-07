@@ -27,6 +27,7 @@
 
 #include "../core/src/hc_carvers.h"
 #include "../core/src/hc_chunk_nbt.h"
+#include "../core/src/hc_df_simd.h"
 #include "../core/src/hc_features.h"
 #include "../core/src/hc_light.h"
 #include "../core/src/hc_nbt.h"
@@ -954,9 +955,23 @@ int main(int argc, char **argv) {
                 free_mode = 1;
             else if (strcmp(p, "replay") != 0)
                 die("--policy must be replay|free", p);
+        } else if (strcmp(argv[i], "--isa") == 0 && i + 1 < argc) {
+            /* ADR-004 D2/D4: 백엔드 강제 — scalar-vs-avx2 canonical 동일
+             * 게이트 (scripts/check_isa_equiv.sh) 가 두 값으로 부른다.
+             * avx2 강제는 cpuid 통과 시에만 반영 (아래 검증). */
+            const char *p = argv[++i];
+            if (strcmp(p, "scalar") == 0)
+                hc_isa_force(HC_ISA_SCALAR);
+            else if (strcmp(p, "avx2") == 0) {
+                hc_isa_force(HC_ISA_AVX2);
+                if (hc_isa_active() != HC_ISA_AVX2)
+                    die("--isa avx2: host lacks AVX2", NULL);
+            } else if (strcmp(p, "auto") != 0)
+                die("--isa must be scalar|avx2|auto", p);
         } else {
             die("usage: hyperchunk-bench --seed <s> --region <x> <z> "
-                "[--repo <root>] [--threads <n>] [--policy replay|free]",
+                "[--repo <root>] [--threads <n>] [--policy replay|free] "
+                "[--isa scalar|avx2|auto]",
                 argv[i]);
         }
     }
@@ -1651,7 +1666,7 @@ int main(int argc, char **argv) {
     getrusage(RUSAGE_SELF, &ru);
 
     fprintf(stderr,
-            "== hyperchunk-bench seed=%" PRId64 " threads=%d ==\n"
+            "== hyperchunk-bench seed=%" PRId64 " threads=%d isa=%s ==\n"
             "   (이 VM은 토폴로지 오보고 — 절대치는 참고치, 비중/배율만 유효)\n"
             "setup                 %8.1f ms  (참조 로드+컴파일, 생성 비용 아님)\n"
             "replay-input parse    %8.1f ms  (하네스 오버헤드)\n"
@@ -1676,7 +1691,9 @@ int main(int argc, char **argv) {
             "gen wall (오버헤드 제외) %8.1f ms   per-chunk(1024) %.2f ms\n"
             "process total         %8.1f ms   maxrss %.1f GiB\n"
             "%s\n",
-            seed, nthreads, setup_ns / 1e6, B_replay_load / 1e6, nthreads,
+            seed, nthreads,
+            hc_isa_active() == HC_ISA_AVX2 ? "avx2" : "scalar",
+            setup_ns / 1e6, B_replay_load / 1e6, nthreads,
             chain_wall / 1e6, cc.nc_init / 1e6, cc.beard / 1e6,
             cc.noise / 1e6, cc.surface / 1e6, cc.carvers / 1e6,
             chain_cpu_total / 1e6,
@@ -1697,6 +1714,7 @@ int main(int argc, char **argv) {
                 D_l08 / 1e6, D_l09 / 1e6, D_prep / 1e6);
 
     printf("{\"seed\":%" PRId64 ",\"threads\":%d,\"policy\":\"%s\","
+           "\"isa\":\"%s\","
            "\"pass\":%s,"
            "\"canonical\":\"%s\","
            "\"chunks\":{\"chain\":%d,\"decorated\":%d,\"postprocessed\":%d,"
@@ -1722,6 +1740,7 @@ int main(int argc, char **argv) {
            "\"feat_phase_wall_ns\":%" PRIu64 ",\"gen_wall_ns\":%" PRIu64
            ",\"proc_wall_ns\":%" PRIu64 ",\"maxrss_kib\":%ld}\n",
            seed, nthreads, free_mode ? "free" : "replay",
+           hc_isa_active() == HC_ISA_AVX2 ? "avx2" : "scalar",
            pass ? "true" : "false", hex, WORLD_CHUNKS, n_man,
            n_pm_out, setup_ns, B_replay_load, chain_wall, cc.nc_init,
            cc.beard, cc.noise, cc.surface, cc.carvers, cw.nc_init, cw.beard,

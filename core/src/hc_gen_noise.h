@@ -70,6 +70,7 @@ typedef struct {
     const uint8_t *mask; /* [g->n] */
     const int32_t *prog; /* NULL = 플레인 콘 워크 */
     int32_t        prog_words;
+    uint8_t        x4_ok; /* 스트림이 AVX2 x4 화이트리스트 안 (P2-4) */
 } hc_nc_cone_t;
 
 enum { HC_NC_N_SP_CONES = 6, HC_NC_N_BLOCK_CONES = 4 };
@@ -121,6 +122,11 @@ typedef struct hc_noise_chunk_s {
      * 그대로 NULL). */
     const hc_beard_t *beard;
     double density_cell[4 * 4 * 8];
+
+    /* AVX2 x4 백엔드 (P2-4, ADR-004 D2 런타임 디스패치). x4 == 0 이면
+     * 전부 스칼라 경로 — 두 백엔드는 canonical 비트 동일 (게이트 대상). */
+    int     x4;        /* hc_isa_active() == AVX2, nc_init 시 1회 캐시 */
+    double *vscratch;  /* [g->n][4] SoA, 32B 정렬 (x4 일 때만 할당) */
 
     /* preliminarySurfaceLevel 컬럼 메모 (Long2IntMap 대응, 값-중립 memo) */
     uint64_t *psl_key;

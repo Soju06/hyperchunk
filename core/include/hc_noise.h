@@ -72,6 +72,10 @@ double hc_octaves_value(const hc_octaves_t *o, double x, double y, double z,
 double hc_octaves_wrap(double d);
 
 /* --- NormalNoise --- */
+
+/* NormalNoise.INPUT_FACTOR — second 좌표 스케일 (스칼라/SIMD 공유) */
+#define HC_NORMAL_INPUT_FACTOR 1.0181268882175227
+
 typedef struct {
     hc_octaves_t first, second;
     double       value_factor;

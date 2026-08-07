@@ -1,4 +1,5 @@
 #include "hc_gen_noise.h"
+#include "hc_df_simd.h"
 
 #include <assert.h>
 #include <math.h>
@@ -155,7 +156,52 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
                         (double)(nc->cell_noise_min_y * nc->cell_height),
                         (double)bz, nc->scratch, nc_cc(nc, HC_DF_MODE_SP),
                         nc->cone_slice_inv.mask);
-        for (int32_t i = 0; i <= nc->cell_count_y; i++) {
+        int32_t i = 0;
+        /* AVX2 x4: y 4점 레인화 (P2-4). x/z 는 컬럼 고정 — 각 레인은
+         * 독립 평가점이고 값은 스칼라 경로와 비트 동일 (df_x4 게이트).
+         * y-불변부 값을 vscratch 에 브로드캐스트해 x4 스트림의 피연산자
+         * 로 제공한다 (콘 닫힘상 var 의 콘-밖 피연산자는 inv 뿐). */
+        if (nc->x4 && nc->cone_slice_var.x4_ok) {
+            for (int32_t t = 0; t < nc->cone_slice_inv.len; t++) {
+                int32_t n = nc->cone_slice_inv.list[t];
+                double  v = nc->scratch[n];
+                nc->vscratch[4 * n] = v;
+                nc->vscratch[4 * n + 1] = v;
+                nc->vscratch[4 * n + 2] = v;
+                nc->vscratch[4 * n + 3] = v;
+            }
+            const int32_t *stream = nc->cone_slice_var.prog
+                                        ? nc->cone_slice_var.prog
+                                        : nc->cone_slice_var.list;
+            int32_t swords = nc->cone_slice_var.prog
+                                 ? nc->cone_slice_var.prog_words
+                                 : nc->cone_slice_var.len;
+            hc_df_lanes_t lanes;
+            memset(&lanes, 0, sizeof lanes);
+            for (; i + 3 <= nc->cell_count_y; i += 4) {
+                for (int l = 0; l < 4; l++) {
+                    lanes.x[l] = (double)nc->cell_start_x;
+                    lanes.y[l] = (double)((i + l + nc->cell_noise_min_y) *
+                                          nc->cell_height);
+                    lanes.z[l] = (double)bz;
+                }
+                hc_df_eval_stream_x4_avx2(nc->g, stream, swords, &lanes,
+                                          nc->vscratch,
+                                          nc_cc(nc, HC_DF_MODE_SP));
+                for (int32_t k = 0; k < nc->n_interp; k++) {
+                    hc_df_interp_t *it = &nc->interp[k];
+                    double *slice = which == 0 ? it->slice0 : it->slice1;
+                    const double *v =
+                        nc->vscratch + 4 * nc->g->nodes[it->node].a;
+                    slice[j * stride + i] = v[0];
+                    slice[j * stride + i + 1] = v[1];
+                    slice[j * stride + i + 2] = v[2];
+                    slice[j * stride + i + 3] = v[3];
+                }
+            }
+            /* 꼬리 (49번째 포인트) 는 아래 스칼라 경로가 처리 */
+        }
+        for (; i <= nc->cell_count_y; i++) {
             int32_t by = (i + nc->cell_noise_min_y) * nc->cell_height;
             if (nc->cone_slice_var.prog)
                 hc_df_eval_prog(nc->g, nc->cone_slice_var.prog,
@@ -215,6 +261,40 @@ void hc_nc_select_cell_yz(hc_noise_chunk_t *nc, int32_t cell_y,
      * 경로에 없음을 증명했으므로 (cache_once 는 전부 interpolated 안)
      * 카운터 자체는 재현할 필요가 없다. */
     int32_t ai = 0;
+    /* AVX2 x4: iz 4점 레인화 (cell_width == 4 일 때 최내측 루프가 정확히
+     * 4레인, P2-4). 각 레인은 독립 평가점 — 값은 스칼라 경로와 비트 동일
+     * (df_x4 게이트). density_cell 채움 순서 (iy 내림, ix, iz) 보존. */
+    if (nc->x4 && nc->cone_cell.x4_ok && nc->cell_width == 4) {
+        const int32_t *stream =
+            nc->cone_cell.prog ? nc->cone_cell.prog : nc->cone_cell.list;
+        int32_t swords = nc->cone_cell.prog ? nc->cone_cell.prog_words
+                                            : nc->cone_cell.len;
+        for (int32_t iy = nc->cell_height - 1; iy >= 0; iy--)
+            for (int32_t ix = 0; ix < nc->cell_width; ix++) {
+                int32_t       bx = nc->cell_start_x + ix;
+                int32_t       by = nc->cell_start_y + iy;
+                int32_t       bz0 = nc->cell_start_z;
+                hc_df_lanes_t lanes;
+                for (int l = 0; l < 4; l++) {
+                    lanes.x[l] = (double)bx;
+                    lanes.y[l] = (double)by;
+                    lanes.z[l] = (double)(bz0 + l);
+                    /* interp_lerp3 델타 — 스칼라와 같은 식 */
+                    lanes.dx[l] = (double)ix / (double)nc->cell_width;
+                    lanes.dy[l] = (double)iy / (double)nc->cell_height;
+                    lanes.dz[l] = (double)l / (double)nc->cell_width;
+                }
+                hc_df_eval_stream_x4_avx2(nc->g, stream, swords, &lanes,
+                                          nc->vscratch,
+                                          nc_cc(nc, HC_DF_MODE_CELL));
+                const double *v =
+                    nc->vscratch + 4 * (size_t)nc->roots.final_density;
+                for (int l = 0; l < 4; l++)
+                    nc->density_cell[ai++] =
+                        v[l] + hc_beard_compute(nc->beard, bx, by, bz0 + l);
+            }
+        return;
+    }
     for (int32_t iy = nc->cell_height - 1; iy >= 0; iy--)
         for (int32_t ix = 0; ix < nc->cell_width; ix++)
             for (int32_t iz = 0; iz < nc->cell_width; iz++) {
@@ -307,6 +387,12 @@ static int cone_build_ex(hc_noise_chunk_t *nc, hc_arena_t *arena,
         hc_df_cone_program(g, roots, n_roots, list, len, arena, &out->prog,
                            &out->prog_words))
         return -1;
+    /* AVX2 x4 적격 (스트림 화이트리스트, P2-4) — 실사용 여부는 nc->x4
+     * (런타임 디스패치) 와 호출 지점이 함께 결정한다. */
+    out->x4_ok = (uint8_t)(out->prog
+                               ? hc_df_stream_x4_ok(g, out->prog,
+                                                    out->prog_words)
+                               : hc_df_stream_x4_ok(g, list, len));
     return 0;
 }
 
@@ -354,6 +440,17 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
     nc->flat_of = hc_arena_alloc(arena, sizeof(int32_t) * (size_t)g->n, 4);
     if (!nc->scratch || !nc->interp_of || !nc->flat_of)
         return -1;
+
+    /* AVX2 백엔드 (P2-4): cpuid 디스패치 결과를 청크당 1회 캐시.
+     * SoA vscratch 는 x4 경로 전용 — 스칼라 백엔드는 할당하지 않는다. */
+    nc->x4 = (hc_isa_active() == HC_ISA_AVX2);
+    nc->vscratch = NULL;
+    if (nc->x4) {
+        nc->vscratch =
+            hc_arena_alloc(arena, sizeof(double) * 4 * (size_t)g->n, 32);
+        if (!nc->vscratch)
+            return -1;
+    }
 
     /* 마커 조사: 그래프 전체의 interpolated / flat_cache — 바닐라는 15슬롯
      * 전부를 한 visitor 로 mapAll 하므로 모든 마커가 상태를 얻는다. */
@@ -479,9 +576,9 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
                     inv[ni++] = node;
             }
             nc->cone_slice_inv =
-                (hc_nc_cone_t){-1, ni, inv, slice_all.mask, NULL, 0};
+                (hc_nc_cone_t){-1, ni, inv, slice_all.mask, NULL, 0, 0};
             nc->cone_slice_var =
-                (hc_nc_cone_t){-1, nv, var, slice_all.mask, NULL, 0};
+                (hc_nc_cone_t){-1, nv, var, slice_all.mask, NULL, 0, 0};
             /* var 부분의 lazy 브랜치 프로그램 (P2-4). 루트 = interp 자식
              * (전부 y-가변이라 var 콘 소속). var-내부 도달성은 var 안에
              * 닫힌다 — y-분산 전파가 단조라 가변 노드에서 가변 노드로
@@ -490,6 +587,11 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
                                    arena, &nc->cone_slice_var.prog,
                                    &nc->cone_slice_var.prog_words))
                 return -1;
+            nc->cone_slice_var.x4_ok = (uint8_t)(
+                nc->cone_slice_var.prog
+                    ? hc_df_stream_x4_ok(g, nc->cone_slice_var.prog,
+                                         nc->cone_slice_var.prog_words)
+                    : hc_df_stream_x4_ok(g, var, nv));
         }
 
         /* flat_cache 테이블 구축용 자식 콘 (SP). 구축 포인트는 정의상 창

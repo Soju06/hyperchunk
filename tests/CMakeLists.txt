@@ -96,6 +96,14 @@ add_executable(test_df_cones parity/test_df_cones.c)
 target_link_libraries(test_df_cones PRIVATE hyperchunk)
 add_test(NAME df_cones COMMAND test_df_cones ${CMAKE_SOURCE_DIR}/reference)
 
+# scalar-vs-avx2 백엔드 동일성 — 유닛 판 (P2-4, ADR-004 D4). fill_slice/
+# select_cell_yz 관측면을 두 백엔드로 이중 실행해 비트 대조. AVX2 부재
+# 호스트는 SKIP (77). 리전 판은 scripts/check_isa_equiv.sh.
+add_executable(test_df_x4 parity/test_df_x4.c)
+target_link_libraries(test_df_x4 PRIVATE hyperchunk)
+add_test(NAME df_x4 COMMAND test_df_x4 ${CMAKE_SOURCE_DIR}/reference)
+set_tests_properties(df_x4 PROPERTIES SKIP_RETURN_CODE 77)
+
 # 노이즈 스테이지 청크 패리티 (Task 6c). 셀 시맨틱 + aquifer + veins +
 # doFill → golden 스테이지 덤프와 라인 단위 0 diff.
 add_executable(test_noise_stage parity/test_noise_stage.c)

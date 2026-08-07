@@ -11,6 +11,8 @@ add_library(hyperchunk STATIC
   src/noise_normal.c
   src/df_eval.c
   src/df_compile.c
+  src/df_isa.c
+  src/df_simd_avx2.c
   src/noise_chunk.c
   src/beard.c
   src/aquifer.c
@@ -47,6 +49,15 @@ add_library(hyperchunk STATIC
   src/sched.c
 )
 target_include_directories(hyperchunk PUBLIC include)
+
+# AVX2 커널 TU 한정 -mavx2 (ADR-004 D1/D2): 나머지 TU 는 기본 ISA 로
+# 남겨 AVX2 부재 호스트에서도 실행 가능해야 한다 (진입은 cpuid 디스패치
+# 뒤에만). -mfma 는 켜지 않는다 — FMA 금지 (ADR-004 D3) 는 인트린식
+# 선택 + check_no_fma.sh 가 이중으로 지킨다.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-6]86")
+  set_source_files_properties(src/df_simd_avx2.c PROPERTIES
+    COMPILE_OPTIONS "-mavx2")
+endif()
 # ADR-003 D1: 서드파티 의존성 없음. libm 은 ISO C 수학 런타임 (glibc
 # 2.34+ 에서는 libc 로 통합된 호환 스텁) — D1 위반 아님. pthread 는
 # P2-3 스케줄러(sched.c)가 소유 — "스레딩은 pthread 허용" (기존 체인
