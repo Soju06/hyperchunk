@@ -11,9 +11,10 @@ SEED="${SEED:-1234567890}"
 BUILD="${BUILD:-$ROOT/build}"
 OUT="${OUT:-/tmp/hyperchunk_verify_r.0.0.mca}"
 
-if [ ! -x "$BUILD/cli/hyperchunk-verify" ]; then
-    cmake --build "$BUILD" --target hyperchunk_verify -j"$(nproc)"
-fi
+# 항상 재빌드 — 존재-검사 스킵은 스테일 바이너리로 낡은 코드를 판정하는
+# false-PASS 채널이었다 (P2-4 에서 실제 발화: bench-o2 verify 가 P2-3
+# 산출물인 채 PASS 를 찍었다). 증분 빌드라 무변경 시 비용은 ~0 이다.
+cmake --build "$BUILD" --target hyperchunk_verify -j"$(nproc)"
 
 "$BUILD/cli/hyperchunk-verify" --seed "$SEED" --region 0 0 \
     --repo "$ROOT" --out "$OUT"
