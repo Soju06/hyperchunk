@@ -51,6 +51,14 @@ typedef struct {
                              * (바닐라는 청크당 1회 — 재시딩 없음) */
     uint8_t     geo_dirty;  /* 누적 모드: 라이브 쓰기 후 지오메트리 재유도
                              * 대기 (dirty 목록 중복 방지) */
+    uint8_t     blk_dirty;  /* 누적 모드 (P2-8): 마지막 재유도 이후 이
+                             * 청크 states[] 에 변경이 있었음 — prepare 가
+                             * 이 플래그 없는 in_r 청크의 재유도를 스킵한다
+                             * (무변경 재유도 = no-op 증명, P2-8 노트 §2).
+                             * 설정: accum_write + 하네스 훅의
+                             * mark_written (동결-창 쓰기 포함 — 라이트
+                             * 미반영이어도 섹션 등록에는 라이브).
+                             * 해제: 그 청크의 재유도 (08/flush/prepare). */
     int32_t     src_y[256]; /* ChunkSkyLightSources.getLowestSourceY; hc_col_idx */
 } hc_light_chunk_t;
 
@@ -147,6 +155,14 @@ int hc_light_get(const hc_light_world_t *w, int layer, int32_t x, int32_t y,
  *   배치 등가 — 그룹핑은 국소 lfp 재구축이라 결과 불변 (R2 §10). */
 void hc_light_accum_prepare(hc_light_world_t *w);
 void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz);
+/* P2-8: states[] 변경 신고 (blk_dirty). 호출처 = 블록 쓰기 훅 — 라이트
+ * 훅과 달리 동결-창 필터 **앞**에서 부른다: 동결-창 쓰기는 checkBlock/
+ * src_y 에는 영구 미반영이지만 (헤더 위 주석), 섹션 등록은 현재 블록
+ * 재유도라 라이브다 — 이 구분이 prepare dirty-skip 의 정확성 조건.
+ * ore 벌크 쓰기 (features.c ore_do_place, BulkSectionAccess 등가) 는
+ * 훅 미경유지만 비-공기→비-공기 뿐이라 섹션 비-공기 프로필을 못 바꾼다
+ * (P2-8 노트 §2 채널 전수). 슬롯 밖 좌표는 no-op. */
+void hc_light_accum_mark_written(hc_light_world_t *w, int32_t x, int32_t z);
 void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz);
 void hc_light_accum_write(hc_light_world_t *w, int32_t x, int32_t y, int32_t z,
                           uint16_t old_id, uint16_t new_id);

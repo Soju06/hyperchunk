@@ -549,6 +549,9 @@ static void light_write_hook(void *ud, int32_t x, int32_t y, int32_t z,
     (void)ud;
     if (!g_lw_hook)
         return;
+    /* P2-8: states[] 변경 신고 — 동결-창 필터 앞 (섹션 등록은 동결과
+     * 무관하게 현재-블록 재유도라 라이브; hc_light.h mark_written 주석) */
+    hc_light_accum_mark_written(g_lw_hook, x, z);
     int32_t la = g_live_at[widx(x >> 4, z >> 4)];
     if (la == INT32_MAX || g_cur_pos < la)
         return; /* 동결 창 / 파이프라인 밖 */
@@ -620,6 +623,9 @@ static uint64_t               B_dag;
 static void fw_light_write_hook(void *ud, int32_t x, int32_t y, int32_t z,
                                 uint16_t old_id, uint16_t new_id) {
     fw_t *w = ud;
+    /* P2-8: states[] 변경 신고 — 동결-창 필터 앞 (섹션 등록은 동결과
+     * 무관하게 현재-블록 재유도라 라이브; hc_light.h mark_written 주석) */
+    hc_light_accum_mark_written(g_lwp, x, z);
     int32_t la = g_live_at[widx(x >> 4, z >> 4)];
     if (la == INT32_MAX || w->cur_pos < la)
         return;

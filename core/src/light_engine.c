@@ -322,6 +322,11 @@ void hc_light_reset(hc_light_world_t *w) {
         s->in_r = 0;
         s->enabled = 0;
         s->seeded = 0;
+        /* P2-8: dirty 플래그도 초기화 — geo_dirty 잔존은 리셋 후 첫
+         * 라이브 쓰기가 ctx dirty 목록 등재를 건너뛰게 만든다 (재유도
+         * 누락 채널; blk_dirty 는 신설이라 동반 초기화). */
+        s->geo_dirty = 0;
+        s->blk_dirty = 0;
         for (int c = 0; c < 256; c++)
             s->src_y[c] = HC_LIGHT_OPEN;
     }
@@ -653,18 +658,66 @@ void hc_light_solve(hc_light_world_t *w) {
 
 /* --- 누적 (increase-only 이력) 모드 — hc_light.h 헤더 주석 참조 --- */
 
+#ifndef NDEBUG
+/* P2-8 dirty-skip no-op 검증 (assert 빌드 전용): blk_dirty 없는 청크의
+ * 재유도가 실제로 no-op 인지 — 즉 자기 비-공기 섹션에서 유도되는 모든
+ * 등록 비트/top 이 이미 반영돼 있는지 — 를 실검증한다. 여기가 깨지면
+ * states[] 변경 채널이 mark_written 을 우회한 것 (P2-8 노트 §2). */
+static void derive_assert_noop(const hc_light_world_t *w,
+                               const hc_light_chunk_t *s) {
+    int32_t cx = s->chunk->cx, cz = s->chunk->cz;
+    for (int32_t sec = -4; sec <= 19; sec++) {
+        if (!section_has_data(s->chunk, sec))
+            continue;
+        for (int dz = -1; dz <= 1; dz++)
+            for (int dx = -1; dx <= 1; dx++) {
+                const hc_light_chunk_t *t = slot(w, cx + dx, cz + dz);
+                assert(t);
+                for (int dy = -1; dy <= 1; dy++) {
+                    int32_t ns = sec + dy;
+                    assert(t->registered &
+                           (1u << (ns - HC_LIGHT_SEC_MIN)));
+                    assert(t->top != HC_LIGHT_NO_TOP && ns + 1 <= t->top);
+                }
+            }
+    }
+}
+#endif
+
 void hc_light_accum_prepare(hc_light_world_t *w) {
     /* 지오메트리만 — src_y 는 각 청크 08 시점에 동결 (init_chunk).
      * 실측 근거: c.2.26 — 3×3 이웃 데코 전부 09 완료 전인데 골든이
      * 나중-배치 캐노피 아래 sky 15 = 09 직접 채움이 08 시점의 열린
      * 컬럼(fillFrom)을 그대로 썼다. ProtoChunk 쓰기는 updateSectionStatus
-     * 만 갱신하고 skyLightSources 는 갱신하지 않는 클래스. */
+     * 만 갱신하고 skyLightSources 는 갱신하지 않는 클래스.
+     *
+     * P2-8 dirty-skip: 마지막 재유도 이후 states[] 변경이 신고되지 않은
+     * 청크는 스킵 — 그 재유도는 no-op 다 (비-공기 섹션 집합 불변 →
+     * 모든 후보 비트가 이미 설정 (등록/top 은 단조, 클리어는 reset 뿐)
+     * → 신규-비트 분기 (15-채움/die 검사) 미진입 → 상태 동일. 증명
+     * P2-8 노트 §2). 실행 순서는 종전 슬롯 순서의 부분열이고 스킵된
+     * 원소가 항등이라 잔여 재유도의 관측 상태도 동일하다. 말미
+     * check_contiguous 는 종전 그대로 전역 — 검출면 불변. */
     for (int32_t i = 0; i < w->n * w->n; i++) {
         hc_light_chunk_t *s = &w->slots[i];
-        if (s->chunk && s->in_r)
-            derive_geometry_chunk(w, s);
+        if (!s->chunk || !s->in_r)
+            continue;
+        if (!s->blk_dirty) {
+#ifndef NDEBUG
+            derive_assert_noop(w, s);
+#endif
+            continue;
+        }
+        s->blk_dirty = 0;
+        derive_geometry_chunk(w, s);
     }
     check_contiguous(w);
+}
+
+void hc_light_accum_mark_written(hc_light_world_t *w, int32_t x, int32_t z) {
+    hc_light_chunk_t *s = slot(w, x >> 4, z >> 4);
+    if (s)
+        s->blk_dirty = 1;
 }
 
 void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
@@ -679,6 +732,7 @@ void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
         abort();
     }
     s->in_r = 1;
+    s->blk_dirty = 0; /* P2-8: 이 재유도가 현재 states[] 를 전부 반영 */
     derive_geometry_chunk(w, s);
     /* 이 재유도의 마스크 영향 반경은 cx±1 — 국소 검사 (위 주석) */
     check_contiguous_box(w, cx - 1, cz - 1, cx + 1, cz + 1);
@@ -780,6 +834,7 @@ void hc_light_accum_write_ctx(hc_light_world_t *w, hc_light_ctx_t *c,
                 x >> 4, z >> 4);
         abort();
     }
+    s->blk_dirty = 1; /* P2-8: 직접 호출자 방어 — 훅 경유는 이미 신고됨 */
     src_y_update(w, s, x, y, z);
     if (c->n_check >= (1 << c->check_log)) {
         fprintf(stderr, "hc_light: checkBlock set overflow\n");
@@ -940,6 +995,7 @@ void hc_light_accum_flush_ctx(hc_light_world_t *w, hc_light_ctx_t *c) {
     for (int32_t i = 0; i < c->n_dirty; i++) {
         hc_light_chunk_t *s = &w->slots[c->dirty[i]];
         s->geo_dirty = 0;
+        s->blk_dirty = 0; /* P2-8: 이 재유도가 현재 states[] 를 전부 반영 */
         derive_geometry_chunk(w, s);
         /* 연속-등록 가드: 이번 재유도가 바꿀 수 있는 마스크는 자신+±1
          * 뿐 — 전역 스캔 대신 국소 검사 (검출력 동일, FREE 에서 무관
