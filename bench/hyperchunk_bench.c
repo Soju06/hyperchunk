@@ -430,8 +430,39 @@ typedef struct {
     stage_acc_t             wall; /* CLOCK_MONOTONIC 누적 */
     stage_acc_t             cpu;  /* CLOCK_THREAD_CPUTIME_ID 누적 */
     int32_t                 chunks_done;
+    int32_t                 tid; /* 워터폴 귀속용 워커 번호 */
     char pad[64]; /* 워커 간 누적 필드 false sharing 차단 */
 } chain_job_t;
+
+/* ---- B-2 워터폴 계측 (분석 전용) — HC_BENCH_TIMELINE=<path> 로만 켜진다.
+ * 꺼진 상태(기본)는 포인터 검사 1회뿐이라 기존 벤치 수치를 오염하지
+ * 않고, 켜져도 체인은 이미 읽던 타임스탬프의 저장뿐이다 (추가 클록
+ * 읽기는 DAG 이벤트당 2회 + 직렬화 청크당 2회 — 오버헤드는 on/off
+ * 3런 중앙값 비교로 병기한다). 덤프는 전 계측 완료 후 1회 파일 쓰기. */
+static const char *g_wf_path; /* NULL = off */
+typedef struct {
+    uint64_t w[6]; /* w0..w5 = 스테이지 경계 (chain_worker 와 동일 순서) */
+    int32_t  tid;
+} wf_chain_rec_t;
+static wf_chain_rec_t g_wf_chain[WORLD_CHUNKS];
+typedef struct {
+    uint64_t t0, t1;
+    int32_t  worker;
+} wf_span_t;
+enum { WF_MAX_MARKS = 32 };
+static struct {
+    const char *name;
+    uint64_t    t;
+} g_wf_marks[WF_MAX_MARKS];
+static int g_wf_nmarks;
+
+static void wf_mark(const char *name, uint64_t t) {
+    if (!g_wf_path || g_wf_nmarks >= WF_MAX_MARKS)
+        return;
+    g_wf_marks[g_wf_nmarks].name = name;
+    g_wf_marks[g_wf_nmarks].t = t;
+    g_wf_nmarks++;
+}
 
 static void *chain_worker(void *ud) {
     chain_job_t *job = ud;
@@ -473,6 +504,16 @@ static void *chain_worker(void *ud) {
         uint64_t w5 = now_ns(), c5 = tcpu_ns();
         job->wall.carvers += w5 - w4;
         job->cpu.carvers += c5 - c4;
+        if (g_wf_path) {
+            wf_chain_rec_t *r = &g_wf_chain[i];
+            r->tid = job->tid;
+            r->w[0] = w0;
+            r->w[1] = w1;
+            r->w[2] = w2;
+            r->w[3] = w3;
+            r->w[4] = w4;
+            r->w[5] = w5;
+        }
         job->chunks_done++;
         job->arena.off = mark;
     }
@@ -562,6 +603,8 @@ typedef struct {
 enum { MAX_EV = 8192, MAX_CELLS = 1 << 18 };
 static hc_sched_ev_t g_evs[MAX_EV];
 static ev_ud_t       g_evud[MAX_EV];
+static wf_span_t     g_wf_ev[MAX_EV];   /* B-2 워터폴: DAG 이벤트 span */
+static wf_span_t     g_wf_ser[1024];    /* B-2 워터폴: 직렬화 청크 span */
 static int32_t       g_ev_n;
 static int32_t       g_cells[MAX_CELLS];
 static int32_t       g_cells_n;
@@ -603,6 +646,7 @@ static int fw_raw_brightness(void *ud, int32_t x, int32_t y, int32_t z) {
 static void exec_ev(void *ud, int32_t worker) {
     ev_ud_t *e = ud;
     fw_t    *w = &g_fw[worker];
+    uint64_t wf0 = g_wf_path ? now_ns() : 0;
     uint64_t c0 = tcpu_ns();
     switch (e->kind) {
     case EV_DECO:
@@ -627,6 +671,12 @@ static void exec_ev(void *ud, int32_t worker) {
         hc_light_accum_prepare(g_lwp);
         w->cpu_prep += tcpu_ns() - c0;
         break;
+    }
+    if (g_wf_path) {
+        wf_span_t *s = &g_wf_ev[e - g_evud];
+        s->t0 = wf0;
+        s->t1 = now_ns();
+        s->worker = worker;
     }
 }
 
@@ -698,8 +748,9 @@ static void push_event(uint8_t kind, int32_t cx, int32_t cz, int32_t pos,
 
 /* FREE 병렬 직렬화 (청크별 순수; test_free_region.c 와 동형) */
 typedef struct {
-    void  *smem;
-    size_t ssz;
+    void   *smem;
+    size_t  ssz;
+    int32_t tid; /* 워터폴 귀속용 */
 } ser_job_t;
 static ser_job_t              g_ser_job[MAX_THREADS];
 static _Atomic int32_t        g_ser_next;
@@ -715,6 +766,7 @@ static void *ser_worker(void *ud) {
             atomic_fetch_add_explicit(&g_ser_next, 1, memory_order_relaxed);
         if (idx >= 1024)
             return NULL;
+        uint64_t    wf0 = g_wf_path ? now_ns() : 0;
         int32_t     cx = idx & 31, cz = idx >> 5;
         hc_chunk_t *c = &g_chunks[widx(cx, cz)];
         hc_arena_t  scratch;
@@ -726,6 +778,11 @@ static void *ser_worker(void *ud) {
         if (n < 0)
             die("chunk serialization failed", NULL);
         g_ser_plen[idx] = n;
+        if (g_wf_path) {
+            g_wf_ser[idx].t0 = wf0;
+            g_wf_ser[idx].t1 = now_ns();
+            g_wf_ser[idx].worker = job->tid;
+        }
     }
 }
 
@@ -906,6 +963,53 @@ static int32_t load_light_tasks(const char *path, ltask_t *out, int32_t cap) {
     return n;
 }
 
+/* B-2 워터폴 덤프 — 전 계측 종료 후 1회 (어느 페이즈 버킷에도 안 잡힘).
+ * 포맷 v1 (텍스트, ns 절대치 — 분석기는 bench/waterfall.py):
+ *   M <name> <ns>                           페이즈 마크
+ *   C <i> <cx> <cz> <tid> <w0..w5>          체인 청크 (경계 6개)
+ *   E <idx> <kind> <cx> <cz> <worker> <t0> <t1>   DAG 이벤트
+ *   D <idx> <n> <cell...>                   이벤트 접촉 셀 (의존 재구성용)
+ *   S <idx> <worker> <t0> <t1>              직렬화 청크 */
+static void wf_dump(int free_mode, int nthreads) {
+    if (!g_wf_path)
+        return;
+    FILE *f = fopen(g_wf_path, "w");
+    if (!f) {
+        fprintf(stderr, "waterfall: cannot open %s\n", g_wf_path);
+        return;
+    }
+    fprintf(f, "# hyperchunk-bench waterfall v1 threads=%d policy=%s\n",
+            nthreads, free_mode ? "free" : "replay");
+    for (int m = 0; m < g_wf_nmarks; m++)
+        fprintf(f, "M %s %" PRIu64 "\n", g_wf_marks[m].name,
+                g_wf_marks[m].t);
+    for (int32_t i = 0; i < WORLD_CHUNKS; i++) {
+        const wf_chain_rec_t *r = &g_wf_chain[i];
+        fprintf(f,
+                "C %d %d %d %d %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                " %" PRIu64 " %" PRIu64 "\n",
+                i, g_chunks[i].cx, g_chunks[i].cz, r->tid, r->w[0], r->w[1],
+                r->w[2], r->w[3], r->w[4], r->w[5]);
+    }
+    if (free_mode) {
+        for (int32_t i = 0; i < g_ev_n; i++) {
+            const ev_ud_t   *u = &g_evud[i];
+            const wf_span_t *s = &g_wf_ev[i];
+            fprintf(f, "E %d %d %d %d %d %" PRIu64 " %" PRIu64 "\n", i,
+                    u->kind, u->cx, u->cz, s->worker, s->t0, s->t1);
+            fprintf(f, "D %d %d", i, g_evs[i].n_cells);
+            for (int32_t k = 0; k < g_evs[i].n_cells; k++)
+                fprintf(f, " %d", g_evs[i].cells[k]);
+            fprintf(f, "\n");
+        }
+        for (int32_t idx = 0; idx < 1024; idx++)
+            fprintf(f, "S %d %d %" PRIu64 " %" PRIu64 "\n", idx,
+                    g_wf_ser[idx].worker, g_wf_ser[idx].t0,
+                    g_wf_ser[idx].t1);
+    }
+    fclose(f);
+}
+
 static const char *expected_canonical(const char *repo, int64_t seed,
                                       const char *suffix) {
     char path[1024];
@@ -999,7 +1103,10 @@ int main(int argc, char **argv) {
     if (nthreads < 1 || nthreads > MAX_THREADS)
         die("--threads out of range [1,64]", NULL);
 
+    g_wf_path = getenv("HC_BENCH_TIMELINE"); /* B-2 워터폴 (기본 off) */
+
     uint64_t t_proc0 = now_ns();
+    wf_mark("proc0", t_proc0);
 
     size_t backing_sz = (size_t)6 << 30;
     if (nthreads > 20)
@@ -1203,6 +1310,7 @@ int main(int argc, char **argv) {
     hc_mth_trig_init();
 
     uint64_t t_setup_end = now_ns();
+    wf_mark("setup_end", t_setup_end);
 
     /* ---- 체인 페이즈: 04 noise / 07 surface / 08 carvers ---- */
     static chain_job_t jobs[MAX_THREADS];
@@ -1225,6 +1333,7 @@ int main(int argc, char **argv) {
             memset(&jobs[t].wall, 0, sizeof jobs[t].wall);
             memset(&jobs[t].cpu, 0, sizeof jobs[t].cpu);
             jobs[t].chunks_done = 0;
+            jobs[t].tid = t;
             if (pthread_create(&tids[t], NULL, chain_worker, &jobs[t]) != 0)
                 die("pthread_create failed", NULL);
         }
@@ -1232,6 +1341,7 @@ int main(int argc, char **argv) {
             pthread_join(tids[t], NULL);
     }
     uint64_t t_chain_end = now_ns();
+    wf_mark("chain_end", t_chain_end);
 
     static hc_feat_region_t rg;
     memset(&rg, 0, sizeof rg);
@@ -1402,10 +1512,12 @@ int main(int argc, char **argv) {
             die("arena exhausted (sched)", NULL);
         hc_arena_init(&sched_a, smem_s, 32u << 20);
         tr0 = now_ns();
+        wf_mark("dag0", tr0);
         if (hc_sched_run(g_evs, g_ev_n, g_ncellspace, HC_SCHED_FREE,
                          nthreads, &sched_a) != 0)
             die("hc_sched_run failed", NULL);
         B_dag = now_ns() - tr0;
+        wf_mark("dag1", tr0 + B_dag);
     }
     int32_t next_b = 0, c08 = 0;
     for (int32_t pos = 0; !free_mode && pos <= n_man; pos++) {
@@ -1501,6 +1613,7 @@ int main(int argc, char **argv) {
         }
         B_replay_load += now_ns() - tr0;
         n_pm_out = n_pm;
+        wf_mark("pp0", now_ns());
         if (free_mode) {
             /* π*: 같은 pp 집합, 행우선 (cz,cx) — 자체 이력이라 기록
              * 마킹과 비교 불가 (FREE-vs-REPLAY 게이트가 판정) */
@@ -1545,10 +1658,12 @@ int main(int argc, char **argv) {
             hc_light_accum_flush(&lw);
             B_light_flush += now_ns() - t2;
         }
+        wf_mark("pp1", now_ns());
     }
 
     /* 라이트 = 증분 이력의 최종 상태 (동결 스냅샷) */
     tr0 = now_ns();
+    wf_mark("lfinal0", tr0);
     hc_light_accum_flush(&lw);
     hc_light_accum_prepare(&lw);
     for (int32_t idx = 0; idx < 1024; idx++) {
@@ -1560,12 +1675,14 @@ int main(int argc, char **argv) {
         frozen[idx] = *sl;
     }
     B_light_final += now_ns() - tr0;
+    wf_mark("lfinal1", tr0 + B_light_final);
 
     uint8_t *cat = hc_arena_alloc(&g_arena, 192u << 20, 16);
     if (!cat)
         die("arena exhausted (serialize cat)", NULL);
     size_t cat_off = 0;
     tr0 = now_ns();
+    wf_mark("ser0", tr0);
     if (!free_mode) {
         hc_arena_t scratch;
         void *smem = hc_arena_alloc(&g_arena, 64u << 20, 16);
@@ -1607,6 +1724,7 @@ int main(int argc, char **argv) {
                 hc_arena_alloc(&jobs[t].arena, g_ser_job[t].ssz, 16);
             if (!g_ser_job[t].smem)
                 die("arena exhausted (ser scratch)", NULL);
+            g_ser_job[t].tid = t;
         }
         atomic_store(&g_ser_next, 0);
         pthread_t stids[MAX_THREADS];
@@ -1627,16 +1745,21 @@ int main(int argc, char **argv) {
         }
     }
     B_serialize = now_ns() - tr0;
+    wf_mark("ser1", tr0 + B_serialize);
     tr0 = now_ns();
+    wf_mark("sha0", tr0);
     uint8_t dig[32];
     hc_sha256(cat, cat_off, dig);
     B_sha256 = now_ns() - tr0;
+    wf_mark("sha1", tr0 + B_sha256);
     char hex[65];
     for (int i = 0; i < 32; i++)
         sprintf(hex + 2 * i, "%02x", dig[i]);
     hex[64] = '\0';
 
     uint64_t t_proc_end = now_ns();
+    wf_mark("proc_end", t_proc_end);
+    wf_dump(free_mode, nthreads);
     int      pass = strcmp(hex, canonical_hex) == 0;
 
     /* ---- 리포트 ---- */
