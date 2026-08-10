@@ -48,6 +48,7 @@ add_library(hyperchunk STATIC
   src/structures_template.c
   src/structures_mineshaft.c
   src/sched.c
+  src/counters.c
 )
 target_include_directories(hyperchunk PUBLIC include)
 

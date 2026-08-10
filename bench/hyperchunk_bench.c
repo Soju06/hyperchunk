@@ -27,6 +27,7 @@
 
 #include "../core/src/hc_carvers.h"
 #include "../core/src/hc_chunk_nbt.h"
+#include "../core/src/hc_counters.h"
 #include "../core/src/hc_df_simd.h"
 #include "../core/src/hc_features.h"
 #include "../core/src/hc_light.h"
@@ -465,13 +466,54 @@ static void wf_mark(const char *name, uint64_t t) {
     g_wf_nmarks++;
 }
 
+/* ---- B-3 연산 카운터 (HC_BENCH_COUNTERS=<path>, 기본 off) ----
+ * HC_BENCH_TIMELINE 과 같은 규율: env 1회 판독, 고정 정적 버퍼, 덤프는
+ * proc_end 뒤 1회 (B_* 버킷 밖). 페이즈 스냅샷은 누적치 — 페이즈별
+ * 델타는 분석기가 뺀다. 스냅샷 전 hc_ctr_flush() 는 호출 스레드(메인)
+ * TLS 만 옮긴다; 워커 몫은 chain_worker 종료/exec_ev 가 이미 옮겼다. */
+static const char *g_ctr_path;
+static uint64_t    g_ctr_snap[4][HC_CTR_N]; /* chain/dag/pp/lfinal 누적 */
+
+static void ctr_snapshot(int phase) {
+    if (!g_ctr_path)
+        return;
+    hc_ctr_flush();
+    for (int i = 0; i < HC_CTR_N; i++)
+        g_ctr_snap[phase][i] = hc_ctr_total(i);
+}
+
+static void ctr_dump(int free_mode, int nthreads, uint64_t stream_bytes) {
+    if (!g_ctr_path)
+        return;
+    hc_ctr_flush();
+    FILE *f = fopen(g_ctr_path, "w");
+    if (!f) {
+        fprintf(stderr, "counters: cannot open %s\n", g_ctr_path);
+        return;
+    }
+    fprintf(f, "# hyperchunk-bench counters v1 threads=%d policy=%s\n",
+            nthreads, free_mode ? "free" : "replay");
+    static const char *const ph[4] = {"chain", "dag", "pp", "lfinal"};
+    for (int p = 0; p < 4; p++)
+        for (int i = 0; i < HC_CTR_N; i++)
+            fprintf(f, "%s %s %" PRIu64 "\n", ph[p], hc_ctr_name(i),
+                    g_ctr_snap[p][i]);
+    for (int i = 0; i < HC_CTR_N; i++)
+        fprintf(f, "final %s %" PRIu64 "\n", hc_ctr_name(i),
+                hc_ctr_total(i));
+    fprintf(f, "final stream_bytes %" PRIu64 "\n", stream_bytes);
+    fclose(f);
+}
+
 static void *chain_worker(void *ud) {
     chain_job_t *job = ud;
     for (;;) {
         int32_t i =
             atomic_fetch_add_explicit(job->next, 1, memory_order_relaxed);
-        if (i >= WORLD_CHUNKS)
+        if (i >= WORLD_CHUNKS) {
+            hc_ctr_flush(); /* B-3 카운터: 스레드 종료 전 TLS → 전역 */
             return NULL;
+        }
         hc_chunk_t *c = &g_chunks[i];
         size_t      mark = job->arena.off;
         uint64_t    w0 = now_ns(), c0 = tcpu_ns();
@@ -685,6 +727,9 @@ static void exec_ev(void *ud, int32_t worker) {
         s->t1 = now_ns();
         s->worker = worker;
     }
+    /* B-3 카운터: DAG 워커는 hc_sched_run 안에서 죽으므로 (조인 지점에
+     * 훅 불가) 이벤트 단위로 플러시한다 — 4240 이벤트 × relaxed 합. */
+    hc_ctr_flush();
 }
 
 static int32_t emit_box_cells(int32_t *dst, int32_t cx, int32_t cz,
@@ -1146,6 +1191,9 @@ int main(int argc, char **argv) {
         die("--threads out of range [1,64]", NULL);
 
     g_wf_path = getenv("HC_BENCH_TIMELINE"); /* B-2 워터폴 (기본 off) */
+    g_ctr_path = getenv("HC_BENCH_COUNTERS"); /* B-3 연산 카운터 (기본 off) */
+    if (g_ctr_path)
+        hc_ctr_enable(); /* 워커 스폰 전 — hc_ctr_on 전파는 create HB */
 
     uint64_t t_proc0 = now_ns();
     wf_mark("proc0", t_proc0);
@@ -1384,6 +1432,7 @@ int main(int argc, char **argv) {
     }
     uint64_t t_chain_end = now_ns();
     wf_mark("chain_end", t_chain_end);
+    ctr_snapshot(0);
 
     static hc_feat_region_t rg;
     memset(&rg, 0, sizeof rg);
@@ -1560,6 +1609,7 @@ int main(int argc, char **argv) {
             die("hc_sched_run failed", NULL);
         B_dag = now_ns() - tr0;
         wf_mark("dag1", tr0 + B_dag);
+        ctr_snapshot(1);
         /* P2-8 GO-3: 직렬화 워커 파킹-스폰 — pp/lfinal (~85ms) 동안
          * 스폰/도착이 전부 겹친다. frozen 내용은 lfinal 뒤에야 유효하나
          * 워커는 래치 (g_ser_go) 통과 후에만 읽는다 (mutex HB). 스폰
@@ -1729,6 +1779,7 @@ int main(int argc, char **argv) {
         }
         wf_mark("pp1", now_ns());
     }
+    ctr_snapshot(2);
 
     /* 라이트 = 증분 이력의 최종 상태 (동결 스냅샷) */
     tr0 = now_ns();
@@ -1745,6 +1796,7 @@ int main(int argc, char **argv) {
     }
     B_light_final += now_ns() - tr0;
     wf_mark("lfinal1", tr0 + B_light_final);
+    ctr_snapshot(3);
 
     /* P2-8 GO-3: concat 제거 — canonical 바이트열 ([4B BE idx][payload]
      * × 1024, idx 순) 을 그대로 sha ctx 로 스트리밍한다. 바이트열이
@@ -1828,6 +1880,7 @@ int main(int argc, char **argv) {
     uint64_t t_proc_end = now_ns();
     wf_mark("proc_end", t_proc_end);
     wf_dump(free_mode, nthreads);
+    ctr_dump(free_mode, nthreads, shac.total);
     int      pass = strcmp(hex, canonical_hex) == 0;
 
     /* ---- 리포트 ---- */

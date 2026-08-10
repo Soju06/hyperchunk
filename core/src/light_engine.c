@@ -19,6 +19,7 @@
  * 전부 정수 연산 — FMA/부동소수점 무관. */
 
 #include "hc_light.h"
+#include "hc_counters.h"
 
 #include "hc_blocks.h"
 
@@ -703,12 +704,14 @@ void hc_light_accum_prepare(hc_light_world_t *w) {
         if (!s->chunk || !s->in_r)
             continue;
         if (!s->blk_dirty) {
+            HC_CTR_INC(HC_CTR_L_PREP_SKIP);
 #ifndef NDEBUG
             derive_assert_noop(w, s);
 #endif
             continue;
         }
         s->blk_dirty = 0;
+        HC_CTR_INC(HC_CTR_L_PREP_SCAN);
         derive_geometry_chunk(w, s);
     }
     check_contiguous(w);
@@ -733,6 +736,7 @@ void hc_light_accum_init_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
     }
     s->in_r = 1;
     s->blk_dirty = 0; /* P2-8: 이 재유도가 현재 states[] 를 전부 반영 */
+    HC_CTR_INC(HC_CTR_L_DERIVE_08);
     derive_geometry_chunk(w, s);
     /* 이 재유도의 마스크 영향 반경은 cx±1 — 국소 검사 (위 주석) */
     check_contiguous_box(w, cx - 1, cz - 1, cx + 1, cz + 1);
@@ -755,10 +759,14 @@ void hc_light_accum_light_chunk_ctx(hc_light_world_t *w, hc_light_ctx_t *c,
     s->seeded = 1;
     bfs_t q = {w, 0, 0, c->inc, c->qlog};
     seed_sky_chunk(w, &q, s);
+    HC_CTR_ADD(HC_CTR_L_SKY_SEED, q.tail); /* push-1회/pop-1회 — 인덱스 판독 */
     bfs_run(&q, HC_LIGHT_SKY);
+    HC_CTR_ADD(HC_CTR_L_SKY_POP, q.head);
     q.head = q.tail = 0;
     seed_block_chunk(w, &q, s);
+    HC_CTR_ADD(HC_CTR_L_BLK_SEED, q.tail);
     bfs_run(&q, HC_LIGHT_BLOCK);
+    HC_CTR_ADD(HC_CTR_L_BLK_POP, q.head);
 }
 
 void hc_light_accum_light_chunk(hc_light_world_t *w, int32_t cx, int32_t cz) {
@@ -991,11 +999,14 @@ static void run_decreases(bfs_t *dq, bfs_t *iq, int layer) {
 void hc_light_accum_flush_ctx(hc_light_world_t *w, hc_light_ctx_t *c) {
     if (c->n_check == 0)
         return;
+    HC_CTR_ADD(HC_CTR_L_CHECK, c->n_check);
+    HC_CTR_ADD(HC_CTR_L_DIRTY_CH, c->n_dirty);
     /* updateSectionStatus 라이브 등가 — 쓰인 청크만 재유도 */
     for (int32_t i = 0; i < c->n_dirty; i++) {
         hc_light_chunk_t *s = &w->slots[c->dirty[i]];
         s->geo_dirty = 0;
         s->blk_dirty = 0; /* P2-8: 이 재유도가 현재 states[] 를 전부 반영 */
+        HC_CTR_INC(HC_CTR_L_DERIVE_FL);
         derive_geometry_chunk(w, s);
         /* 연속-등록 가드: 이번 재유도가 바꿀 수 있는 마스크는 자신+±1
          * 뿐 — 전역 스캔 대신 국소 검사 (검출력 동일, FREE 에서 무관
@@ -1017,7 +1028,9 @@ void hc_light_accum_flush_ctx(hc_light_world_t *w, hc_light_ctx_t *c) {
                        (int32_t)((e >> 13) & 0x1FFF) - 4096);
         }
         run_decreases(&dq, &iq, layer);
+        HC_CTR_ADD(HC_CTR_L_FLUSH_DEC, dq.head);
         bfs_run(&iq, layer);
+        HC_CTR_ADD(HC_CTR_L_FLUSH_INC, iq.head);
     }
     c->n_check = 0;
 }

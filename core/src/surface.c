@@ -1,4 +1,5 @@
 #include "hc_surface.h"
+#include "hc_counters.h"
 
 #include <assert.h>
 #include <math.h>
@@ -204,6 +205,7 @@ static int32_t ctx_biome(hc_sctx_t *c) {
 
 static double ctx_surface_secondary(hc_sctx_t *c) {
     if (c->sec_stamp != c->last_xz) {
+        HC_CTR_INC(HC_CTR_SURF_SEC_MISS);
         c->sec_stamp = c->last_xz;
         c->sec_val = hc_surface_secondary(c->s, c->block_x, c->block_z);
     }
@@ -214,6 +216,7 @@ static double ctx_surface_secondary(hc_sctx_t *c) {
  * float 분수 bilinear → floor → + surfaceDepth - 8 */
 static int32_t ctx_min_surface_level(hc_sctx_t *c) {
     if (c->msl_stamp != c->last_xz) {
+        HC_CTR_INC(HC_CTR_SURF_MSL_MISS);
         c->msl_stamp = c->last_xz;
         int32_t cell_x = c->block_x >> 4;
         int32_t cell_z = c->block_z >> 4;
@@ -252,6 +255,7 @@ static double sampler_value(hc_sctx_t *c, int32_t si) {
     const hc_ssampler_t *sp = &c->s->samplers[si];
     int64_t              stamp = sp->is3d ? c->last_y : c->last_xz;
     if (c->sam_stamp[si] != stamp) {
+        HC_CTR_INC(HC_CTR_SURF_SAMP_MISS);
         c->sam_val[si] = hc_normal_noise_value(
             &sp->noise, (double)c->block_x,
             sp->is3d ? (double)c->block_y : 0.0, (double)c->block_z);
@@ -283,6 +287,7 @@ static int steep_compute(const hc_sctx_t *c) {
 /* --- 조건 평가 (A3) --- */
 
 static int cond_test(hc_sctx_t *c, int32_t ci) {
+    HC_CTR_INC_HOT(HC_CTR_SURF_COND);
     const hc_scond_t *k = &c->s->conds[ci];
     switch (k->kind) {
     case HC_SC_BIOME: {
@@ -322,6 +327,7 @@ static int cond_test(hc_sctx_t *c, int32_t ci) {
                                             c->s->sea_level);
     case HC_SC_STEEP:
         if (c->steep_stamp != c->last_xz) { /* stamp-before-compute */
+            HC_CTR_INC(HC_CTR_SURF_STEEP_MISS);
             c->steep_stamp = c->last_xz;
             c->steep_val = (uint8_t)steep_compute(c);
         }
@@ -352,6 +358,7 @@ static int cond_test(hc_sctx_t *c, int32_t ci) {
 
 static int32_t rule_apply(hc_sctx_t *c, int32_t ri, int32_t x, int32_t y,
                           int32_t z) {
+    HC_CTR_INC_HOT(HC_CTR_SURF_APPLY);
     const hc_srule_t *r = &c->s->rules[ri];
     switch (r->kind) {
     case HC_SR_SEQUENCE:
@@ -388,6 +395,7 @@ int32_t hc_surface_top_material(hc_surface_t *s, hc_chunk_t *chunk,
     ctx_init(&ctx, s, chunk, nc, view);
     ctx_update_xz(&ctx, x, z);
     ctx_update_y(&ctx, 1, 1, has_fluid ? y + 1 : INT32_MIN, y);
+    HC_CTR_INC(HC_CTR_SURF_TOPMAT);
     return rule_apply(&ctx, s->root_rule, x, y, z);
 }
 
@@ -523,6 +531,8 @@ void hc_gen_surface_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc,
 
             /* (5) h2 — 프리패스 후 재읽기 */
             int32_t h2 = chunk->heightmap_ws[col];
+            HC_CTR_ADD(HC_CTR_SURF_YITER,
+                       h2 >= HC_MIN_Y ? h2 - HC_MIN_Y + 1 : 0);
 
             /* (6) updateXZ — eager getSurfaceDepth (positional RNG) */
             ctx_update_xz(&ctx, x, z);
@@ -561,6 +571,7 @@ void hc_gen_surface_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc,
                 /* 참조 동일성 게이트: 정확히 defaultBlock 상태만 교체 대상 */
                 if (st != s->default_block)
                     continue;
+                HC_CTR_INC(HC_CTR_SURF_ROOT);
                 int32_t res = rule_apply(&ctx, s->root_rule, x, y, z);
                 if (res >= 0)
                     col_set(chunk, lx, y, lz, (uint16_t)res);

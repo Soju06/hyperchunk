@@ -1,5 +1,6 @@
 #include "hc_gen_noise.h"
 #include "hc_df_simd.h"
+#include "hc_counters.h"
 
 #include <assert.h>
 #include <math.h>
@@ -101,6 +102,7 @@ int32_t hc_nc_psl(hc_noise_chunk_t *nc, int32_t x, int32_t z) {
     for (int32_t probes = 0; probes < nc->psl_cap;
          probes++, i = (i + 1) & mask) {
         if (!nc->psl_used[i]) {
+            HC_CTR_INC(HC_CTR_DF_PSL_MISS);
             double v = hc_nc_eval_sp(nc, nc->roots.preliminary_surface_level,
                                      qx, 0, qz);
             nc->psl_used[i] = 1;
@@ -185,6 +187,7 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
                                           nc->cell_height);
                     lanes.z[l] = (double)bz;
                 }
+                HC_CTR_INC(HC_CTR_X4_SLICE);
                 hc_df_eval_stream_x4_avx2(nc->g, stream, swords, &lanes,
                                           nc->vscratch,
                                           nc_cc(nc, HC_DF_MODE_SP));
@@ -284,6 +287,7 @@ void hc_nc_select_cell_yz(hc_noise_chunk_t *nc, int32_t cell_y,
                     lanes.dy[l] = (double)iy / (double)nc->cell_height;
                     lanes.dz[l] = (double)l / (double)nc->cell_width;
                 }
+                HC_CTR_INC(HC_CTR_X4_CELL);
                 hc_df_eval_stream_x4_avx2(nc->g, stream, swords, &lanes,
                                           nc->vscratch,
                                           nc_cc(nc, HC_DF_MODE_CELL));

@@ -1,4 +1,5 @@
 #include "hc_carvers.h" /* hc_mth_trig_init */
+#include "hc_counters.h"
 #include "hc_features.h"
 
 #include <string.h>
@@ -84,6 +85,7 @@ void hc_gen_features_chunk(hc_feat_region_t *rg, int32_t cx, int32_t cz,
         for (int32_t i = 0; i < nf; i++) {
             if (!((idxset[i >> 6] >> (i & 63)) & 1u))
                 continue;
+            HC_CTR_INC(HC_CTR_FEAT_ATTEMPT);
             hc_wgr_set_feature_seed(&rng, deco, i, step);
             hc_feat_run_placed(rg, &rng, level_seed, reg, view, biomes,
                                sea_level, &reg->steps[step][i], step, i,

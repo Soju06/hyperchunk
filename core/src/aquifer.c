@@ -1,4 +1,5 @@
 #include "hc_gen_noise.h"
+#include "hc_counters.h"
 
 #include <assert.h>
 #include <math.h>
@@ -178,6 +179,10 @@ static int32_t compute_surface_level(hc_aquifer_t *aq, int32_t x, int32_t y,
     /* OverworldBiomeBuilder.isDeepDarkRegion: erosion 먼저, 단락 평가.
      * 상수는 (double)(float)-0.225 / (double)(float)0.9 */
     double erosion = hc_nc_eval_sp(nc, nc->roots.erosion, x, y, z);
+    HC_CTR_INC(HC_CTR_DF_AQ_EROSION);
+    /* depth 평가는 && 단락상 erosion < C 일 때 정확히 1회 — 식 무손대 계수 */
+    if (erosion < -0.22499999403953552)
+        HC_CTR_INC(HC_CTR_DF_AQ_DEPTH);
     if (erosion < -0.22499999403953552 &&
         hc_nc_eval_sp(nc, nc->roots.depth, x, y, z) > 0.8999999761581421) {
         d1 = -1.0;
@@ -187,6 +192,7 @@ static int32_t compute_surface_level(hc_aquifer_t *aq, int32_t x, int32_t y,
         double  dampener =
             center_fluid ? mth_clamped_map((double)dist, 0.0, 64.0, 1.0, 0.0)
                           : 0.0;
+        HC_CTR_INC(HC_CTR_DF_AQ_FLOOD);
         double flood = mth_clamp(
             hc_nc_eval_sp(nc, nc->roots.fluid_level_floodedness, x, y, z),
             -1.0, 1.0);
@@ -203,6 +209,7 @@ static int32_t compute_surface_level(hc_aquifer_t *aq, int32_t x, int32_t y,
         int32_t gy = floor_div(y, 40);
         int32_t gz = floor_div(z, 16);
         int32_t base = gy * 40 + 20;
+        HC_CTR_INC(HC_CTR_DF_AQ_SPREAD);
         double  spread =
             hc_nc_eval_sp(nc, nc->roots.fluid_level_spread, gx, gy, gz) *
             10.0;
@@ -222,6 +229,7 @@ static uint8_t compute_fluid_type(hc_aquifer_t *aq, int32_t x, int32_t y,
         int32_t gx = floor_div(x, 64);
         int32_t gy = floor_div(y, 40);
         int32_t gz = floor_div(z, 64);
+        HC_CTR_INC(HC_CTR_DF_AQ_LAVA);
         double  lava = hc_nc_eval_sp(nc, nc->roots.lava, gx, gy, gz);
         if (fabs(lava) > 0.3)
             type = HC_B_LAVA;
@@ -246,6 +254,7 @@ static hc_fluid_status_t get_status(hc_aquifer_t *aq, int32_t idx) {
         return aq->fs_cache[idx];
     uint64_t loc = aq->loc_cache[idx]; /* 스캔 루프가 항상 먼저 채운다 */
     assert(loc != UINT64_MAX);
+    HC_CTR_INC(HC_CTR_AQ_FS_MISS);
     hc_fluid_status_t s = compute_fluid(aq, bp_x(loc), bp_y(loc), bp_z(loc));
     aq->fs_cache[idx] = s;
     aq->fs_set[idx] = 1;
@@ -287,9 +296,11 @@ static double calc_pressure(hc_aquifer_t *aq, int32_t x, int32_t y, int32_t z,
     if (q < -2.0 || q > 2.0) {
         bv = 0.0;
     } else {
-        if (*barrier != *barrier) /* Double.isNaN */
+        if (*barrier != *barrier) { /* Double.isNaN */
+            HC_CTR_INC(HC_CTR_DF_AQ_BARRIER);
             *barrier =
                 hc_nc_eval_block(aq->nc, aq->nc->roots.barrier, x, y, z);
+        }
         bv = *barrier;
     }
     return 2.0 * (bv + q);
@@ -298,6 +309,7 @@ static double calc_pressure(hc_aquifer_t *aq, int32_t x, int32_t y, int32_t z,
 int hc_aquifer_substance(hc_aquifer_t *aq, int32_t x, int32_t y, int32_t z,
                          double density) {
     if (density > 0.0) {
+        HC_CTR_INC(HC_CTR_AQ_SOLID);
         aq->should_schedule_fluid_update = 0;
         return -1;
     }

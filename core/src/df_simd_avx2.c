@@ -1,4 +1,5 @@
 #include "hc_df_simd.h"
+#include "hc_counters.h"
 
 /* AVX2 4-레인 콘 스트림 평가기 (P2-4, ADR-004 D1). 이 TU 만 -mavx2 로
  * 컴파일된다 — 진입은 hc_isa_active()==AVX2 확인 후에만 (df_isa.c 디스패치,
@@ -145,6 +146,7 @@ static inline V4 corner_dot(const hc_perlin_t *p, const int h[4],
  * 스칼라 폴백. */
 static V4 perlin_x4(const hc_perlin_t *p, V4 x, V4 y, V4 z, double yscale,
                     V4 ymax) {
+    HC_CTR_INC(HC_CTR_X4_PERLIN);
     V4 dx = _mm256_add_pd(x, bc(p->xo));
     V4 dy = _mm256_add_pd(y, bc(p->yo));
     V4 dz = _mm256_add_pd(z, bc(p->zo));
@@ -217,6 +219,7 @@ static V4 perlin_x4(const hc_perlin_t *p, V4 x, V4 y, V4 z, double yscale,
     }
 
 scalar_fallback:; /* 포화/NaN 시맨틱은 스칼라 경로가 소유 (희귀) */
+    HC_CTR_INC(HC_CTR_X4_SCALAR_FB);
     {
         double xs[4], ys[4], zs[4], ym[4], out[4];
         _mm256_storeu_pd(xs, x);
@@ -307,6 +310,11 @@ static V4 blended_x4(const hc_blended_noise_t *b, V4 xi, V4 yi, V4 zi) {
     V4  underm = _mm256_cmp_pd(q, bc(0.0), _CMP_LE_OQ);
     int over_all = _mm256_movemask_pd(overm) == 0xF;
     int under_all = _mm256_movemask_pd(underm) == 0xF;
+    if (hc_ctr_on) { /* 혼합-레인 = 패리티가 강제하는 죽은-레인 뱅크 계산 */
+        int mo = _mm256_movemask_pd(overm), mu = _mm256_movemask_pd(underm);
+        if ((mo != 0 && mo != 0xF) || (mu != 0 && mu != 0xF))
+            hc_ctr_tls[HC_CTR_X4_BLEND_MIX]++;
+    }
 
     V4 lo = _mm256_setzero_pd();
     V4 hi = _mm256_setzero_pd();
@@ -567,6 +575,7 @@ static void x4_run(const x4_env_t *e, const int32_t *p, int32_t words) {
     while (p < end) {
         int32_t v = *p++;
         if (v >= 0) {
+            HC_CTR_INC_HOT(HC_CTR_X4_NODE);
             x4_node(e, v);
             continue;
         }
@@ -577,6 +586,8 @@ static void x4_run(const x4_env_t *e, const int32_t *p, int32_t words) {
             V4 in = _mm256_and_pd(_mm256_cmp_pd(d, bc(nd->k0), _CMP_GE_OQ),
                                   _mm256_cmp_pd(d, bc(nd->k1), _CMP_LT_OQ));
             int m = _mm256_movemask_pd(in);
+            if (m != 0 && m != 0xF)
+                HC_CTR_INC(HC_CTR_X4_RC_MIX);
             if (m != 0)
                 x4_run(e, p + 3, wt);
             if (m != 0xF)
@@ -603,6 +614,8 @@ static void x4_run(const x4_env_t *e, const int32_t *p, int32_t words) {
                     }
                 sel[l] = s;
             }
+            if (sel[0] != sel[1] || sel[1] != sel[2] || sel[2] != sel[3])
+                HC_CTR_INC(HC_CTR_X4_IS_MIX);
             const int32_t *q = p + 2 + nf;
             for (int32_t k = 0; k < nf; k++) {
                 int need = sel[0] == k || sel[1] == k || sel[2] == k ||

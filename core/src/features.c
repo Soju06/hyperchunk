@@ -1,4 +1,5 @@
 #include "hc_light.h" /* 데코-시점 getRawBrightness (Task 14) */
+#include "hc_counters.h"
 #include "hc_carvers.h" /* hc_mth_sin (Mth 테이블) */
 #include "features_internal.h"
 #include "hc_jdk_trig.h" /* ore 각도 sin/cos (JDK 스텁 이식) */
@@ -147,6 +148,7 @@ int hc_feat_set_block(hc_feat_region_t *rg, int32_t x, int32_t y, int32_t z,
         return 0;
     hc_chunk_t *c = hc_feat_region_chunk(rg, cx, cz);
     int lx = x & 15, lz = z & 15;
+    HC_CTR_INC(HC_CTR_FEAT_SETBLK);
     uint16_t old_id = c->states[hc_idx(lx, y, lz)];
     c->states[hc_idx(lx, y, lz)] = id;
     /* ProtoChunk.setBlockState: 섹션 쓰기 뒤 없는 FINAL 맵 지연 프라임 +
@@ -184,6 +186,7 @@ int hc_feat_set_block_ks(hc_feat_region_t *rg, int32_t x, int32_t y,
         return 0;
     hc_chunk_t *c = hc_feat_region_chunk(rg, cx, cz);
     int lx = x & 15, lz = z & 15;
+    HC_CTR_INC(HC_CTR_FEAT_SETBLK);
     uint16_t old_id = c->states[hc_idx(lx, y, lz)];
     c->states[hc_idx(lx, y, lz)] = id;
     for (int t = 0; t < HC_HMF_COUNT; t++)

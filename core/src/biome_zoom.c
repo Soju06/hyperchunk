@@ -1,4 +1,5 @@
 #include "hc_biome.h"
+#include "hc_counters.h"
 
 #include <assert.h>
 #include <stdatomic.h>
@@ -65,6 +66,7 @@ static _Thread_local int           g_zc_none; /* 풀 소진 — 폴백 고정 */
 
 static void zoom_cell_fill(int64_t seed, int32_t q0x, int32_t q0y,
                            int32_t q0z, zoom_cell_t *c) {
+    HC_CTR_INC(HC_CTR_ZOOM_MISS); /* 미스당 lcg 정확히 64회 (아래 루프) */
     c->seed = seed;
     c->qx = q0x;
     c->qy = q0y;
@@ -111,6 +113,7 @@ static const zoom_cell_t *zoom_cell(int64_t seed, int32_t q0x, int32_t q0y,
 
 void hc_biome_zoom(int64_t zoom_seed, int32_t x, int32_t y, int32_t z,
                    int32_t *qx, int32_t *qy, int32_t *qz) {
+    HC_CTR_INC(HC_CTR_ZOOM_Q);
     int32_t bx = x - 2, by = y - 2, bz = z - 2;
     int32_t q0x = bx >> 2, q0y = by >> 2, q0z = bz >> 2;
     double  fx = (double)(bx & 3) / 4.0;

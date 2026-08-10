@@ -45,6 +45,15 @@ if(HC_TSAN)
   add_link_options(-fsanitize=thread)
 endif()
 
+# B-3 연산 카운터의 최핫 사이트 (hc_counters.h HC_CTR_INC_HOT — x4_run
+# 노드 루프, cond_test/rule_apply 진입). 기본 OFF = 코드 부재 (off 상태의
+# 로드+분기조차 noise CPU-sum +5.6% 로 실측돼 컴파일 타임 게이트).
+# 카운트 수집 시에만 로컬 빌드에서 켠다 — 벤치 수치·게이트 빌드에 금지.
+option(HC_CTR_HOT "Compile hot-path op counters (B-3; local count runs only)" OFF)
+if(HC_CTR_HOT)
+  add_compile_definitions(HC_CTR_HOT)
+endif()
+
 add_subdirectory(core)
 add_subdirectory(cli)
 add_subdirectory(bench)

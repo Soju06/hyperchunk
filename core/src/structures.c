@@ -15,6 +15,7 @@
  *     블록 부재); References 멤버십 (c.7..14.31) 은 골든 실측으로 고정. */
 
 #include "hc_structures.h"
+#include "hc_counters.h"
 
 #include "features_internal.h" /* hc_jset (HashSet<BlockPos> 에뮬) */
 
@@ -1211,6 +1212,7 @@ void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg,
                         const hc_feat_reg_t *freg, int32_t sea,
                         int32_t cx, int32_t cz, int64_t deco_seed,
                         int32_t step) {
+    HC_CTR_INC(HC_CTR_STRUCT_STEP);
     /* 이 청크의 references 에 있는 스타트들만, 스텝 내 순번 순.
      * 같은 순번의 스타트 여러 개 (mineshaft) 는 references LongSet 순회
      * 순서 (hc_structures_references 산출 순서와 동일 산식). */

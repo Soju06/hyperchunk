@@ -1,4 +1,5 @@
 #include "hc_gen_noise.h"
+#include "hc_counters.h"
 
 #include <math.h>
 
@@ -33,6 +34,7 @@ int hc_ore_vein_block(hc_noise_chunk_t *nc, int32_t x, int32_t y, int32_t z) {
     if (y > 50 || y < -60 || (y > -8 && y < 0))
         return -1;
 
+    HC_CTR_INC(HC_CTR_DF_VEIN_TOGGLE);
     double toggle = hc_nc_eval_block(nc, nc->roots.vein_toggle, x, y, z);
     int    is_copper = toggle > 0.0; /* dcmpl ifle — NaN → IRON */
     double abs_toggle = fabs(toggle);
@@ -56,6 +58,7 @@ int hc_ore_vein_block(hc_noise_chunk_t *nc, int32_t x, int32_t y, int32_t z) {
     /* VEIN_SOLIDNESS = 0.7f */
     if (hc_xoro_next_float(&r) > 0.7f)
         return -1;
+    HC_CTR_INC(HC_CTR_DF_VEIN_RIDGED);
     if (hc_nc_eval_block(nc, nc->roots.vein_ridged, x, y, z) >= 0.0)
         return -1;
 
@@ -64,6 +67,7 @@ int hc_ore_vein_block(hc_noise_chunk_t *nc, int32_t x, int32_t y, int32_t z) {
         clamped_map(abs_toggle, 0.4000000059604645, 0.6000000238418579,
                     0.10000000149011612, 0.30000001192092896);
     /* nextFloat 는 richness 비교 '전에' 소비된다 (바이트코드 순서) */
+    HC_CTR_INC(HC_CTR_VEIN_PRE_GAP); /* gap 평가 도달 상한 (RNG 단락 앞) */
     if ((double)hc_xoro_next_float(&r) < richness &&
         hc_nc_eval_block(nc, nc->roots.vein_gap, x, y, z) >
             -0.30000001192092896 /* SKIP_ORE_IF_GAP_NOISE_IS_BELOW = -0.3f */) {

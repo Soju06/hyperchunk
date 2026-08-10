@@ -1,4 +1,5 @@
 #include "hc_df.h"
+#include "hc_counters.h"
 
 #include <assert.h>
 #include <math.h>
@@ -308,6 +309,7 @@ static double eval_node(const hc_df_graph_t *g, int32_t idx, double x,
         int32_t inv_off = nd->aux + 1;
         eval_cone(g, inv_off, n_inv, -1, x, (double)start, z, sc2, cc);
         for (int32_t yy = start; yy >= lower; yy -= cell) {
+            HC_CTR_INC(HC_CTR_FTS_ITER);
             double d = eval_cone(g, inv_off + n_inv, nd->aux2 - n_inv,
                                  nd->a, x, (double)yy, z, sc2, cc);
             if (d > 0.0)
@@ -773,6 +775,7 @@ static void prog_run(const hc_df_graph_t *g, const int32_t *p, int32_t words,
     while (p < end) {
         int32_t v = *p++;
         if (v >= 0) {
+            HC_CTR_INC_HOT(HC_CTR_SP_NODE);
             sc[v] = eval_node(g, v, x, y, z, sc, sc2, cc, mask);
             continue;
         }
