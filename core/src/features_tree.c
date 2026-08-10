@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,6 +99,60 @@ typedef struct {
     const hc_tree_cfg_t *cfg;
     jset_t roots, logs, leaves, deco;
 } tree_ctx_t;
+
+/* --- P2-9 GO-3: 대형 스크래치 TLS 다이어트 ---
+ *
+ * (cpos_t / BOX_MAX_SPAN / shape_t 는 원래 §데코레이터·§updateLeaves
+ * 소속 — 스크래치 통합 정의를 위해 상향. 의미 불변.) */
+typedef struct {
+    int32_t x, y, z;
+} cpos_t;
+
+enum { BOX_MAX_SPAN = 64 };
+
+typedef struct {
+    int32_t min_x, min_y, min_z, max_x, max_y, max_z;
+    uint64_t bits[(BOX_MAX_SPAN * BOX_MAX_SPAN * BOX_MAX_SPAN + 63) / 64];
+} shape_t;
+
+/* PT_TLS 8.17MB 중 6.37MB 가 이 파일의 _Thread_local 스크래치였다 —
+ * pthread_create 부모-측 정적 TLS 제로화 (~2.5-3ms/스레드, "스폰
+ * 계단") 와 스레드 스택 가용 마진 ~380KB 의 원인 (P2-8 §1 함정).
+ * biome_zoom.c (P2-8 GO-1) 의 bss 풀 + 스레드당 1회 relaxed 원자
+ * 핸드아웃 패턴으로 이관: 슬롯은 소유 스레드 전용 (공유 없음 — TSan
+ * 관측면은 핸드아웃 카운터뿐), 미사용 슬롯은 제로 페이지 (물리 0).
+ * 값-불변 논거: 모든 필드는 사용처가 사용 전 전체 재초기화한다
+ * (jset_init / memset(bits) / ctx_list 전량 재기록 — 제로-초기화 의존
+ * 없음, P2-9 전수 실사). TLS 와 동일하게 스레드당 단일 슬롯이므로
+ * 같은-스레드 재사용/재진입 특성도 종전과 동형. 배치를 실행하는
+ * 스레드는 DAG 워커 (스케줄러 캡 MAX_W 64) + 메인 (REPLAY/verify/pp)
+ * 뿐이라 풀 80 은 도달 불가 상한 — 소진은 die (fail-loud, 캡 die
+ * 하우스 스타일). */
+typedef struct {
+    tree_ctx_t tree_ctx;  /* hc_featx_tree_place (종전 TLS t_storage) */
+    tree_ctx_t ftree_ctx; /* hc_featx_ftree_place (종전 별도 TLS 동형) */
+    jset_t     levels[7]; /* update_leaves */
+    cpos_t     log_arr[JSET_MAX_ENTRIES]; /* run_decorators */
+    cpos_t     leaf_arr[JSET_MAX_ENTRIES];
+    shape_t    box; /* update_leaves */
+} tree_scratch_t;
+
+enum { TS_POOL = 80 };
+static tree_scratch_t                g_ts_pool[TS_POOL];
+static _Atomic int32_t               g_ts_next;
+static _Thread_local tree_scratch_t *g_ts;
+
+static tree_scratch_t *tree_scratch(void) {
+    tree_scratch_t *t = g_ts;
+    if (!t) {
+        int32_t slot =
+            atomic_fetch_add_explicit(&g_ts_next, 1, memory_order_relaxed);
+        if (slot >= TS_POOL)
+            die("tree scratch pool exhausted", NULL);
+        t = g_ts = &g_ts_pool[slot];
+    }
+    return t;
+}
 
 /* BiConsumer: 셋에 추가(항상) + setBlock flag 19 (창 밖이면 soft-fail —
  * 셋에는 남는다, R2 §3) */
@@ -471,11 +526,8 @@ static int32_t trunk_fancy(tree_ctx_t *t, int32_t x, int32_t y, int32_t z,
 
 /* ================= 데코레이터 (R2 §11) ================= */
 
-/* Context 리스트: jset 순회 순서로 배열화 후 getY 안정 정렬 */
-typedef struct {
-    int32_t x, y, z;
-} cpos_t;
-
+/* Context 리스트: jset 순회 순서로 배열화 후 getY 안정 정렬
+ * (cpos_t 는 P2-9 GO-3 로 tree_scratch_t 곁으로 상향) */
 static int32_t ctx_list(const jset_t *s, cpos_t *out, int32_t cap) {
     int32_t n = 0;
     jit_t   it;
@@ -839,8 +891,9 @@ static void run_decorators(tree_ctx_t *t, const hc_tdec_t *decs, int32_t n_dec,
                            jset_t *logs, jset_t *leaves, jset_t *deco) {
     if (n_dec == 0)
         return;
-    static _Thread_local cpos_t log_arr[JSET_MAX_ENTRIES],
-        leaf_arr[JSET_MAX_ENTRIES];
+    tree_scratch_t *ts = tree_scratch(); /* P2-9 GO-3: TLS → 풀 */
+    cpos_t         *log_arr = ts->log_arr;
+    cpos_t         *leaf_arr = ts->leaf_arr;
     int32_t n_logs = ctx_list(logs, log_arr, JSET_MAX_ENTRIES);
     int32_t n_leaves = ctx_list(leaves, leaf_arr, JSET_MAX_ENTRIES);
     for (int32_t i = 0; i < n_dec; i++) {
@@ -869,14 +922,8 @@ static void run_decorators(tree_ctx_t *t, const hc_tdec_t *decs, int32_t n_dec,
     }
 }
 
-/* ================= updateLeaves (R2 §4) ================= */
-
-enum { BOX_MAX_SPAN = 64 };
-
-typedef struct {
-    int32_t min_x, min_y, min_z, max_x, max_y, max_z;
-    uint64_t bits[(BOX_MAX_SPAN * BOX_MAX_SPAN * BOX_MAX_SPAN + 63) / 64];
-} shape_t;
+/* ================= updateLeaves (R2 §4) =================
+ * (BOX_MAX_SPAN / shape_t 는 P2-9 GO-3 로 tree_scratch_t 곁으로 상향) */
 
 static int box_inside(const shape_t *b, int32_t x, int32_t y, int32_t z) {
     return x >= b->min_x && x <= b->max_x && y >= b->min_y && y <= b->max_y &&
@@ -965,9 +1012,7 @@ static uint16_t leaf_with_distance(uint16_t s, int32_t d) {
 
 static shape_t *update_leaves(tree_ctx_t *t) {
     feat_env_t *e = t->e;
-    shape_t    *box;
-    static _Thread_local shape_t box_storage;
-    box = &box_storage;
+    shape_t    *box = &tree_scratch()->box; /* P2-9 GO-3: TLS → 풀 */
     memset(box->bits, 0, sizeof box->bits);
     int any = 0;
     box_extend(box, &t->roots, &any);
@@ -994,7 +1039,7 @@ static shape_t *update_leaves(tree_ctx_t *t) {
             shape_fill(box, en->x, en->y, en->z);
     }
 
-    static _Thread_local jset_t levels[7];
+    jset_t *levels = tree_scratch()->levels; /* P2-9 GO-3: TLS → 풀 */
     for (int i = 0; i < 7; i++)
         jset_init(&levels[i]);
     /* lists.get(0).addAll(logs) — logs 셋 순회 순서 */
@@ -1834,8 +1879,7 @@ static int32_t two_layers_size(const hc_tree_cfg_t *c, int32_t y) {
 
 int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
     const hc_tree_cfg_t *cfg = e->pf->cf.tree;
-    static _Thread_local tree_ctx_t t_storage;
-    tree_ctx_t *t = &t_storage;
+    tree_ctx_t *t = &tree_scratch()->tree_ctx; /* P2-9 GO-3: TLS → 풀 */
     t->e = e;
     t->cfg = cfg;
     jset_init(&t->roots);
@@ -1919,8 +1963,7 @@ int hc_featx_tree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
 
 int hc_featx_ftree_place(feat_env_t *e, int32_t ox, int32_t oy, int32_t oz) {
     const hc_ftree_cfg_t *cfg = e->pf->cf.ftree;
-    static _Thread_local tree_ctx_t t_storage;
-    tree_ctx_t *t = &t_storage;
+    tree_ctx_t *t = &tree_scratch()->ftree_ctx; /* P2-9 GO-3: TLS → 풀 */
     static const hc_tree_cfg_t fake_cfg; /* run_decorators 는 t->cfg 를 안 읽는다 */
     t->e = e;
     t->cfg = &fake_cfg;

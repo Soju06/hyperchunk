@@ -1,6 +1,7 @@
 #include "features_internal.h"
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,32 @@ static void vdbg_init(void) {
 #define sprov_sample hc_featx_sprov_sample
 #define bpred_eval hc_featx_bpred_eval
 #define run_nested_pf hc_featx_run_nested
+
+/* P2-9 GO-3: vpatch ground/water 스크래치 (0.82MB) TLS → bss 풀 +
+ * 스레드당 1회 relaxed 핸드아웃 (features_tree.c tree_scratch 와 같은
+ * 논거·같은 풀 상한: hc_jset_init 이 사용 전 전체 재초기화라 제로-의존
+ * 없음, 슬롯은 소유 스레드 전용, 스레드당 단일 슬롯이라 중첩 재진입
+ * 특성도 종전 TLS 와 동형). */
+typedef struct {
+    hc_jset_t ground, water;
+} lush_scratch_t;
+
+enum { LS_POOL = 80 };
+static lush_scratch_t                g_ls_pool[LS_POOL];
+static _Atomic int32_t               g_ls_next;
+static _Thread_local lush_scratch_t *g_ls;
+
+static lush_scratch_t *lush_scratch(void) {
+    lush_scratch_t *t = g_ls;
+    if (!t) {
+        int32_t slot =
+            atomic_fetch_add_explicit(&g_ls_next, 1, memory_order_relaxed);
+        if (slot >= LS_POOL)
+            die("lush scratch pool exhausted", NULL);
+        t = g_ls = &g_ls_pool[slot];
+    }
+    return t;
+}
 
 /* MC Direction 서수: 0 DOWN, 1 UP, 2 NORTH, 3 SOUTH, 4 WEST, 5 EAST */
 static const int8_t D_STEP[6][3] = {{0, -1, 0}, {0, 1, 0},  {0, 0, -1},
@@ -342,8 +369,10 @@ int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t ox,
         }
     }
 
-    static _Thread_local hc_jset_t ground, water;
-    hc_jset_init(&ground);
+    lush_scratch_t *ls = lush_scratch(); /* P2-9 GO-3: TLS → 풀 */
+    hc_jset_t      *ground = &ls->ground;
+    hc_jset_t      *water = &ls->water;
+    hc_jset_init(ground);
 
     /* placeGroundPatch — x 외측/z 내측 오름차순 (R3 §3.1) */
     for (int32_t x = -xr; x <= xr; x++) {
@@ -416,25 +445,25 @@ int hc_featx_vpatch_place(feat_env_t *e, const hc_vpatch_cfg_t *c, int32_t ox,
                 gy += dir;
             }
             if (placed)
-                hc_jset_add(&ground, mx, ty, mz);
+                hc_jset_add(ground, mx, ty, mz);
         }
     }
 
-    hc_jset_t *veg = &ground;
+    hc_jset_t *veg = ground;
     if (c->waterlogged) {
         /* WaterloggedVegetationPatchFeature.placeGroundPatch (R3 §3.2) */
-        hc_jset_init(&water);
+        hc_jset_init(water);
         hc_jit_t it;
-        for (hc_jit_begin(&it, &ground); hc_jit_valid(&it); hc_jit_next(&it)) {
-            const hc_jent_t *en = &ground.ent[it.e];
+        for (hc_jit_begin(&it, ground); hc_jit_valid(&it); hc_jit_next(&it)) {
+            const hc_jent_t *en = &ground->ent[it.e];
             if (!wv_exposed(e, en->x, en->y, en->z))
-                hc_jset_add(&water, en->x, en->y, en->z);
+                hc_jset_add(water, en->x, en->y, en->z);
         }
-        for (hc_jit_begin(&it, &water); hc_jit_valid(&it); hc_jit_next(&it)) {
-            const hc_jent_t *en = &water.ent[it.e];
+        for (hc_jit_begin(&it, water); hc_jit_valid(&it); hc_jit_next(&it)) {
+            const hc_jent_t *en = &water->ent[it.e];
             hc_feat_set_block(e->rg, en->x, en->y, en->z, HC_B_WATER);
         }
-        veg = &water;
+        veg = water;
     }
 
     /* distributeVegetation — HashSet 순회 순서 (R3 §3.1) */
