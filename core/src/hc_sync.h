@@ -13,23 +13,35 @@
 #include <stdatomic.h>
 
 typedef struct {
-    atomic_flag f;
+    atomic_uchar f; /* 0 = 풀림, 1 = 잠김 */
 } hc_spin_t;
 
-#define HC_SPIN_INIT {ATOMIC_FLAG_INIT}
+#define HC_SPIN_INIT {0}
 
 static inline void hc_spin_init(hc_spin_t *s) {
-    atomic_flag_clear_explicit(&s->f, memory_order_release);
+    atomic_store_explicit(&s->f, 0, memory_order_release);
 }
 
+/* TTAS (P2-9 수정): 획득 실패 시 relaxed 로드로만 관망하고, 풀린 것을
+ * 본 뒤에만 acquire 교환을 재시도한다. 경합 RMW 를 반복하는 종전
+ * 형태는 네이티브에선 캐시라인 핑퐁, TSan 게이트에선 전역 런타임 락
+ * 컨보이가 된다 — P2-9 실발화: GO-1 로 deco 이벤트가 조밀해진 뒤
+ * own-σ* (무충돌 산개 순서) 20-워커가 틱-레코더 락에 몰려
+ * free_region_own 이 2분 → 75분+ 로 폭주했다 (gdb 백트레이스: 17/20
+ * 스레드가 __tsan AtomicRMW 경로). 릴랙스드 로드는 HB 를 만들지
+ * 않는다 — 획득 HB 는 acquire 교환만이 부여하므로 시맨틱(값 경로)
+ * 불변. 짧은 임계구역(레코더 append/스캔) 전용 — 양보 없이 스핀. */
 static inline void hc_spin_lock(hc_spin_t *s) {
-    while (atomic_flag_test_and_set_explicit(&s->f, memory_order_acquire)) {
-        /* 짧은 임계구역(레코더 append/스캔) 전용 — 양보 없이 스핀 */
+    for (;;) {
+        if (!atomic_exchange_explicit(&s->f, 1, memory_order_acquire))
+            return;
+        while (atomic_load_explicit(&s->f, memory_order_relaxed)) {
+        }
     }
 }
 
 static inline void hc_spin_unlock(hc_spin_t *s) {
-    atomic_flag_clear_explicit(&s->f, memory_order_release);
+    atomic_store_explicit(&s->f, 0, memory_order_release);
 }
 
 #endif /* HC_SYNC_H */
