@@ -18,6 +18,22 @@
  * check_sha_equiv.sh 가 판정한다. */
 void hc_sha256(const void *data, size_t len, uint8_t out[32]);
 
+/* P2-8: 스트리밍 API — 같은 바이트열이면 hc_sha256 원샷과 다이제스트
+ * 비트 동일 (원샷이 이 ctx 의 래퍼라 경로가 하나다; test_sha256 §4
+ * 스트리밍 배터리가 분할 위상 전수 대조). 벤치 serialize 꼬리의 47MB
+ * concat 제거용 — canonical 판정 값은 정의상 불변. 백엔드 디스패치는
+ * 호출 시점 (force 규약은 원샷과 동일: 생성 스레드 기동 전). */
+typedef struct {
+    uint32_t h[8];
+    uint64_t total;   /* 누적 바이트 */
+    uint32_t buf_len; /* buf 잔량 (< 64) */
+    uint8_t  buf[64];
+} hc_sha256_ctx_t;
+
+void hc_sha256_init(hc_sha256_ctx_t *c);
+void hc_sha256_update(hc_sha256_ctx_t *c, const void *data, size_t len);
+void hc_sha256_final(hc_sha256_ctx_t *c, uint8_t out[32]);
+
 /* BiomeManager.obfuscateSeed(seed) */
 int64_t hc_biome_obfuscate_seed(int64_t seed);
 

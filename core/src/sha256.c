@@ -86,34 +86,75 @@ void hc_sha256_force(int backend) {
     atomic_store_explicit(&g_sha_ni, backend, memory_order_relaxed);
 }
 
-void hc_sha256(const void *data, size_t len, uint8_t out[32]) {
-    uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-                     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+/* P2-8: 스트리밍 ctx — 원샷 hc_sha256 이 이 경로의 래퍼가 되면서 기존
+ * KAT/이중 배터리가 ctx 기계를 상시 검증한다. 블록 처리는 종전과 동일한
+ * 디스패치 함수로, 같은 바이트열 = 같은 블록열 = 같은 다이제스트. */
+
+void hc_sha256_init(hc_sha256_ctx_t *c) {
+    static const uint32_t H0[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372,
+                                   0xa54ff53a, 0x510e527f, 0x9b05688c,
+                                   0x1f83d9ab, 0x5be0cd19};
+    memcpy(c->h, H0, sizeof H0);
+    c->total = 0;
+    c->buf_len = 0;
+}
+
+void hc_sha256_update(hc_sha256_ctx_t *c, const void *data, size_t len) {
     void (*blocks)(uint32_t[8], const uint8_t *, size_t) =
         hc_sha256_ni_active() ? hc_sha256_blocks_ni : hc_sha256_blocks_sw;
     const uint8_t *p = data;
-    size_t         rem = len;
-    size_t         nb = rem / 64;
-    if (nb) {
-        blocks(h, p, nb);
-        p += nb * 64;
-        rem -= nb * 64;
+    c->total += len;
+    if (c->buf_len) {
+        uint32_t take = 64 - c->buf_len;
+        if ((size_t)take > len)
+            take = (uint32_t)len;
+        memcpy(c->buf + c->buf_len, p, take);
+        c->buf_len += take;
+        p += take;
+        len -= take;
+        if (c->buf_len == 64) {
+            blocks(c->h, c->buf, 1);
+            c->buf_len = 0;
+        }
     }
-    uint8_t tail[128];
-    memcpy(tail, p, rem);
+    size_t nb = len / 64;
+    if (nb) {
+        blocks(c->h, p, nb);
+        p += nb * 64;
+        len -= nb * 64;
+    }
+    if (len) {
+        memcpy(c->buf, p, len);
+        c->buf_len = (uint32_t)len;
+    }
+}
+
+void hc_sha256_final(hc_sha256_ctx_t *c, uint8_t out[32]) {
+    void (*blocks)(uint32_t[8], const uint8_t *, size_t) =
+        hc_sha256_ni_active() ? hc_sha256_blocks_ni : hc_sha256_blocks_sw;
+    uint8_t  tail[128];
+    uint32_t rem = c->buf_len;
+    memcpy(tail, c->buf, rem);
     tail[rem] = 0x80;
     size_t pad = (rem + 1 + 8 <= 64) ? 64 : 128;
     memset(tail + rem + 1, 0, pad - rem - 1 - 8);
-    uint64_t bits = (uint64_t)len * 8;
+    uint64_t bits = c->total * 8;
     for (int i = 0; i < 8; i++)
         tail[pad - 1 - i] = (uint8_t)(bits >> (8 * i));
-    blocks(h, tail, pad / 64);
+    blocks(c->h, tail, pad / 64);
     for (int i = 0; i < 8; i++) {
-        out[4 * i] = (uint8_t)(h[i] >> 24);
-        out[4 * i + 1] = (uint8_t)(h[i] >> 16);
-        out[4 * i + 2] = (uint8_t)(h[i] >> 8);
-        out[4 * i + 3] = (uint8_t)h[i];
+        out[4 * i] = (uint8_t)(c->h[i] >> 24);
+        out[4 * i + 1] = (uint8_t)(c->h[i] >> 16);
+        out[4 * i + 2] = (uint8_t)(c->h[i] >> 8);
+        out[4 * i + 3] = (uint8_t)c->h[i];
     }
+}
+
+void hc_sha256(const void *data, size_t len, uint8_t out[32]) {
+    hc_sha256_ctx_t c;
+    hc_sha256_init(&c);
+    hc_sha256_update(&c, data, len);
+    hc_sha256_final(&c, out);
 }
 
 /* Guava HashFunction.hashLong 은 리틀엔디언 8바이트를 해시하고,

@@ -120,6 +120,62 @@ int main(void) {
         }
     }
 
+    /* 4) 스트리밍-vs-원샷 배터리 (P2-8): 같은 바이트열을 update 분할
+     * 위상 (1/7/63/64/65/4096 + 벤치 패턴 4B+가변) 으로 흘려도 원샷과
+     * 다이제스트 동일. 카운트 동결 7×25=175 (df_x4 규약 — 분할 케이스를
+     * 바꾸면 카운트 검사도 같이). 가용 백엔드는 auto 그대로 (sw/ni 블록
+     * 동일성은 §2 가 이미 판정 — 여기는 분할 불변성만 본다). */
+    {
+        enum { SNMAX = 1 << 16 };
+        static uint8_t sbuf[SNMAX];
+        uint64_t       s = 0xDEADBEEFCAFEF00Dull;
+        for (size_t i = 0; i < sizeof sbuf; i++) {
+            s = s * 6364136223846793005ull + 1442695040888963407ull;
+            sbuf[i] = (uint8_t)(s >> 56);
+        }
+        static const size_t lens[25] = {0,   1,    55,   56,   63,  64,
+                                        65,  127,  128,  129,  191, 192,
+                                        193, 255,  1000, 4095, 4096, 4097,
+                                        8191, 8192, 12345, 20000, 32768,
+                                        65535, 65536};
+        static const size_t steps[7] = {1, 7, 63, 64, 65, 4096, 0 /*4B+rest*/};
+        int scount = 0;
+        for (int si = 0; si < 7; si++) {
+            for (int li = 0; li < 25; li++) {
+                size_t  n = lens[li];
+                uint8_t want[32], got[32];
+                hc_sha256(sbuf, n, want);
+                hc_sha256_ctx_t cx;
+                hc_sha256_init(&cx);
+                if (steps[si] == 0) { /* 벤치 패턴: 4B 프리픽스 + 잔량 */
+                    size_t head = n < 4 ? n : 4;
+                    hc_sha256_update(&cx, sbuf, head);
+                    hc_sha256_update(&cx, sbuf + head, n - head);
+                } else {
+                    for (size_t off = 0; off < n; off += steps[si]) {
+                        size_t take = steps[si];
+                        if (off + take > n)
+                            take = n - off;
+                        hc_sha256_update(&cx, sbuf + off, take);
+                    }
+                }
+                hc_sha256_final(&cx, got);
+                if (memcmp(want, got, 32) != 0) {
+                    g_fails++;
+                    fprintf(stderr,
+                            "FAIL stream/oneshot mismatch len=%zu step=%zu\n",
+                            n, steps[si]);
+                }
+                scount++;
+            }
+        }
+        if (scount != 175) {
+            fprintf(stderr, "FAIL streaming battery count %d != 175\n",
+                    scount);
+            return 2;
+        }
+    }
+
     /* 3) obfuscateSeed 회귀 — golden/rng/surface_seed1234567890.txt:3 */
     hc_sha256_force(-1); /* auto 복원 (프로세스 종료 전 위생) */
     if (hc_biome_obfuscate_seed(1234567890) != 7304622306158335831LL) {

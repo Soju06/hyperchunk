@@ -40,6 +40,7 @@
 #include <dirent.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -752,7 +753,12 @@ static void push_event(uint8_t kind, int32_t cx, int32_t cz, int32_t pos,
     g_ev_n++;
 }
 
-/* FREE 병렬 직렬화 (청크별 순수; test_free_region.c 와 동형) */
+/* FREE 병렬 직렬화 (청크별 순수; test_free_region.c 와 동형).
+ * P2-8 GO-3: 워커는 DAG 직후 파킹-스폰 (래치 대기) — pp/lfinal 이 도는
+ * 동안 스폰/도착 지연이 전부 겹쳐 사라진다 (B-2 §1.3 스폰 계단). 완료는
+ * 청크별 release 플래그로 신고하고, 메인이 idx 순서로 소비하며 canonical
+ * 바이트열을 sha ctx 로 스트리밍한다 (47MB concat 제거 — 같은 바이트열,
+ * 같은 다이제스트). */
 typedef struct {
     void   *smem;
     size_t  ssz;
@@ -762,11 +768,39 @@ static ser_job_t              g_ser_job[MAX_THREADS];
 static _Atomic int32_t        g_ser_next;
 static uint8_t               *g_ser_payload[1024];
 static ptrdiff_t              g_ser_plen[1024];
+static _Atomic uint8_t        g_ser_done[1024];
 static const hc_light_chunk_t *g_ser_frozen;
 static const hc_tick_recorder_t *g_ser_recorder;
+static pthread_mutex_t        g_ser_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t         g_ser_cv = PTHREAD_COND_INITIALIZER;
+static int                    g_ser_go;
+static pthread_t              g_ser_tids[MAX_THREADS];
+static pthread_t              g_ser_spawner;
+static int                    g_ser_nthreads;
+static uint64_t               B_ser_spawn; /* 파킹-스폰 소요 (B_serialize 에 귀속) */
+
+static void *ser_worker(void *ud);
+
+/* P2-8: pthread_create 가 이 프로세스에선 ~2.5-3ms/스레드다 — glibc 가
+ * 생성 시점에 정적 TLS 블록 (PT_TLS ~8.2MB, features_tree 스크래치) 을
+ * 부모 쪽에서 제로화하기 때문 (B-2 "스폰 계단" 의 실체). 헬퍼 스레드
+ * 하나가 워커 생성을 대행해 그 비용을 pp/lfinal 창에 실제로 겹친다
+ * (메인 부담은 헬퍼 1회 생성뿐 — B_ser_spawn 으로 정직 귀속). */
+static void *ser_spawner(void *ud) {
+    (void)ud;
+    for (int t = 0; t < g_ser_nthreads; t++)
+        if (pthread_create(&g_ser_tids[t], NULL, ser_worker,
+                           &g_ser_job[t]) != 0)
+            die("pthread_create failed (ser)", NULL);
+    return NULL;
+}
 
 static void *ser_worker(void *ud) {
     ser_job_t *job = ud;
+    pthread_mutex_lock(&g_ser_mu);
+    while (!g_ser_go)
+        pthread_cond_wait(&g_ser_cv, &g_ser_mu);
+    pthread_mutex_unlock(&g_ser_mu);
     for (;;) {
         int32_t idx =
             atomic_fetch_add_explicit(&g_ser_next, 1, memory_order_relaxed);
@@ -784,6 +818,8 @@ static void *ser_worker(void *ud) {
         if (n < 0)
             die("chunk serialization failed", NULL);
         g_ser_plen[idx] = n;
+        /* payload/plen 쓰기 → 소비자 acquire 로드와 페어 */
+        atomic_store_explicit(&g_ser_done[idx], 1, memory_order_release);
         if (g_wf_path) {
             g_wf_ser[idx].t0 = wf0;
             g_wf_ser[idx].t1 = now_ns();
@@ -1524,6 +1560,33 @@ int main(int argc, char **argv) {
             die("hc_sched_run failed", NULL);
         B_dag = now_ns() - tr0;
         wf_mark("dag1", tr0 + B_dag);
+        /* P2-8 GO-3: 직렬화 워커 파킹-스폰 — pp/lfinal (~85ms) 동안
+         * 스폰/도착이 전부 겹친다. frozen 내용은 lfinal 뒤에야 유효하나
+         * 워커는 래치 (g_ser_go) 통과 후에만 읽는다 (mutex HB). 스폰
+         * 루프 자체 소요는 B_serialize 에 귀속 (숨김 없음). */
+        {
+            uint64_t sp0 = now_ns();
+            g_ser_frozen = frozen;
+            g_ser_recorder = &recorder;
+            for (int32_t idx = 0; idx < 1024; idx++) {
+                g_ser_payload[idx] = hc_arena_alloc(&g_arena, 256u << 10, 1);
+                if (!g_ser_payload[idx])
+                    die("arena exhausted (payload)", NULL);
+            }
+            for (int t = 0; t < nthreads; t++) {
+                g_ser_job[t].ssz = 96u << 20;
+                g_ser_job[t].smem =
+                    hc_arena_alloc(&jobs[t].arena, g_ser_job[t].ssz, 16);
+                if (!g_ser_job[t].smem)
+                    die("arena exhausted (ser scratch)", NULL);
+                g_ser_job[t].tid = t;
+            }
+            atomic_store(&g_ser_next, 0);
+            g_ser_nthreads = nthreads;
+            if (pthread_create(&g_ser_spawner, NULL, ser_spawner, NULL) != 0)
+                die("pthread_create failed (ser spawner)", NULL);
+            B_ser_spawn = now_ns() - sp0;
+        }
     }
     int32_t next_b = 0, c08 = 0;
     for (int32_t pos = 0; !free_mode && pos <= n_man; pos++) {
@@ -1683,24 +1746,29 @@ int main(int argc, char **argv) {
     B_light_final += now_ns() - tr0;
     wf_mark("lfinal1", tr0 + B_light_final);
 
-    uint8_t *cat = hc_arena_alloc(&g_arena, 192u << 20, 16);
-    if (!cat)
-        die("arena exhausted (serialize cat)", NULL);
-    size_t cat_off = 0;
+    /* P2-8 GO-3: concat 제거 — canonical 바이트열 ([4B BE idx][payload]
+     * × 1024, idx 순) 을 그대로 sha ctx 로 스트리밍한다. 바이트열이
+     * 종전 cat 버퍼와 동일하므로 다이제스트 (판정 상수) 는 정의상 불변
+     * (스트리밍-vs-원샷 등가는 test_sha256 §4 배터리가 상시 판정). */
+    hc_sha256_ctx_t shac;
+    hc_sha256_init(&shac);
+    uint8_t dig[32];
     tr0 = now_ns();
     wf_mark("ser0", tr0);
     if (!free_mode) {
         hc_arena_t scratch;
-        void *smem = hc_arena_alloc(&g_arena, 64u << 20, 16);
-        if (!smem)
+        void      *smem = hc_arena_alloc(&g_arena, 64u << 20, 16);
+        uint8_t   *payload = hc_arena_alloc(&g_arena, 256u << 10, 1);
+        if (!smem || !payload)
             die("arena exhausted (serialize scratch)", NULL);
+        /* 버킷 귀속: 직렬화 시간 = B_serialize, 스트리밍 해시 = B_sha256
+         * (종전 "연접 후 원샷" 과 합계 의미 동일, concat memcpy 만 소멸) */
+        uint64_t ser_acc = 0, sha_acc = 0;
         for (int32_t idx = 0; idx < 1024; idx++) {
+            uint64_t          s0 = now_ns();
             int32_t           cx = idx & 31, cz = idx >> 5;
             hc_chunk_t       *c = &g_chunks[widx(cx, cz)];
             hc_light_chunk_t *ls = &frozen[idx];
-            uint8_t *payload = hc_arena_alloc(&g_arena, 256u << 10, 1);
-            if (!payload)
-                die("arena exhausted (payload)", NULL);
             hc_arena_init(&scratch, smem, 64u << 20);
             ptrdiff_t n = hc_chunk_to_nbt(c, &g_reg, ls, recorder.recs,
                                           recorder.n, /*last_update=*/0,
@@ -1708,56 +1776,50 @@ int main(int argc, char **argv) {
                                           256u << 10);
             if (n < 0)
                 die("chunk serialization failed", NULL);
-            cat[cat_off++] = (uint8_t)(idx >> 24);
-            cat[cat_off++] = (uint8_t)(idx >> 16);
-            cat[cat_off++] = (uint8_t)(idx >> 8);
-            cat[cat_off++] = (uint8_t)idx;
-            memcpy(cat + cat_off, payload, (size_t)n);
-            cat_off += (size_t)n;
+            uint64_t s1 = now_ns();
+            ser_acc += s1 - s0;
+            uint8_t pre[4] = {(uint8_t)(idx >> 24), (uint8_t)(idx >> 16),
+                              (uint8_t)(idx >> 8), (uint8_t)idx};
+            hc_sha256_update(&shac, pre, 4);
+            hc_sha256_update(&shac, payload, (size_t)n);
+            sha_acc += now_ns() - s1;
         }
+        B_serialize = ser_acc;
+        B_sha256 = sha_acc;
     } else {
-        /* 청크별 순수 병렬 (references scratch 수정 선행) — 연접만 순차 */
-        g_ser_frozen = frozen;
-        g_ser_recorder = &recorder;
+        /* 래치 해제 → idx 순 소비 (per-청크 release/acquire 플래그) +
+         * 스트리밍. 소비 루프의 sha 갱신은 워커 직렬화와 겹치므로
+         * B_serialize 가 그 창 전체 (+ 파킹-스폰 소요) 를 담고,
+         * B_sha256 은 finalize 잔여만 남는다. */
+        pthread_mutex_lock(&g_ser_mu);
+        g_ser_go = 1; /* 늦게 생성된 워커는 대기 없이 플래그를 보고 통과 */
+        pthread_cond_broadcast(&g_ser_cv);
+        pthread_mutex_unlock(&g_ser_mu);
         for (int32_t idx = 0; idx < 1024; idx++) {
-            g_ser_payload[idx] = hc_arena_alloc(&g_arena, 256u << 10, 1);
-            if (!g_ser_payload[idx])
-                die("arena exhausted (payload)", NULL);
+            while (!atomic_load_explicit(&g_ser_done[idx],
+                                         memory_order_acquire))
+                sched_yield();
+            uint8_t pre[4] = {(uint8_t)(idx >> 24), (uint8_t)(idx >> 16),
+                              (uint8_t)(idx >> 8), (uint8_t)idx};
+            hc_sha256_update(&shac, pre, 4);
+            hc_sha256_update(&shac, g_ser_payload[idx],
+                             (size_t)g_ser_plen[idx]);
         }
-        for (int t = 0; t < nthreads; t++) {
-            g_ser_job[t].ssz = 96u << 20;
-            g_ser_job[t].smem =
-                hc_arena_alloc(&jobs[t].arena, g_ser_job[t].ssz, 16);
-            if (!g_ser_job[t].smem)
-                die("arena exhausted (ser scratch)", NULL);
-            g_ser_job[t].tid = t;
-        }
-        atomic_store(&g_ser_next, 0);
-        pthread_t stids[MAX_THREADS];
+        /* 스포너 조인 선행 — g_ser_tids[] 전체 기록에 HB 부여 */
+        pthread_join(g_ser_spawner, NULL);
         for (int t = 0; t < nthreads; t++)
-            if (pthread_create(&stids[t], NULL, ser_worker,
-                               &g_ser_job[t]) != 0)
-                die("pthread_create failed (ser)", NULL);
-        for (int t = 0; t < nthreads; t++)
-            pthread_join(stids[t], NULL);
-        for (int32_t idx = 0; idx < 1024; idx++) {
-            cat[cat_off++] = (uint8_t)(idx >> 24);
-            cat[cat_off++] = (uint8_t)(idx >> 16);
-            cat[cat_off++] = (uint8_t)(idx >> 8);
-            cat[cat_off++] = (uint8_t)idx;
-            memcpy(cat + cat_off, g_ser_payload[idx],
-                   (size_t)g_ser_plen[idx]);
-            cat_off += (size_t)g_ser_plen[idx];
-        }
+            pthread_join(g_ser_tids[t], NULL);
+        B_serialize = (now_ns() - tr0) + B_ser_spawn;
     }
-    B_serialize = now_ns() - tr0;
-    wf_mark("ser1", tr0 + B_serialize);
+    wf_mark("ser1", now_ns());
     tr0 = now_ns();
     wf_mark("sha0", tr0);
-    uint8_t dig[32];
-    hc_sha256(cat, cat_off, dig);
-    B_sha256 = now_ns() - tr0;
-    wf_mark("sha1", tr0 + B_sha256);
+    hc_sha256_final(&shac, dig);
+    if (free_mode)
+        B_sha256 = now_ns() - tr0;
+    else
+        B_sha256 += now_ns() - tr0;
+    wf_mark("sha1", now_ns());
     char hex[65];
     for (int i = 0; i < 32; i++)
         sprintf(hex + 2 * i, "%02x", dig[i]);
