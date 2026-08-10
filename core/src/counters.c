@@ -57,6 +57,7 @@ static const char *const g_names[HC_CTR_N] = {
     [HC_CTR_FEAT_SETBLK] = "feat_setblk",
     [HC_CTR_FEAT_ATTEMPT] = "feat_attempt",
     [HC_CTR_STRUCT_STEP] = "struct_step",
+    [HC_CTR_STRUCT_SCAN] = "struct_scan",
 };
 
 void hc_ctr_enable(void) {

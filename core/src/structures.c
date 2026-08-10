@@ -889,6 +889,26 @@ int hc_structures_init(hc_sctx_t *sc, hc_arena_t *a, int64_t seed,
         }
     }
 
+    /* --- P2-9 GO-1: 스캔 순열 구축 — (scx, scz, i) 사전식 안정 정렬
+     * (삽입 정렬; n ≤ 64). 창 필터를 얹은 ord 순회가 종전 삼중 스캔의
+     * 방문 순서와 동일함은 사전식 순서의 성질: 창 안의 두 스타트 a, b
+     * 에 대해 삼중 스캔은 셀을 (sx asc, sz asc) 로, 셀 안에서 i asc 로
+     * 방문하므로 a 가 b 보다 먼저 ⇔ (scx,scz,i)_a <lex (scx,scz,i)_b.
+     * 바로 아래 references 교차검증이 이 순회의 산출 순서를 골든과
+     * 전수 대조한다 (fail-loud). */
+    for (int32_t i = 0; i < sc->n_starts; i++) {
+        int32_t j = i;
+        while (j > 0) {
+            const hc_sstart_t *a = &sc->starts[sc->ord[j - 1]];
+            const hc_sstart_t *b = &sc->starts[i];
+            if (a->scx < b->scx || (a->scx == b->scx && a->scz <= b->scz))
+                break;
+            sc->ord[j] = sc->ord[j - 1];
+            j--;
+        }
+        sc->ord[j] = i;
+    }
+
     /* --- References 교차검증 (골든 references.txt 전수) --- */
     {
         char path[512];
@@ -996,33 +1016,36 @@ int32_t hc_structures_references(const hc_sctx_t *sc, hc_arena_t *scratch,
     } acc[8];
     int32_t n_acc = 0;
     int32_t bx0 = cx * 16, bz0 = cz * 16, bx1 = bx0 + 15, bz1 = bz0 + 15;
-    for (int32_t sx = cx - 8; sx <= cx + 8; sx++)
-        for (int32_t sz = cz - 8; sz <= cz + 8; sz++)
-            for (int32_t i = 0; i < sc->n_starts; i++) {
-                const hc_sstart_t *st = &sc->starts[i];
-                if (st->scx != sx || st->scz != sz)
-                    continue;
-                /* 2D XZ intersects (BoundingBox.java:135-137) */
-                if (st->bb[3] < bx0 || st->bb[0] > bx1 || st->bb[5] < bz0 ||
-                    st->bb[2] > bz1)
-                    continue;
-                int32_t k = -1;
-                for (int32_t j = 0; j < n_acc; j++)
-                    if (strcmp(acc[j].name, st->name) == 0)
-                        k = j;
-                if (k < 0) {
-                    if (n_acc >= 8)
-                        die("too many structures per chunk", NULL);
-                    k = n_acc++;
-                    acc[k].name = st->name;
-                    acc[k].n = 0;
-                }
-                if (acc[k].n >= MAX_PER)
-                    die("too many references per structure", NULL);
-                acc[k].added[acc[k].n++] =
-                    (int64_t)((uint64_t)(uint32_t)sx |
-                              ((uint64_t)(uint32_t)sz << 32));
-            }
+    /* P2-9 GO-1: 종전 (sx asc, sz asc, i asc) 17×17×n_starts 삼중 스캔을
+     * ord[] (사전식 정렬) 순회 + 창 필터로 대체 — 방문 순서 동일 (init
+     * 의 ord 구축 논거), acc 삽입 순서·LongSet 삽입 순서 불변. */
+    for (int32_t o = 0; o < sc->n_starts; o++) {
+        const hc_sstart_t *st = &sc->starts[sc->ord[o]];
+        HC_CTR_INC_HOT(HC_CTR_STRUCT_SCAN);
+        if (st->scx < cx - 8 || st->scx > cx + 8 || st->scz < cz - 8 ||
+            st->scz > cz + 8)
+            continue;
+        /* 2D XZ intersects (BoundingBox.java:135-137) */
+        if (st->bb[3] < bx0 || st->bb[0] > bx1 || st->bb[5] < bz0 ||
+            st->bb[2] > bz1)
+            continue;
+        int32_t k = -1;
+        for (int32_t j = 0; j < n_acc; j++)
+            if (strcmp(acc[j].name, st->name) == 0)
+                k = j;
+        if (k < 0) {
+            if (n_acc >= 8)
+                die("too many structures per chunk", NULL);
+            k = n_acc++;
+            acc[k].name = st->name;
+            acc[k].n = 0;
+        }
+        if (acc[k].n >= MAX_PER)
+            die("too many references per structure", NULL);
+        acc[k].added[acc[k].n++] =
+            (int64_t)((uint64_t)(uint32_t)st->scx |
+                      ((uint64_t)(uint32_t)st->scz << 32));
+    }
     /* 방출: 구조물 키 순서는 소스 맵 (HashMap<Structure identity>) —
      * 컴파운드 키 방출은 nbt.c 의 HashMap(String) 에뮬이 처리하므로
      * 여기서는 put 순서만 결정하면 된다. 우리 청크는 전부 단일 구조물
@@ -1074,23 +1097,25 @@ int hc_structures_beard(const hc_sctx_t *sc, hc_arena_t *arena, int32_t cx,
     hc_sstart_t *hits[24];
     int64_t      added[24];
     int32_t      n_hits = 0;
-    for (int32_t sx = cx - 8; sx <= cx + 8; sx++)
-        for (int32_t sz = cz - 8; sz <= cz + 8; sz++)
-            for (int32_t i = 0; i < sc->n_starts; i++) {
-                const hc_sstart_t *st = &sc->starts[i];
-                if (st->scx != sx || st->scz != sz)
-                    continue;
-                if (terrain_adaptation_of(st->name) == HC_TA_NONE)
-                    continue;
-                if (st->bb[3] < bx0 || st->bb[0] > bx0 + 15 ||
-                    st->bb[5] < bz0 || st->bb[2] > bz0 + 15)
-                    continue;
-                assert(n_hits < 24);
-                hits[n_hits] = (hc_sstart_t *)st;
-                added[n_hits] = (int64_t)((uint64_t)(uint32_t)sx |
-                                          ((uint64_t)(uint32_t)sz << 32));
-                n_hits++;
-            }
+    /* P2-9 GO-1: ord[] 순회 + 창 필터 — 방문 순서 동일 (references 와
+     * 같은 논거), hits/added 수집 순서 불변. */
+    for (int32_t o = 0; o < sc->n_starts; o++) {
+        const hc_sstart_t *st = &sc->starts[sc->ord[o]];
+        HC_CTR_INC_HOT(HC_CTR_STRUCT_SCAN);
+        if (st->scx < cx - 8 || st->scx > cx + 8 || st->scz < cz - 8 ||
+            st->scz > cz + 8)
+            continue;
+        if (terrain_adaptation_of(st->name) == HC_TA_NONE)
+            continue;
+        if (st->bb[3] < bx0 || st->bb[0] > bx0 + 15 ||
+            st->bb[5] < bz0 || st->bb[2] > bz0 + 15)
+            continue;
+        assert(n_hits < 24);
+        hits[n_hits] = (hc_sstart_t *)st;
+        added[n_hits] = (int64_t)((uint64_t)(uint32_t)st->scx |
+                                  ((uint64_t)(uint32_t)st->scz << 32));
+        n_hits++;
+    }
     if (n_hits == 0)
         return 0;
     int64_t ordered[24];
@@ -1218,30 +1243,39 @@ void hc_structures_step(hc_sctx_t *sc, hc_feat_region_t *rg,
      * 순서 (hc_structures_references 산출 순서와 동일 산식). */
     int32_t bx0 = cx * 16, bz0 = cz * 16, bx1 = bx0 + 15, bz1 = bz0 + 15;
     /* chunkBB (getWritableArea): y [minY+1, maxY] */
+    /* P2-9 GO-1: 종전 26(idx) × 289(창) × n_starts 스캔을 ord[] 단일
+     * 패스 + step_index 버킷으로 대체. 고정 idx 에 대해 버킷 append
+     * 순서 == 종전 그 idx 스캔의 (sx asc, sz asc, i asc) 수집 순서
+     * (ord 구축 논거의 부분열 추출) — hits/added 시퀀스가 idx 별로
+     * 비트 동일, LongSet 삽입 순서·RNG 소비 순서 불변. idx 시맨틱도
+     * 불변: 빈 버킷은 종전 n_hits==0 continue (RNG 미시드) 와 동일,
+     * step_index > 25 는 종전 루프 범위 밖 (매치 불가) 그대로 스킵. */
+    uint8_t bn[26] = {0};
+    uint8_t border[26][24]; /* 버킷: starts[] 인덱스 (MAX_STARTS 64) */
+    for (int32_t o = 0; o < sc->n_starts; o++) {
+        const hc_sstart_t *st = &sc->starts[sc->ord[o]];
+        HC_CTR_INC_HOT(HC_CTR_STRUCT_SCAN);
+        if (st->scx < cx - 8 || st->scx > cx + 8 || st->scz < cz - 8 ||
+            st->scz > cz + 8 || st->step != step || st->step_index > 25)
+            continue;
+        if (st->bb[3] < bx0 || st->bb[0] > bx1 || st->bb[5] < bz0 ||
+            st->bb[2] > bz1)
+            continue;
+        assert(bn[st->step_index] < 24);
+        border[st->step_index][bn[st->step_index]++] = (uint8_t)sc->ord[o];
+    }
     for (int idx = 0; idx <= 25; idx++) {
-        /* 이 (step, idx) 조합의 스타트 수집 (refs 산식과 같은 스캔) */
-        hc_sstart_t *hits[24];
-        int32_t      n_hits = 0;
-        int64_t      added[24];
-        for (int32_t sx = cx - 8; sx <= cx + 8; sx++)
-            for (int32_t sz = cz - 8; sz <= cz + 8; sz++)
-                for (int32_t i = 0; i < sc->n_starts; i++) {
-                    hc_sstart_t *st = &sc->starts[i];
-                    if (st->scx != sx || st->scz != sz ||
-                        st->step != step || st->step_index != idx)
-                        continue;
-                    if (st->bb[3] < bx0 || st->bb[0] > bx1 ||
-                        st->bb[5] < bz0 || st->bb[2] > bz1)
-                        continue;
-                    assert(n_hits < 24);
-                    hits[n_hits] = st;
-                    added[n_hits] =
-                        (int64_t)((uint64_t)(uint32_t)sx |
-                                  ((uint64_t)(uint32_t)sz << 32));
-                    n_hits++;
-                }
+        int32_t n_hits = bn[idx];
         if (n_hits == 0)
             continue;
+        hc_sstart_t *hits[24];
+        int64_t      added[24];
+        for (int32_t i = 0; i < n_hits; i++) {
+            hc_sstart_t *st = &sc->starts[border[idx][i]];
+            hits[i] = st;
+            added[i] = (int64_t)((uint64_t)(uint32_t)st->scx |
+                                 ((uint64_t)(uint32_t)st->scz << 32));
+        }
         /* LongOpenHashSet 순회 순서로 재배열 */
         int64_t ordered[24];
         int32_t m = hc_longset_to_array(added, n_hits, ordered);

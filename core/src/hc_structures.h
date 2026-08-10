@@ -220,6 +220,12 @@ typedef struct hc_sctx {
     } copper;
     hc_sstart_t starts[HC_SCTX_MAX_STARTS];
     int32_t     n_starts;
+    /* P2-9 GO-1: (scx asc, scz asc, i asc) 사전식 안정 정렬 순열.
+     * 창 [cx±8]×[cz±8] 필터로 ord 를 순회하면 종전 (sx asc, sz asc,
+     * i asc) 17×17×n_starts 삼중 스캔과 방문 순서가 모든 (cx,cz) 에서
+     * 동일하다 (references/beard/step 공용 — structures.c 각 사이트
+     * 논거). init 말미 (references 골든 교차검증 전) 구축, 이후 불변. */
+    int32_t     ord[HC_SCTX_MAX_STARTS];
     hc_be_recorder_t be;
     /* references: 직렬화 시 파생 (radius-8 스캔 + LongOpenHashSet 에뮬) */
 } hc_sctx_t;

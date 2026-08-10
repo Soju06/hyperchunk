@@ -76,6 +76,9 @@ enum {
     HC_CTR_FEAT_SETBLK,  /* set_block 펀넬 (일반+ks, 창 가드 통과분) */
     HC_CTR_FEAT_ATTEMPT, /* (청크, step, feature) 배치 시도 (idxset 통과) */
     HC_CTR_STRUCT_STEP,  /* structures_step 호출 (청크×step) */
+    HC_CTR_STRUCT_SCAN,  /* references/beard/step 스캔 스텝 (start 검사 수)
+                          * — P2-9 GO-1 전 26×289×n_starts 삼중 루프 트립,
+                          * 후 ord[] 순회 트립 (HOT: 전 형상이 ~2.5G/런) */
 
     HC_CTR_N
 };
