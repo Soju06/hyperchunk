@@ -489,6 +489,67 @@ static int32_t compile_rule(sc_ctx_t *c, const hc_json_t *j) {
     return fail(s, "unknown rule type '%.*s'", (int)type->slen, type->s);
 }
 
+/* --- P2-9 GO-2: 룰 트리 선형화 방출 ---
+ *
+ * 레이아웃: 룰 r 의 구간 R(r, fail) 은
+ *  - BLOCK/BANDLANDS → 반환 op 1개 (fail 미사용)
+ *  - CONDITION → [TEST cond fail] ++ R(then, fail)
+ *  - SEQUENCE → R(c1, at(c2)) ++ R(c2, at(c3)) ++ … ++ R(cn, fail)
+ *    (자식 i 의 fail = 자식 i+1 의 물리 시작 주소; 빈 sequence 는 0 op)
+ * 크기를 먼저 계산해 시작 주소를 하향식으로 확정 — 백패치 불요.
+ * 등가 논거는 surface.c prog_run 주석. */
+
+static int32_t prog_size(const hc_surface_t *s, int32_t ri) {
+    const hc_srule_t *r = &s->rules[ri];
+    switch (r->kind) {
+    case HC_SR_SEQUENCE: {
+        int32_t n = 0;
+        for (int32_t i = 0; i < r->u.seq.count; i++)
+            n += prog_size(s, s->children[r->u.seq.first + i]);
+        return n;
+    }
+    case HC_SR_CONDITION:
+        return 1 + prog_size(s, r->u.test.then);
+    default: /* HC_SR_BLOCK / HC_SR_BANDLANDS */
+        return 1;
+    }
+}
+
+static void prog_emit(hc_surface_t *s, int32_t ri, int32_t at, int32_t fpc) {
+    const hc_srule_t *r = &s->rules[ri];
+    hc_sop_t          op;
+    memset(&op, 0, sizeof op);
+    switch (r->kind) {
+    case HC_SR_SEQUENCE: {
+        int32_t off = at;
+        for (int32_t i = 0; i < r->u.seq.count; i++) {
+            int32_t ci = s->children[r->u.seq.first + i];
+            int32_t sz = prog_size(s, ci);
+            prog_emit(s, ci, off,
+                      i + 1 < r->u.seq.count ? off + sz : fpc);
+            off += sz;
+        }
+        return;
+    }
+    case HC_SR_CONDITION:
+        op.kind = HC_SOP_TEST;
+        op.cond = (uint16_t)r->u.test.cond;
+        op.fail = (uint16_t)fpc;
+        s->prog[at] = op;
+        prog_emit(s, r->u.test.then, at + 1, fpc);
+        return;
+    case HC_SR_BLOCK:
+        op.kind = HC_SOP_BLOCK;
+        op.block = r->u.block.block;
+        s->prog[at] = op;
+        return;
+    default: /* HC_SR_BANDLANDS */
+        op.kind = HC_SOP_BAND;
+        s->prog[at] = op;
+        return;
+    }
+}
+
 /* --- 시스템 초기화 --- */
 
 int hc_surface_init(hc_surface_t *s, hc_arena_t *arena, int64_t seed,
@@ -563,6 +624,22 @@ int hc_surface_init(hc_surface_t *s, hc_arena_t *arena, int64_t seed,
     s->root_rule = compile_rule(&c, rule);
     if (s->root_rule < 0)
         return -1;
+
+    /* P2-9 GO-2: 선형화 방출. op 수 = 비-sequence 노드 수 ≤ n_rules
+     * ≤ MAX_RULES (1024) — cond/fail 의 uint16 인코딩 상한 안. */
+    {
+        int32_t np = prog_size(s, s->root_rule);
+        if (np + 1 > HC_SURF_MAX_RULES + 1)
+            return (int)fail(s, "linearized program too long");
+        s->prog = hc_arena_alloc(arena, (size_t)(np + 1) * sizeof(hc_sop_t),
+                                 _Alignof(hc_sop_t));
+        if (!s->prog)
+            return (int)fail(s, "arena exhausted (surface prog)");
+        prog_emit(s, s->root_rule, 0, np);
+        memset(&s->prog[np], 0, sizeof(hc_sop_t));
+        s->prog[np].kind = HC_SOP_NULL;
+        s->n_prog = np + 1;
+    }
 
     /* 확장 패스 트리거 바이옴 — intern 하지 않는다 (레지스트리에 없으면
      * 어떤 쿼트도 그 id 를 가질 수 없어 -1 매치 불가가 정답이다) */

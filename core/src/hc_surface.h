@@ -107,6 +107,25 @@ typedef struct {
     } u;
 } hc_srule_t;
 
+/* --- P2-9 GO-2: 룰 트리 선형화 프로그램 ---
+ *
+ * 재귀 tryApply 의 제어 흐름을 fail-연속 (fail continuation) 으로 편
+ * 평탄 op 배열. 컴파일 시 (init, 단일 스레드) 트리에서 방출하고 이후
+ * 읽기 전용. 등가 논거는 surface.c prog_run 주석 (구조 귀납) — 값
+ * 경로는 cond_test/getBand 그대로, 순수 제어-흐름 변환. */
+enum {
+    HC_SOP_TEST = 0, /* cond 통과 → pc+1 낙하, 실패 → pc = fail */
+    HC_SOP_BLOCK,    /* 반환 block */
+    HC_SOP_BAND,     /* 반환 getBand(x,y,z) */
+    HC_SOP_NULL,     /* 반환 -1 (전 트리 미매치) — 프로그램 말단 1개 */
+};
+typedef struct {
+    uint16_t kind;
+    uint16_t cond;  /* TEST: conds 인덱스 (< HC_SURF_MAX_CONDS) */
+    uint16_t fail;  /* TEST: 실패 시 pc (항상 전방) */
+    uint16_t block; /* BLOCK: 상태 id */
+} hc_sop_t;
+
 /* noise_threshold 의 공유 샘플러 (Context$1/$2 대응): (키, is_3d) 로
  * dedup. memo (2d=lastUpdateXZ / 3d=lastUpdateY 스탬프, A2 §0.5) 는
  * 청크별 hc_sctx_t 로 옮겼다 (P2-3) — 바닐라도 Context (청크당 새 객체)
@@ -145,6 +164,8 @@ typedef struct {
     hc_ssampler_t *samplers;
     int32_t        n_samplers;
     int32_t        root_rule;
+    hc_sop_t      *prog; /* P2-9 GO-2: root_rule 선형화 (+ 말단 NULL op) */
+    int32_t        n_prog;
 
     const hc_biome_reg_t *biomes;
     /* 확장 패스 트리거 (레지스트리에 없으면 -1 — 어떤 컬럼도 매치 불가) */

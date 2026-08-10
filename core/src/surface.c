@@ -356,9 +356,11 @@ static int cond_test(hc_sctx_t *c, int32_t ci) {
 
 /* --- 룰 평가 (A4): tryApply — -1 == null --- */
 
+#ifndef NDEBUG
+/* 재귀 참조 구현 — P2-9 GO-2 이후 assert 빌드의 등가 실검증 전용
+ * (릴리스 실행 경로는 아래 prog_run). */
 static int32_t rule_apply(hc_sctx_t *c, int32_t ri, int32_t x, int32_t y,
                           int32_t z) {
-    HC_CTR_INC_HOT(HC_CTR_SURF_APPLY);
     const hc_srule_t *r = &c->s->rules[ri];
     switch (r->kind) {
     case HC_SR_SEQUENCE:
@@ -381,6 +383,55 @@ static int32_t rule_apply(hc_sctx_t *c, int32_t ri, int32_t x, int32_t y,
     assert(0 && "unknown rule kind");
     return -1;
 }
+#endif
+
+/* --- P2-9 GO-2: 선형화 프로그램 실행 (재귀 tryApply 등가) ---
+ *
+ * 등가 논거 (구조 귀납; 방출 레이아웃은 surface_compile.c prog_emit):
+ * R(r, fail) 을 r 의 방출 구간이라 하자. 귀납 가설: "R(r,fail) 진입 =
+ * rule_apply(r) 가 non-null 이면 그 값 반환, null 이면 pc=fail 이탈,
+ * cond_test 호출 시퀀스 동일".
+ *  - BLOCK/BANDLANDS: 반환 op 1개, cond 평가 없음 — 자명.
+ *  - CONDITION: TEST 1회 = 같은 cond_test(cond) 1회. 통과 → pc+1 =
+ *    R(then, fail) 진입 (then null → fail: 재귀에서 CONDITION 이 null
+ *    을 돌려 부모 sequence 가 다음 자식으로 가는 것과 동일). 실패 →
+ *    pc=fail (null 반환과 동일).
+ *  - SEQUENCE: 자식 구간을 선언 순서로 연접, 자식 i 의 fail = 자식
+ *    i+1 시작, 마지막 fail = 부모 fail — "첫 non-null 승리" 단락과
+ *    1:1. 빈 sequence 는 0 op (진입 = 즉시 다음 주소) = 상시 null.
+ * 최상위 fail = 말단 HC_SOP_NULL (-1 반환). 따라서 cond_test 의 호출
+ * 순서·횟수가 재귀와 동일하고 (surf_cond 카운터 비트 대조로 실측),
+ * memo 래치 순서 (steep 포함)·vgrad positional RNG·bandlands 도달
+ * 조건이 전부 보존된다. 값 경로는 cond_test/hc_surface_band 그대로 —
+ * 순수 제어-흐름 선형화다. */
+static int32_t prog_run(hc_sctx_t *c, int32_t x, int32_t y, int32_t z) {
+    const hc_sop_t *prog = c->s->prog;
+    int32_t         pc = 0;
+    for (;;) {
+        const hc_sop_t *op = &prog[pc];
+        HC_CTR_INC_HOT(HC_CTR_SURF_APPLY);
+        if (op->kind == HC_SOP_TEST) {
+            pc = cond_test(c, op->cond) ? pc + 1 : op->fail;
+            continue;
+        }
+        if (op->kind == HC_SOP_BLOCK)
+            return op->block;
+        if (op->kind == HC_SOP_BAND)
+            return hc_surface_band(c->s, x, y, z);
+        return -1; /* HC_SOP_NULL */
+    }
+}
+
+/* assert 빌드 등가 실검증: 선형화 결과 == 재귀 tryApply. 두 번째 순회는
+ * 첫 순회가 래치한 memo 를 읽지만 memo 값은 위치 상태의 순수 함수
+ * (steep 은 컬럼 내 래치 — 한 루트 적용 안에서는 하이트맵 불변이라
+ * 언제 래치해도 같은 값) 이라 관측 등가다. */
+#ifndef NDEBUG
+#define PROG_RUN_CHECKED(c, s, x, y, z, res)                                 \
+    assert(rule_apply((c), (s)->root_rule, (x), (y), (z)) == (res))
+#else
+#define PROG_RUN_CHECKED(c, s, x, y, z, res) ((void)0)
+#endif
 
 /* SurfaceSystem.topMaterial (task7 A1 §11, task8 A5 §1) — 카버 전용 진입점.
  * 바닐라는 호출마다 새 SurfaceRules.Context 를 만든다 (possibleBiomes=null):
@@ -396,7 +447,9 @@ int32_t hc_surface_top_material(hc_surface_t *s, hc_chunk_t *chunk,
     ctx_update_xz(&ctx, x, z);
     ctx_update_y(&ctx, 1, 1, has_fluid ? y + 1 : INT32_MIN, y);
     HC_CTR_INC(HC_CTR_SURF_TOPMAT);
-    return rule_apply(&ctx, s->root_rule, x, y, z);
+    int32_t res = prog_run(&ctx, x, y, z);
+    PROG_RUN_CHECKED(&ctx, s, x, y, z, res);
+    return res;
 }
 
 /* --- erodedBadlandsExtension (A1 §8) — 룰 패스 전, RNG 없음 --- */
@@ -572,7 +625,8 @@ void hc_gen_surface_stage(hc_chunk_t *chunk, hc_noise_chunk_t *nc,
                 if (st != s->default_block)
                     continue;
                 HC_CTR_INC(HC_CTR_SURF_ROOT);
-                int32_t res = rule_apply(&ctx, s->root_rule, x, y, z);
+                int32_t res = prog_run(&ctx, x, y, z);
+                PROG_RUN_CHECKED(&ctx, s, x, y, z, res);
                 if (res >= 0)
                     col_set(chunk, lx, y, lz, (uint16_t)res);
             }
