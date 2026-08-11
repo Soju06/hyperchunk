@@ -15,7 +15,9 @@
  *        타이밍은 커널 루프만 (nc_init 제외). ISA 부재 호스트는 exit 77.
  *   zoom --repo <root> [--passes N] [--ctr]
  *        golden/rng/surface_seed<seed>.txt 의 zoomed 벡터 12,288개 루프.
- *        pass0 = 콜드 (셀-캐시 미스 포함), 이후 = 히트 경로.
+ *        pass0 = 콜드; 정상상태도 순수 히트가 아니다 — 1024-슬롯 직결
+ *        캐시의 충돌 미스가 패스당 잔존 (B-4 실측 ~5.5%). --ctr 시
+ *        패스별 zoom_q/zoom_miss 델타를 함께 찍는다 (누적 오독 방지).
  *   sha  [--backend ni|sw] [--total B] [--chunk B]
  *        스트리밍 업데이트 처리량 (기본 total 47,243,127 B = canonical
  *        스트림 크기, chunk 46 KiB ≈ 청크당 스트림).
@@ -370,7 +372,8 @@ static int mode_zoom(const char *repo, int passes, int want_ctr) {
     printf("mb vectors %d\n", nv);
     printf("mb passes %d\n", passes);
 
-    int64_t sink = 0;
+    int64_t  sink = 0;
+    uint64_t q_prev = 0, miss_prev = 0;
     for (int pass = 0; pass < passes; pass++) {
         int64_t m0 = now_ns(), c0 = tcpu_ns();
         for (int i = 0; i < nv; i++) {
@@ -380,8 +383,19 @@ static int mode_zoom(const char *repo, int passes, int want_ctr) {
         }
         int64_t c1 = tcpu_ns(), m1 = now_ns();
         printf("mb pass %d cpu_ns %" PRId64 " mono_ns %" PRId64
-               " ns_per_q %.3f\n",
+               " ns_per_q %.3f",
                pass, c1 - c0, m1 - m0, (double)(c1 - c0) / nv);
+        if (want_ctr) {
+            /* 패스별 델타 — 누적치 오독 방지 (B-4 §9 함정) */
+            hc_ctr_flush();
+            uint64_t q = hc_ctr_total(HC_CTR_ZOOM_Q);
+            uint64_t miss = hc_ctr_total(HC_CTR_ZOOM_MISS);
+            printf(" d_q %" PRIu64 " d_miss %" PRIu64, q - q_prev,
+                   miss - miss_prev);
+            q_prev = q;
+            miss_prev = miss;
+        }
+        printf("\n");
     }
     printf("mb sink %" PRId64 "\n", sink);
     if (want_ctr)
@@ -474,6 +488,8 @@ int main(int argc, char **argv) {
         die("--iters out of range", NULL);
     if (passes < 1 || passes > 4096)
         die("--passes out of range", NULL);
+    if (chunk < 1 || total < 1)
+        die("--chunk/--total must be >= 1", NULL);
 
     if (!strcmp(mode, "df"))
         return mode_df(repo, isa, iters, warm, n_coords, want_ctr);
