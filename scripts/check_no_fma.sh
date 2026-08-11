@@ -45,4 +45,19 @@ if [ "$ninsn" -eq 0 ]; then
   exit 1
 fi
 
-echo "PASS: no FMA instructions in $LIB ($ninsn instructions inspected)"
+# AVX-512 TU (P2-10) 비공허 확인: df_simd_avx512.o 멤버가 존재하고 실제
+# zmm 코드를 담아야 한다 — 멤버 누락/스텁-공허 시 이 게이트가 avx512
+# 커널을 전혀 판정하지 않는 false-PASS 채널을 막는다 (컴파일은 호스트
+# CPU 무관 — Zen3 로컬에서도 검사 유효).
+avx512_dis="$(awk '/^df_simd_avx512(\.c)?\.o:/{f=1} f && /\.o:/ && !/^df_simd_avx512(\.c)?\.o:/{f=0} f' <<<"$disasm")"
+n512="$(grep -cE '^[[:space:]]+[0-9a-f]+:' <<<"$avx512_dis" || true)"
+if [ "$n512" -eq 0 ]; then
+  echo "FAIL: df_simd_avx512.o has no instructions in $LIB — avx512 gate vacuous"
+  exit 1
+fi
+if ! grep -q 'zmm' <<<"$avx512_dis"; then
+  echo "FAIL: df_simd_avx512.o contains no zmm code in $LIB — avx512 kernel missing"
+  exit 1
+fi
+
+echo "PASS: no FMA instructions in $LIB ($ninsn instructions inspected; avx512 TU $n512 insn incl.)"

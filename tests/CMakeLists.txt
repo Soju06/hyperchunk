@@ -104,6 +104,13 @@ target_link_libraries(test_df_x4 PRIVATE hyperchunk)
 add_test(NAME df_x4 COMMAND test_df_x4 ${CMAKE_SOURCE_DIR}/reference)
 set_tests_properties(df_x4 PROPERTIES SKIP_RETURN_CODE 77)
 
+# scalar-vs-avx512 유닛 판 (P2-10) — AVX-512(F/DQ/BW/VL) 부재 호스트
+# (로컬 claw=Zen3) 는 SKIP; 실판정은 hc-e6 (Zen5) 에서.
+add_executable(test_df_x8 parity/test_df_x8.c)
+target_link_libraries(test_df_x8 PRIVATE hyperchunk)
+add_test(NAME df_x8 COMMAND test_df_x8 ${CMAKE_SOURCE_DIR}/reference)
+set_tests_properties(df_x8 PROPERTIES SKIP_RETURN_CODE 77)
+
 # 노이즈 스테이지 청크 패리티 (Task 6c). 셀 시맨틱 + aquifer + veins +
 # doFill → golden 스테이지 덤프와 라인 단위 0 diff.
 add_executable(test_noise_stage parity/test_noise_stage.c)
