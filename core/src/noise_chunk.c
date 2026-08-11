@@ -159,11 +159,51 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
                         (double)bz, nc->scratch, nc_cc(nc, HC_DF_MODE_SP),
                         nc->cone_slice_inv.mask);
         int32_t i = 0;
+        /* AVX-512 x8: y 8점 레인화 (P2-10) — x4 판과 동일 구조, 폭 2배
+         * (cellCountY 48 = 6×8, 꼬리 1점은 아래 스칼라). 값은 스칼라
+         * 경로와 비트 동일 (df_x8 게이트). */
+        if (nc->x8 && nc->cone_slice_var.x4_ok) {
+            for (int32_t t = 0; t < nc->cone_slice_inv.len; t++) {
+                int32_t n = nc->cone_slice_inv.list[t];
+                double  v = nc->scratch[n];
+                for (int l = 0; l < 8; l++)
+                    nc->vscratch[8 * n + l] = v;
+            }
+            const int32_t *stream = nc->cone_slice_var.prog
+                                        ? nc->cone_slice_var.prog
+                                        : nc->cone_slice_var.list;
+            int32_t swords = nc->cone_slice_var.prog
+                                 ? nc->cone_slice_var.prog_words
+                                 : nc->cone_slice_var.len;
+            hc_df_lanes8_t lanes;
+            memset(&lanes, 0, sizeof lanes);
+            for (; i + 7 <= nc->cell_count_y; i += 8) {
+                for (int l = 0; l < 8; l++) {
+                    lanes.x[l] = (double)nc->cell_start_x;
+                    lanes.y[l] = (double)((i + l + nc->cell_noise_min_y) *
+                                          nc->cell_height);
+                    lanes.z[l] = (double)bz;
+                }
+                HC_CTR_INC(HC_CTR_X8_SLICE);
+                hc_df_eval_stream_x8_avx512(nc->g, stream, swords, &lanes,
+                                            nc->vscratch,
+                                            nc_cc(nc, HC_DF_MODE_SP));
+                for (int32_t k = 0; k < nc->n_interp; k++) {
+                    hc_df_interp_t *it = &nc->interp[k];
+                    double *slice = which == 0 ? it->slice0 : it->slice1;
+                    const double *v =
+                        nc->vscratch + 8 * nc->g->nodes[it->node].a;
+                    for (int l = 0; l < 8; l++)
+                        slice[j * stride + i + l] = v[l];
+                }
+            }
+            /* 꼬리 (49번째 포인트) 는 아래 스칼라 경로가 처리 */
+        }
         /* AVX2 x4: y 4점 레인화 (P2-4). x/z 는 컬럼 고정 — 각 레인은
          * 독립 평가점이고 값은 스칼라 경로와 비트 동일 (df_x4 게이트).
          * y-불변부 값을 vscratch 에 브로드캐스트해 x4 스트림의 피연산자
          * 로 제공한다 (콘 닫힘상 var 의 콘-밖 피연산자는 inv 뿐). */
-        if (nc->x4 && nc->cone_slice_var.x4_ok) {
+        else if (nc->x4 && nc->cone_slice_var.x4_ok) {
             for (int32_t t = 0; t < nc->cone_slice_inv.len; t++) {
                 int32_t n = nc->cone_slice_inv.list[t];
                 double  v = nc->scratch[n];
@@ -264,6 +304,44 @@ void hc_nc_select_cell_yz(hc_noise_chunk_t *nc, int32_t cell_y,
      * 경로에 없음을 증명했으므로 (cache_once 는 전부 interpolated 안)
      * 카운터 자체는 재현할 필요가 없다. */
     int32_t ai = 0;
+    /* AVX-512 x8: (ix 2 × iz 4) 8점 레인화 (P2-10). 레인 = 독립 평가점,
+     * 채움 순서 (iy 내림, ix, iz) 는 레인 배열 (ix, iz0..3, ix+1, iz0..3)
+     * 이 그대로 보존한다. 값은 스칼라 경로와 비트 동일 (df_x8 게이트). */
+    if (nc->x8 && nc->cone_cell.x4_ok && nc->cell_width == 4) {
+        const int32_t *stream =
+            nc->cone_cell.prog ? nc->cone_cell.prog : nc->cone_cell.list;
+        int32_t swords = nc->cone_cell.prog ? nc->cone_cell.prog_words
+                                            : nc->cone_cell.len;
+        for (int32_t iy = nc->cell_height - 1; iy >= 0; iy--)
+            for (int32_t ix = 0; ix < nc->cell_width; ix += 2) {
+                int32_t        by = nc->cell_start_y + iy;
+                int32_t        bz0 = nc->cell_start_z;
+                hc_df_lanes8_t lanes;
+                for (int l = 0; l < 8; l++) {
+                    int32_t lx = ix + (l >> 2);
+                    lanes.x[l] = (double)(nc->cell_start_x + lx);
+                    lanes.y[l] = (double)by;
+                    lanes.z[l] = (double)(bz0 + (l & 3));
+                    /* interp_lerp3 델타 — 스칼라와 같은 식 */
+                    lanes.dx[l] = (double)lx / (double)nc->cell_width;
+                    lanes.dy[l] = (double)iy / (double)nc->cell_height;
+                    lanes.dz[l] = (double)(l & 3) / (double)nc->cell_width;
+                }
+                HC_CTR_INC(HC_CTR_X8_CELL);
+                hc_df_eval_stream_x8_avx512(nc->g, stream, swords, &lanes,
+                                            nc->vscratch,
+                                            nc_cc(nc, HC_DF_MODE_CELL));
+                const double *v =
+                    nc->vscratch + 8 * (size_t)nc->roots.final_density;
+                for (int l = 0; l < 8; l++)
+                    nc->density_cell[ai++] =
+                        v[l] + hc_beard_compute(nc->beard,
+                                                nc->cell_start_x + ix +
+                                                    (l >> 2),
+                                                by, bz0 + (l & 3));
+            }
+        return;
+    }
     /* AVX2 x4: iz 4점 레인화 (cell_width == 4 일 때 최내측 루프가 정확히
      * 4레인, P2-4). 각 레인은 독립 평가점 — 값은 스칼라 경로와 비트 동일
      * (df_x4 게이트). density_cell 채움 순서 (iy 내림, ix, iz) 보존. */
@@ -445,11 +523,20 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
     if (!nc->scratch || !nc->interp_of || !nc->flat_of)
         return -1;
 
-    /* AVX2 백엔드 (P2-4): cpuid 디스패치 결과를 청크당 1회 캐시.
-     * SoA vscratch 는 x4 경로 전용 — 스칼라 백엔드는 할당하지 않는다. */
-    nc->x4 = (hc_isa_active() == HC_ISA_AVX2);
+    /* SIMD 백엔드 (P2-4/P2-10): cpuid 디스패치 결과를 청크당 1회 캐시.
+     * SoA vscratch 는 simd 경로 전용 — 스칼라 백엔드는 할당하지 않는다. */
+    {
+        hc_isa_t isa = hc_isa_active();
+        nc->x4 = (isa == HC_ISA_AVX2);
+        nc->x8 = (isa == HC_ISA_AVX512);
+    }
     nc->vscratch = NULL;
-    if (nc->x4) {
+    if (nc->x8) {
+        nc->vscratch =
+            hc_arena_alloc(arena, sizeof(double) * 8 * (size_t)g->n, 64);
+        if (!nc->vscratch)
+            return -1;
+    } else if (nc->x4) {
         nc->vscratch =
             hc_arena_alloc(arena, sizeof(double) * 4 * (size_t)g->n, 32);
         if (!nc->vscratch)

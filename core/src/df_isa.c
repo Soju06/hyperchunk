@@ -2,17 +2,26 @@
 
 #include <stdatomic.h>
 
-/* ISA 검출/오버라이드 + x4 화이트리스트 (P2-4, ADR-004 D2).
- * 이 TU 는 -mavx2 없이 컴파일된다 — AVX2 코드는 df_simd_avx2.c 에만. */
+/* ISA 검출/오버라이드 + simd 화이트리스트 (P2-4/P2-10, ADR-004 D2).
+ * 이 TU 는 -mavx* 없이 컴파일된다 — SIMD 코드는 df_simd_avx2.c /
+ * df_simd_avx512.c 에만. */
 
 #if defined(__x86_64__) || defined(__i386__)
-static int detect_avx2(void) {
+static int detect_isa(void) {
     /* __builtin_cpu_supports: GCC/Clang 내장 (외부 라이브러리 아님).
-     * OS 의 YMM 상태 지원 (OSXSAVE/XGETBV) 까지 검사한다. */
+     * OS 의 YMM/ZMM 상태 지원 (OSXSAVE/XGETBV) 까지 검사한다.
+     * AVX-512 기준선은 Zen4 = F+DQ+BW+VL (P2-10) — 커널이 그 밖 확장
+     * (VBMI/VP2INTERSECT 등) 을 쓰지 않음은 코드 리뷰 + Zen4 실행으로
+     * 지킨다 (게이트는 명령 존재를 검사하지 않는다 — 부재 시 SIGILL). */
+    if (__builtin_cpu_supports("avx512f") &&
+        __builtin_cpu_supports("avx512dq") &&
+        __builtin_cpu_supports("avx512bw") &&
+        __builtin_cpu_supports("avx512vl"))
+        return HC_ISA_AVX512;
     return __builtin_cpu_supports("avx2") ? HC_ISA_AVX2 : HC_ISA_SCALAR;
 }
 #else
-static int detect_avx2(void) {
+static int detect_isa(void) {
     return HC_ISA_SCALAR;
 }
 #endif
@@ -24,7 +33,7 @@ static _Atomic int g_isa = -1;
 hc_isa_t hc_isa_active(void) {
     int v = atomic_load_explicit(&g_isa, memory_order_relaxed);
     if (v < 0) {
-        v = detect_avx2();
+        v = detect_isa();
         atomic_store_explicit(&g_isa, v, memory_order_relaxed);
     }
     return (hc_isa_t)v;
@@ -35,14 +44,17 @@ void hc_isa_force(int isa) {
         atomic_store_explicit(&g_isa, -1, memory_order_relaxed);
         return;
     }
-    /* AVX2 강제는 하드웨어 확인 통과 시에만 — 부재 호스트 SIGILL 방지
-     * (ADR-004 Verification: 폴백 확인 항목) */
-    if (isa == HC_ISA_AVX2 && detect_avx2() != HC_ISA_AVX2)
-        isa = HC_ISA_SCALAR;
+    /* 상위 ISA 강제는 하드웨어 확인 통과 시에만 — 부재 호스트 SIGILL
+     * 방지 (ADR-004 Verification: 폴백 확인 항목). 요청이 검출 레벨을
+     * 넘으면 검출 레벨로 강등 (AVX512 요청 + AVX2 호스트 → AVX2);
+     * 하향 강제 (AVX-512 호스트에서 --isa avx2/scalar) 는 그대로. */
+    int d = detect_isa();
+    if (isa > d)
+        isa = d;
     atomic_store_explicit(&g_isa, isa, memory_order_relaxed);
 }
 
-/* --- x4 화이트리스트 --- */
+/* --- x4/x8 화이트리스트 (스트림 구조·op 집합이 동일해 공용, P2-10) --- */
 
 static int op_x4_ok(uint8_t op) {
     switch (op) {

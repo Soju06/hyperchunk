@@ -40,6 +40,16 @@ enum {
     HC_CTR_X4_RC_MIX,    /* RC 세그먼트 혼합-레인 (0<m<0xF): 죽은-레인 작업 */
     HC_CTR_X4_IS_MIX,    /* IS 세그먼트 레인별 sel 상이 */
     HC_CTR_X4_BLEND_MIX, /* blended over/under 혼합-레인 뱅크 계산 */
+
+    /* 04 noise — x8 커널 (df_simd_avx512.c, P2-10) — x4 대응 계수 */
+    HC_CTR_X8_SLICE,     /* fill_slice x8 스트림 호출 (레인=y 8점) */
+    HC_CTR_X8_CELL,      /* select_cell x8 스트림 호출 (레인=x2·z4 8점) */
+    HC_CTR_X8_NODE,      /* x8_run 플레인 노드 실행 (1회 = 8레인, HOT) */
+    HC_CTR_X8_PERLIN,    /* perlin_x8 호출 (8레인 옥타브 샘플) */
+    HC_CTR_X8_SCALAR_FB, /* perlin_x8 포화 폴백 (26.2 오버월드 0 예상) */
+    HC_CTR_X8_RC_MIX,    /* RC 세그먼트 혼합-레인 (0<m<0xFF) */
+    HC_CTR_X8_IS_MIX,    /* IS 세그먼트 레인별 sel 상이 */
+    HC_CTR_X8_BLEND_MIX, /* blended over/under 혼합-레인 뱅크 계산 */
     HC_CTR_SP_NODE,      /* 스칼라 prog_run 노드 실행 */
     HC_CTR_FTS_ITER,     /* FindTopSurface 사다리 반복 (y-가변 콘 워크) */
 

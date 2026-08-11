@@ -13,6 +13,7 @@ add_library(hyperchunk STATIC
   src/df_compile.c
   src/df_isa.c
   src/df_simd_avx2.c
+  src/df_simd_avx512.c
   src/noise_chunk.c
   src/beard.c
   src/aquifer.c
@@ -59,6 +60,11 @@ target_include_directories(hyperchunk PUBLIC include)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-6]86")
   set_source_files_properties(src/df_simd_avx2.c PROPERTIES
     COMPILE_OPTIONS "-mavx2")
+  # AVX-512 커널 TU (P2-10) — 동일 격리 정책. Zen4 기준선 F+DQ+BW+VL 만
+  # 켠다 (VBMI/VP2INTERSECT 등 Zen4-외 확장 미허용 — 컴파일러가 해당
+  # 명령을 낼 수 없다). -mfma 는 켜지 않는다 (ADR-004 D3).
+  set_source_files_properties(src/df_simd_avx512.c PROPERTIES
+    COMPILE_OPTIONS "-mavx512f;-mavx512dq;-mavx512bw;-mavx512vl")
   # SHA-NI 백엔드 TU (P2-5) — 동일 격리 정책. -msha 는 FMA 와 무관
   # (check_no_fma 패턴은 vfmadd 계열만 — sha256rnds2 는 비대상).
   set_source_files_properties(src/sha256_ni.c PROPERTIES

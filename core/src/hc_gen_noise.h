@@ -123,10 +123,12 @@ typedef struct hc_noise_chunk_s {
     const hc_beard_t *beard;
     double density_cell[4 * 4 * 8];
 
-    /* AVX2 x4 백엔드 (P2-4, ADR-004 D2 런타임 디스패치). x4 == 0 이면
-     * 전부 스칼라 경로 — 두 백엔드는 canonical 비트 동일 (게이트 대상). */
+    /* SIMD 백엔드 (P2-4 AVX2 / P2-10 AVX-512, ADR-004 D2 런타임 디스패치).
+     * 셋 다 canonical 비트 동일 (게이트 대상). x4/x8 상호 배타. */
     int     x4;        /* hc_isa_active() == AVX2, nc_init 시 1회 캐시 */
-    double *vscratch;  /* [g->n][4] SoA, 32B 정렬 (x4 일 때만 할당) */
+    int     x8;        /* hc_isa_active() == AVX512 (P2-10) */
+    double *vscratch;  /* SoA — x8: [g->n][8] 64B 정렬, x4: [g->n][4] 32B
+                        * 정렬 (simd 일 때만 할당) */
 
     /* preliminarySurfaceLevel 컬럼 메모 (Long2IntMap 대응, 값-중립 memo) */
     uint64_t *psl_key;

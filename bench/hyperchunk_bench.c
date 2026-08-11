@@ -52,6 +52,18 @@
 
 /* ---------------- 계측 ---------------- */
 
+/* 리포트용 ISA 라벨 (ADR-004 D2 — 3백엔드) */
+static const char *isa_name(void) {
+    switch (hc_isa_active()) {
+    case HC_ISA_AVX512:
+        return "avx512";
+    case HC_ISA_AVX2:
+        return "avx2";
+    default:
+        return "scalar";
+    }
+}
+
 static uint64_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1151,9 +1163,9 @@ int main(int argc, char **argv) {
             else if (strcmp(p, "replay") != 0)
                 die("--policy must be replay|free", p);
         } else if (strcmp(argv[i], "--isa") == 0 && i + 1 < argc) {
-            /* ADR-004 D2/D4: 백엔드 강제 — scalar-vs-avx2 canonical 동일
-             * 게이트 (scripts/check_isa_equiv.sh) 가 두 값으로 부른다.
-             * avx2 강제는 cpuid 통과 시에만 반영 (아래 검증). */
+            /* ADR-004 D2/D4: 백엔드 강제 — scalar/avx2/avx512 canonical
+             * 동일 게이트 (scripts/check_isa_equiv.sh) 가 세 값으로
+             * 부른다. 상위 ISA 강제는 cpuid 통과 시에만 반영 (아래 검증). */
             const char *p = argv[++i];
             if (strcmp(p, "scalar") == 0)
                 hc_isa_force(HC_ISA_SCALAR);
@@ -1161,8 +1173,13 @@ int main(int argc, char **argv) {
                 hc_isa_force(HC_ISA_AVX2);
                 if (hc_isa_active() != HC_ISA_AVX2)
                     die("--isa avx2: host lacks AVX2", NULL);
+            } else if (strcmp(p, "avx512") == 0) {
+                hc_isa_force(HC_ISA_AVX512);
+                if (hc_isa_active() != HC_ISA_AVX512)
+                    die("--isa avx512: host lacks AVX-512 (F/DQ/BW/VL)",
+                        NULL);
             } else if (strcmp(p, "auto") != 0)
-                die("--isa must be scalar|avx2|auto", p);
+                die("--isa must be scalar|avx2|avx512|auto", p);
         } else if (strcmp(argv[i], "--sha") == 0 && i + 1 < argc) {
             /* P2-5: sha256 백엔드 강제 — sw-vs-ni canonical 동일 게이트
              * (scripts/check_sha_equiv.sh) 가 두 값으로 부른다. ni 강제는
@@ -1954,7 +1971,7 @@ int main(int argc, char **argv) {
             "process total         %8.1f ms   maxrss %.1f GiB\n"
             "%s\n",
             seed, nthreads,
-            hc_isa_active() == HC_ISA_AVX2 ? "avx2" : "scalar",
+            isa_name(),
             hc_sha256_ni_active() ? "ni" : "sw",
             setup_ns / 1e6, B_replay_load / 1e6, nthreads,
             chain_wall / 1e6, cc.nc_init / 1e6, cc.beard / 1e6,
@@ -2003,7 +2020,7 @@ int main(int argc, char **argv) {
            "\"feat_phase_wall_ns\":%" PRIu64 ",\"gen_wall_ns\":%" PRIu64
            ",\"proc_wall_ns\":%" PRIu64 ",\"maxrss_kib\":%ld}\n",
            seed, nthreads, free_mode ? "free" : "replay",
-           hc_isa_active() == HC_ISA_AVX2 ? "avx2" : "scalar",
+           isa_name(),
            hc_sha256_ni_active() ? "ni" : "sw",
            pass ? "true" : "false", hex, WORLD_CHUNKS, n_man,
            n_pm_out, setup_ns, B_replay_load, chain_wall, cc.nc_init,
