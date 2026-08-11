@@ -63,8 +63,19 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-6]86")
   # AVX-512 커널 TU (P2-10) — 동일 격리 정책. Zen4 기준선 F+DQ+BW+VL 만
   # 켠다 (VBMI/VP2INTERSECT 등 Zen4-외 확장 미허용 — 컴파일러가 해당
   # 명령을 낼 수 없다). -mfma 는 켜지 않는다 (ADR-004 D3).
+  set(HC_AVX512_TU_OPTS "-mavx512f;-mavx512dq;-mavx512bw;-mavx512vl")
+  if(HC_SANITIZE)
+    # GCC ASan fake-stack (use-after-return 검출, libasan 기본 on) 프레임은
+    # 32B 정렬만 보장하는데, 이 TU 의 zmm 스택 슬롯은 64B 정렬 전제라
+    # 컴파일러가 접은 정렬 이동 (vmovapd zmm) 이 미정렬 #GP(SIGSEGV) 로
+    # 발화한다 (hc-e6 free_region ASan 실발화, 폴트 주소 32B-정렬 실측
+    # — GCC ASan/AVX-512 상호작용 결함). 이 TU 만 UAR 비활성 — 나머지
+    # TU 의 UAR 검출력은 유지된다 (게이트 약화 아님: 대안이 전역
+    # detect_stack_use_after_return=0 이었다).
+    string(APPEND HC_AVX512_TU_OPTS ";--param=asan-use-after-return=0")
+  endif()
   set_source_files_properties(src/df_simd_avx512.c PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512dq;-mavx512bw;-mavx512vl")
+    COMPILE_OPTIONS "${HC_AVX512_TU_OPTS}")
   # SHA-NI 백엔드 TU (P2-5) — 동일 격리 정책. -msha 는 FMA 와 무관
   # (check_no_fma 패턴은 vfmadd 계열만 — sha256rnds2 는 비대상).
   set_source_files_properties(src/sha256_ni.c PROPERTIES
