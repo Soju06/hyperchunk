@@ -160,22 +160,57 @@ static inline grad_regs_t grad_load(void) {
     return g;
 }
 
-/* 코너 하나: 레인별 gradient 인덱스 (정수 테이블 조회 — 스칼라, 비트
- * 정확 무비용) → vpermt2pd 컴포넌트 픽 → ((g0*x)+(g1*y))+(g2*z). */
-static inline V8 corner_dot(const hc_perlin_t *p, const grad_regs_t *gr,
-                            const int h[8], const int iz[8], int zoff, V8 xv,
-                            V8 yv, V8 zv) {
-    int64_t idx[8] __attribute__((aligned(64)));
-    for (int l = 0; l < 8; l++)
-        idx[l] = (int64_t)(p->perm[(h[l] + iz[l] + zoff) & 255] & 15);
-    __m512i vi = _mm512_load_si512((const void *)idx);
-    V8      gx = _mm512_permutex2var_pd(gr->xlo, vi, gr->xhi);
-    V8      gy = _mm512_permutex2var_pd(gr->ylo, vi, gr->yhi);
-    V8      gz = _mm512_permutex2var_pd(gr->zlo, vi, gr->zhi);
+/* 코너 하나: gradient 인덱스 qword 벡터 → vpermt2pd 컴포넌트 픽 →
+ * ((g0*x)+(g1*y))+(g2*z). 인덱스는 perm 룩업 결과 &15 (아래 해시
+ * 벡터화가 산출) — vpermt2pd 는 하위 4비트만 쓴다 (16 double 2소스). */
+static inline V8 corner_dot(const grad_regs_t *gr, __m512i vi, V8 xv, V8 yv,
+                            V8 zv) {
+    V8 gx = _mm512_permutex2var_pd(gr->xlo, vi, gr->xhi);
+    V8 gy = _mm512_permutex2var_pd(gr->ylo, vi, gr->yhi);
+    V8 gz = _mm512_permutex2var_pd(gr->zlo, vi, gr->zhi);
     /* SimplexNoise.dot 좌결합: ((g0*x) + (g1*y)) + (g2*z) */
     return _mm512_add_pd(
         _mm512_add_pd(_mm512_mul_pd(gx, xv), _mm512_mul_pd(gy, yv)),
         _mm512_mul_pd(gz, zv));
+}
+
+/* --- perm 해시 체인 벡터화 (B-3 §5 표적 ②: 스칼라 해시 4.15G) ---
+ *
+ * perm[256] (uint8) 을 16-비트 워드로 넓혀 zmm 8개에 상주시키고 256-
+ * 엔트리 조회를 vpermt2w 4회 (64-엔트리 2-소스 permute) + 인덱스 상위
+ * 2비트 4-way 선택으로 푼다 — 전부 BW 명령 (Zen4 기준선 안). 룩업·
+ * 덧셈·마스킹 전부 정수 연산이라 반올림이 존재하지 않고, 인덱스 산술은
+ * 스칼라 P() 와 두 보수 동치다:
+ *   (A + iy) & 255 == (A + (iy & 255)) & 255   (mod-256 저비트 보존)
+ * — iy/iz 를 사전 마스킹하면 16-비트 워드 덧셈이 오버플로 없이
+ * (최대 255+255+1 = 511) 스칼라 int 덧셈과 같은 저 8비트를 만든다. */
+
+typedef struct {
+    __m512i w[8]; /* w[2k], w[2k+1] = perm[64k .. 64k+63] 워드 */
+} perm_regs_t;
+
+static inline perm_regs_t perm_load(const hc_perlin_t *p) {
+    perm_regs_t t;
+    for (int k = 0; k < 8; k++)
+        t.w[k] = _mm512_cvtepu8_epi16(
+            _mm256_loadu_si256((const __m256i *)(p->perm + 32 * k)));
+    return t;
+}
+
+/* 32 워드 인덱스 (각 0..255) → perm[idx] 32개 (워드) */
+static inline __m512i perm_lookup32(const perm_regs_t *t, __m512i idx) {
+    /* vpermt2w 는 워드 인덱스 하위 6비트만 본다 — 상위 2비트는 선택으로 */
+    __m512i   c0 = _mm512_permutex2var_epi16(t->w[0], idx, t->w[1]);
+    __m512i   c1 = _mm512_permutex2var_epi16(t->w[2], idx, t->w[3]);
+    __m512i   c2 = _mm512_permutex2var_epi16(t->w[4], idx, t->w[5]);
+    __m512i   c3 = _mm512_permutex2var_epi16(t->w[6], idx, t->w[7]);
+    __m512i   hi = _mm512_srli_epi16(idx, 6);
+    __mmask32 m1 = _mm512_cmpeq_epi16_mask(hi, _mm512_set1_epi16(1));
+    __mmask32 m2 = _mm512_cmpeq_epi16_mask(hi, _mm512_set1_epi16(2));
+    __mmask32 m3 = _mm512_cmpeq_epi16_mask(hi, _mm512_set1_epi16(3));
+    __m512i   r = _mm512_mask_blend_epi16(m1, c0, c1);
+    r = _mm512_mask_blend_epi16(m2, r, c2);
+    return _mm512_mask_blend_epi16(m3, r, c3);
 }
 
 /* hc_perlin_sample_scaled x8. yscale 은 옥타브 스칼라 (전 레인 동일),
@@ -215,37 +250,73 @@ static V8 perlin_x8(const hc_perlin_t *p, V8 x, V8 y, V8 z, double yscale,
             gy = _mm512_sub_pd(fy, yadj);
         }
 
-        /* 해시 체인 (레인별 정수 — 스칼라 P() 와 동일) */
-        double fdxs[8], fdys[8], fdzs[8];
-        _mm512_storeu_pd(fdxs, fdx);
-        _mm512_storeu_pd(fdys, fdy);
-        _mm512_storeu_pd(fdzs, fdz);
-        int iz[8], aa[8], ab[8], ba[8], bb[8];
-        for (int l = 0; l < 8; l++) {
-            int ix = (int)fdxs[l];
-            int iy = (int)fdys[l];
-            iz[l] = (int)fdzs[l];
-            int A = p->perm[ix & 255];
-            int B = p->perm[(ix + 1) & 255];
-            aa[l] = p->perm[(A + iy) & 255];
-            ab[l] = p->perm[(A + iy + 1) & 255];
-            ba[l] = p->perm[(B + iy) & 255];
-            bb[l] = p->perm[(B + iy + 1) & 255];
-        }
+        /* 해시 체인 벡터화 (B-3 표적 ② — perm_lookup32, 산술 동치는
+         * perm_regs_t 주석 참조). 3단 조회를 워드-벡터 배치로:
+         * L1 16조회 (A,B) → L2 32조회 (aa,ab,ba,bb) → 코너 2×32조회.
+         * 전부 정수 — 스칼라 P() 체인과 인덱스가 같으므로 값이 같다. */
+        perm_regs_t pr = perm_load(p);
+        __m256i     m255d = _mm256_set1_epi32(255);
+        __m128i     one16 = _mm_set1_epi16(1);
+        __m512i     m255w = _mm512_set1_epi16(255);
+
+        /* 정수 좌표: 정수값 double 이라 vcvtpd2dq 정확 (스칼라 (int)
+         * 캐스트 동치, |좌표|<2^30 가드 위) — 저 8비트 사전 마스킹 */
+        __m128i ixw = _mm256_cvtepi32_epi16(
+            _mm256_and_si256(_mm512_cvtpd_epi32(fdx), m255d));
+        __m128i iyw = _mm256_cvtepi32_epi16(
+            _mm256_and_si256(_mm512_cvtpd_epi32(fdy), m255d));
+        __m128i izw = _mm256_cvtepi32_epi16(
+            _mm256_and_si256(_mm512_cvtpd_epi32(fdz), m255d));
+
+        /* L1: 워드 0-7 = perm[ix&255] = A, 8-15 = perm[(ix+1)&255] = B
+         * (상위 16워드는 미정의 인덱스 — 결과 미사용) */
+        __m256i ixp = _mm256_inserti128_si256(
+            _mm256_castsi128_si256(ixw), _mm_add_epi16(ixw, one16), 1);
+        __m512i AB = perm_lookup32(
+            &pr, _mm512_and_si512(_mm512_castsi256_si512(ixp), m255w));
+
+        /* L2: 그룹 [A,A,B,B] + [iy,iy+1,iy,iy+1] → [aa,ab,ba,bb] */
+        __m512i h4 = _mm512_shuffle_i32x4(AB, AB, _MM_SHUFFLE(1, 1, 0, 0));
+        __m256i iyp = _mm256_inserti128_si256(
+            _mm256_castsi128_si256(iyw), _mm_add_epi16(iyw, one16), 1);
+        __m512i iy4 = _mm512_shuffle_i32x4(_mm512_castsi256_si512(iyp),
+                                           _mm512_castsi256_si512(iyp),
+                                           _MM_SHUFFLE(1, 0, 1, 0));
+        __m512i AABB = perm_lookup32(
+            &pr, _mm512_and_si512(_mm512_add_epi16(h4, iy4), m255w));
+
+        /* 코너: 그룹 재배열 (aa,ba,ab,bb) = (v000,v100,v010,v110) 순서,
+         * +iz 뱅크 (z0) 와 +iz+1 뱅크 (z1) 각 1배치. 워드 합은 최대
+         * 255+255+1 = 511 — 오버플로 없음. */
+        __m512i hcn = _mm512_shuffle_i32x4(AABB, AABB, _MM_SHUFFLE(3, 1, 2, 0));
+        __m512i sum0 = _mm512_add_epi16(hcn, _mm512_broadcast_i32x4(izw));
+        __m512i g15 = _mm512_set1_epi16(15);
+        __m512i gh0 = _mm512_and_si512(
+            perm_lookup32(&pr, _mm512_and_si512(sum0, m255w)), g15);
+        __m512i gh1 = _mm512_and_si512(
+            perm_lookup32(&pr, _mm512_and_si512(
+                                   _mm512_add_epi16(sum0,
+                                                    _mm512_set1_epi16(1)),
+                                   m255w)),
+            g15);
 
         V8 fx1 = _mm512_sub_pd(fx, bc(1.0));
         V8 gy1 = _mm512_sub_pd(gy, bc(1.0));
         V8 fz1 = _mm512_sub_pd(fz, bc(1.0));
 
         grad_regs_t gr = grad_load();
-        V8 v000 = corner_dot(p, &gr, aa, iz, 0, fx, gy, fz);
-        V8 v100 = corner_dot(p, &gr, ba, iz, 0, fx1, gy, fz);
-        V8 v010 = corner_dot(p, &gr, ab, iz, 0, fx, gy1, fz);
-        V8 v110 = corner_dot(p, &gr, bb, iz, 0, fx1, gy1, fz);
-        V8 v001 = corner_dot(p, &gr, aa, iz, 1, fx, gy, fz1);
-        V8 v101 = corner_dot(p, &gr, ba, iz, 1, fx1, gy, fz1);
-        V8 v011 = corner_dot(p, &gr, ab, iz, 1, fx, gy1, fz1);
-        V8 v111 = corner_dot(p, &gr, bb, iz, 1, fx1, gy1, fz1);
+#define GH(v, g)                                                             \
+    _mm512_cvtepu16_epi64((g) == 0 ? _mm512_castsi512_si128(v)               \
+                                   : _mm512_extracti32x4_epi32((v), (g)))
+        V8 v000 = corner_dot(&gr, GH(gh0, 0), fx, gy, fz);
+        V8 v100 = corner_dot(&gr, GH(gh0, 1), fx1, gy, fz);
+        V8 v010 = corner_dot(&gr, GH(gh0, 2), fx, gy1, fz);
+        V8 v110 = corner_dot(&gr, GH(gh0, 3), fx1, gy1, fz);
+        V8 v001 = corner_dot(&gr, GH(gh1, 0), fx, gy, fz1);
+        V8 v101 = corner_dot(&gr, GH(gh1, 1), fx1, gy, fz1);
+        V8 v011 = corner_dot(&gr, GH(gh1, 2), fx, gy1, fz1);
+        V8 v111 = corner_dot(&gr, GH(gh1, 3), fx1, gy1, fz1);
+#undef GH
 
         V8 sx = v_smoothstep(fx);
         V8 sy = v_smoothstep(fy); /* fade 는 양자화 전 fy */
