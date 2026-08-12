@@ -11,3 +11,11 @@ add_executable(hyperchunk_microbench microbench.c)
 set_target_properties(hyperchunk_microbench PROPERTIES OUTPUT_NAME
                                                        hyperchunk-microbench)
 target_link_libraries(hyperchunk_microbench PRIVATE hyperchunk)
+
+# B-5 체인 임계-경로 하한 도구 — 조항 3 재판정의 분모 산출 (모델, 실측
+# 아님). 게이트/벤치 프로토콜 비연결, 스칼라 강제라 어느 호스트에서든
+# 돈다. 재산출: hyperchunk-chaincp --repo <root> --lat low|nom [--fma]
+add_executable(hyperchunk_chaincp chaincp.c)
+set_target_properties(hyperchunk_chaincp PROPERTIES OUTPUT_NAME
+                                                    hyperchunk-chaincp)
+target_link_libraries(hyperchunk_chaincp PRIVATE hyperchunk m)
