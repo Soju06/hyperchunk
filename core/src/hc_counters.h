@@ -50,6 +50,11 @@ enum {
     HC_CTR_X8_RC_MIX,    /* RC 세그먼트 혼합-레인 (0<m<0xFF) */
     HC_CTR_X8_IS_MIX,    /* IS 세그먼트 레인별 sel 상이 */
     HC_CTR_X8_BLEND_MIX, /* blended over/under 혼합-레인 뱅크 계산 */
+    HC_CTR_X8_DUAL,      /* x8x2 2-웨이 인터리브 스트림-페어 호출 (P2-11) */
+    HC_CTR_X8_PERLIN2,   /* perlin dual-커밋 (1 = 두 스트림 × 8레인) —
+                          * 커버리지 = 2·perlin2 / perlin */
+    HC_CTR_X8_SPLIT,     /* dual 내 단일-스트림 위임 이벤트 (RC/IS 레그,
+                          * blended 편측, 포화 가드) — 커버리지 진단 */
     HC_CTR_SP_NODE,      /* 스칼라 prog_run 노드 실행 */
     HC_CTR_FTS_ITER,     /* FindTopSurface 사다리 반복 (y-가변 콘 워크) */
 

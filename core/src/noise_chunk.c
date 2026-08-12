@@ -166,8 +166,10 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
             for (int32_t t = 0; t < nc->cone_slice_inv.len; t++) {
                 int32_t n = nc->cone_slice_inv.list[t];
                 double  v = nc->scratch[n];
-                for (int l = 0; l < 8; l++)
+                for (int l = 0; l < 8; l++) {
                     nc->vscratch[8 * n + l] = v;
+                    nc->vscratch2[8 * n + l] = v; /* 스트림 B 도 inv 필요 */
+                }
             }
             const int32_t *stream = nc->cone_slice_var.prog
                                         ? nc->cone_slice_var.prog
@@ -177,6 +179,45 @@ static void nc_fill_slice(hc_noise_chunk_t *nc, int which,
                                  : nc->cone_slice_var.len;
             hc_df_lanes8_t lanes;
             memset(&lanes, 0, sizeof lanes);
+            /* 2-웨이 인터리브 (P2-11): y-그룹 (i, i+8) = 독립 평가점
+             * 8+8 을 단일 스레드에서 교차 실행 (의존-체인 지연 상호
+             * 은닉). 각 그룹의 값·연산 시퀀스는 아래 단일 x8 경로와
+             * 비트 동일 — 그룹별 scratch 분리 (vscratch/vscratch2). */
+            hc_df_lanes8_t lanes2;
+            memset(&lanes2, 0, sizeof lanes2);
+            for (; i + 15 <= nc->cell_count_y; i += 16) {
+                for (int l = 0; l < 8; l++) {
+                    lanes.x[l] = (double)nc->cell_start_x;
+                    lanes.y[l] = (double)((i + l + nc->cell_noise_min_y) *
+                                          nc->cell_height);
+                    lanes.z[l] = (double)bz;
+                    lanes2.x[l] = (double)nc->cell_start_x;
+                    lanes2.y[l] = (double)((i + 8 + l +
+                                            nc->cell_noise_min_y) *
+                                           nc->cell_height);
+                    lanes2.z[l] = (double)bz;
+                }
+                HC_CTR_INC(HC_CTR_X8_SLICE);
+                HC_CTR_INC(HC_CTR_X8_SLICE);
+                HC_CTR_INC(HC_CTR_X8_DUAL);
+                hc_df_eval_stream_x8x2_avx512(
+                    nc->g, stream, swords, &lanes, nc->vscratch,
+                    nc_cc(nc, HC_DF_MODE_SP), &lanes2, nc->vscratch2,
+                    nc_cc(nc, HC_DF_MODE_SP));
+                for (int32_t k = 0; k < nc->n_interp; k++) {
+                    hc_df_interp_t *it = &nc->interp[k];
+                    double *slice = which == 0 ? it->slice0 : it->slice1;
+                    const double *va =
+                        nc->vscratch + 8 * nc->g->nodes[it->node].a;
+                    const double *vb =
+                        nc->vscratch2 + 8 * nc->g->nodes[it->node].a;
+                    for (int l = 0; l < 8; l++) {
+                        slice[j * stride + i + l] = va[l];
+                        slice[j * stride + i + 8 + l] = vb[l];
+                    }
+                }
+            }
+            /* 잔여 그룹 (페어 미달분) — 기존 단일 x8 경로 */
             for (; i + 7 <= nc->cell_count_y; i += 8) {
                 for (int l = 0; l < 8; l++) {
                     lanes.x[l] = (double)nc->cell_start_x;
@@ -312,34 +353,55 @@ void hc_nc_select_cell_yz(hc_noise_chunk_t *nc, int32_t cell_y,
             nc->cone_cell.prog ? nc->cone_cell.prog : nc->cone_cell.list;
         int32_t swords = nc->cone_cell.prog ? nc->cone_cell.prog_words
                                             : nc->cone_cell.len;
-        for (int32_t iy = nc->cell_height - 1; iy >= 0; iy--)
-            for (int32_t ix = 0; ix < nc->cell_width; ix += 2) {
-                int32_t        by = nc->cell_start_y + iy;
-                int32_t        bz0 = nc->cell_start_z;
-                hc_df_lanes8_t lanes;
-                for (int l = 0; l < 8; l++) {
-                    int32_t lx = ix + (l >> 2);
-                    lanes.x[l] = (double)(nc->cell_start_x + lx);
-                    lanes.y[l] = (double)by;
-                    lanes.z[l] = (double)(bz0 + (l & 3));
-                    /* interp_lerp3 델타 — 스칼라와 같은 식 */
-                    lanes.dx[l] = (double)lx / (double)nc->cell_width;
-                    lanes.dy[l] = (double)iy / (double)nc->cell_height;
-                    lanes.dz[l] = (double)(l & 3) / (double)nc->cell_width;
-                }
-                HC_CTR_INC(HC_CTR_X8_CELL);
-                hc_df_eval_stream_x8_avx512(nc->g, stream, swords, &lanes,
-                                            nc->vscratch,
-                                            nc_cc(nc, HC_DF_MODE_CELL));
-                const double *v =
-                    nc->vscratch + 8 * (size_t)nc->roots.final_density;
-                for (int l = 0; l < 8; l++)
-                    nc->density_cell[ai++] =
-                        v[l] + hc_beard_compute(nc->beard,
-                                                nc->cell_start_x + ix +
-                                                    (l >> 2),
-                                                by, bz0 + (l & 3));
+        /* 2-웨이 인터리브 (P2-11): cell_width 4 에서 iy 당 ix 그룹은
+         * 정확히 2개 (ix=0 → 스트림 A, ix=2 → 스트림 B) — 같은 셀 (cc
+         * 공유), 독립 평가점 16개를 단일 스레드 교차 실행. density_cell
+         * 채움 순서 (iy 내림, ix, iz) 는 A 8개 → B 8개 순 회수가 그대로
+         * 보존한다. 값은 단일 x8 경로 2회와 비트 동일 (df_x8 게이트). */
+        for (int32_t iy = nc->cell_height - 1; iy >= 0; iy--) {
+            int32_t        by = nc->cell_start_y + iy;
+            int32_t        bz0 = nc->cell_start_z;
+            hc_df_lanes8_t lanes, lanes2;
+            for (int l = 0; l < 8; l++) {
+                int32_t lx = (l >> 2);      /* ix = 0 (스트림 A) */
+                int32_t lx2 = 2 + (l >> 2); /* ix = 2 (스트림 B) */
+                lanes.x[l] = (double)(nc->cell_start_x + lx);
+                lanes.y[l] = (double)by;
+                lanes.z[l] = (double)(bz0 + (l & 3));
+                /* interp_lerp3 델타 — 스칼라와 같은 식 */
+                lanes.dx[l] = (double)lx / (double)nc->cell_width;
+                lanes.dy[l] = (double)iy / (double)nc->cell_height;
+                lanes.dz[l] = (double)(l & 3) / (double)nc->cell_width;
+                lanes2.x[l] = (double)(nc->cell_start_x + lx2);
+                lanes2.y[l] = (double)by;
+                lanes2.z[l] = (double)(bz0 + (l & 3));
+                lanes2.dx[l] = (double)lx2 / (double)nc->cell_width;
+                lanes2.dy[l] = (double)iy / (double)nc->cell_height;
+                lanes2.dz[l] = (double)(l & 3) / (double)nc->cell_width;
             }
+            HC_CTR_INC(HC_CTR_X8_CELL);
+            HC_CTR_INC(HC_CTR_X8_CELL);
+            HC_CTR_INC(HC_CTR_X8_DUAL);
+            hc_df_eval_stream_x8x2_avx512(nc->g, stream, swords, &lanes,
+                                          nc->vscratch,
+                                          nc_cc(nc, HC_DF_MODE_CELL),
+                                          &lanes2, nc->vscratch2,
+                                          nc_cc(nc, HC_DF_MODE_CELL));
+            const double *va =
+                nc->vscratch + 8 * (size_t)nc->roots.final_density;
+            const double *vb =
+                nc->vscratch2 + 8 * (size_t)nc->roots.final_density;
+            for (int l = 0; l < 8; l++)
+                nc->density_cell[ai++] =
+                    va[l] + hc_beard_compute(nc->beard,
+                                             nc->cell_start_x + (l >> 2),
+                                             by, bz0 + (l & 3));
+            for (int l = 0; l < 8; l++)
+                nc->density_cell[ai++] =
+                    vb[l] + hc_beard_compute(nc->beard,
+                                             nc->cell_start_x + 2 + (l >> 2),
+                                             by, bz0 + (l & 3));
+        }
         return;
     }
     /* AVX2 x4: iz 4점 레인화 (cell_width == 4 일 때 최내측 루프가 정확히
@@ -531,10 +593,14 @@ int hc_nc_init(hc_noise_chunk_t *nc, hc_arena_t *arena,
         nc->x8 = (isa == HC_ISA_AVX512);
     }
     nc->vscratch = NULL;
+    nc->vscratch2 = NULL;
     if (nc->x8) {
         nc->vscratch =
             hc_arena_alloc(arena, sizeof(double) * 8 * (size_t)g->n, 64);
-        if (!nc->vscratch)
+        /* P2-11: 2-웨이 콘-스트림 인터리브의 스트림 B scratch */
+        nc->vscratch2 =
+            hc_arena_alloc(arena, sizeof(double) * 8 * (size_t)g->n, 64);
+        if (!nc->vscratch || !nc->vscratch2)
             return -1;
     } else if (nc->x4) {
         nc->vscratch =

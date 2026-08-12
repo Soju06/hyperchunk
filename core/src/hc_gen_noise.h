@@ -129,6 +129,8 @@ typedef struct hc_noise_chunk_s {
     int     x8;        /* hc_isa_active() == AVX512 (P2-10) */
     double *vscratch;  /* SoA — x8: [g->n][8] 64B 정렬, x4: [g->n][4] 32B
                         * 정렬 (simd 일 때만 할당) */
+    double *vscratch2; /* P2-11 2-웨이 인터리브의 스트림 B scratch —
+                        * x8 일 때만 할당 ([g->n][8], 64B 정렬) */
 
     /* preliminarySurfaceLevel 컬럼 메모 (Long2IntMap 대응, 값-중립 memo) */
     uint64_t *psl_key;

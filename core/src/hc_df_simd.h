@@ -77,4 +77,15 @@ void hc_df_eval_stream_x8_avx512(const hc_df_graph_t *g, const int32_t *stream,
                                  int32_t words, const hc_df_lanes8_t *lanes,
                                  double *vscratch, const hc_df_cellctx_t *cc);
 
+/* 2-웨이 콘-스트림 인터리브 (P2-11): 독립 8-레인 스트림 A/B (같은 그래프·
+ * 같은 스트림 워드, 좌표/scratch/cc 는 스트림별) 를 단일 스레드에서 문장
+ * 단위로 교차 실행한다 — 의존-체인 지연 상호 은닉 (B-4 §4.4). 각 스트림의
+ * 레인별 값·연산 시퀀스는 hc_df_eval_stream_x8_avx512 단독 2회 실행과
+ * 비트 동일 (인터리브는 값을 교환하지 않는 스케줄링일 뿐 — df_x8 게이트가
+ * 관측면을 판정). vscA/vscB 는 서로 다른 [g->n][8] 버퍼 (64B 정렬). */
+void hc_df_eval_stream_x8x2_avx512(
+    const hc_df_graph_t *g, const int32_t *stream, int32_t words,
+    const hc_df_lanes8_t *lanesA, double *vscA, const hc_df_cellctx_t *ccA,
+    const hc_df_lanes8_t *lanesB, double *vscB, const hc_df_cellctx_t *ccB);
+
 #endif /* HC_DF_SIMD_H */
