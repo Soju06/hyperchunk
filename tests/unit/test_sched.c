@@ -155,7 +155,13 @@ int main(void) {
     int32_t n = build_events(evs, uds, cells, 300, 30);
     atomic_store(&g_clock, 0);
     hc_arena_init(&arena, backing, backing_sz);
-    assert(hc_sched_run(evs, n, NCELLS, HC_SCHED_REPLAY, 1, &arena) == 0);
+    /* assert 금지 (부작용 호출): NDEBUG(Release) 에서 실행 자체가 소거돼
+     * 스테일 스탬프로 아래 검사가 헛발 FAIL — FREE 블록과 동일한 명시
+     * 검사로 (Release 트리 ctest 에서 실제로 밟은 결함) */
+    if (hc_sched_run(evs, n, NCELLS, HC_SCHED_REPLAY, 1, &arena) != 0) {
+        fprintf(stderr, "FAIL: hc_sched_run (REPLAY, arena)\n");
+        return 1;
+    }
     for (int32_t i = 1; i < n; i++)
         if (!(g_end[i - 1] < g_start[i])) {
             fprintf(stderr, "FAIL: REPLAY 순차성 위반 (%d)\n", i);
