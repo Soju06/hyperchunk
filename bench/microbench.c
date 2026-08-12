@@ -223,6 +223,8 @@ static void dump_ctrs(void) {
         {HC_CTR_X8_SCALAR_FB, "x8_scalar_fb"},
         {HC_CTR_X8_RC_MIX, "x8_rc_mix"}, {HC_CTR_X8_IS_MIX, "x8_is_mix"},
         {HC_CTR_X8_BLEND_MIX, "x8_blend_mix"},
+        {HC_CTR_X8_DUAL, "x8_dual"},     {HC_CTR_X8_PERLIN2, "x8_perlin2"},
+        {HC_CTR_X8_SPLIT, "x8_split"},
         {HC_CTR_X4_SLICE, "x4_slice"},   {HC_CTR_X4_CELL, "x4_cell"},
         {HC_CTR_X4_NODE, "x4_node"},     {HC_CTR_X4_PERLIN, "x4_perlin"},
         {HC_CTR_SP_NODE, "sp_node"},     {HC_CTR_FTS_ITER, "fts_iter"},
