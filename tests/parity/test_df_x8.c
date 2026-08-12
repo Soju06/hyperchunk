@@ -16,6 +16,7 @@
 
 #undef NDEBUG
 
+#include "../../core/src/hc_counters.h"
 #include "../../core/src/hc_df_compile.h"
 #include "../../core/src/hc_df_simd.h"
 #include "../../core/src/hc_gen_noise.h"
@@ -157,6 +158,11 @@ int main(int argc, char **argv) {
         return 77;
     }
 
+    /* P2-11 비-공허 방어: 2-웨이 인터리브 경로가 실제로 돌았는지 카운터로
+     * 확인한다 (dual 이 조용히 비활성화되면 이 게이트의 dual 커버가
+     * 공허해진다). 단일 스레드 테스트 — 스폰 규약 무관. */
+    hc_ctr_enable();
+
     const char *ref_dir = argv[1];
     char        sub[1024];
     snprintf(sub, sizeof sub, "%s/density_function", ref_dir);
@@ -267,7 +273,17 @@ int main(int argc, char **argv) {
                 g_checks, want_total);
         return 2;
     }
-    printf("test_df_x8: %d nodes; %d checks, %d failures\n", graph.n,
-           g_checks, g_fails);
+    /* P2-11 비-공허 방어: dual 경로 실작동 확인 (fill_slice 48=6그룹 →
+     * 페어 3 + select_cell iy 8 → 페어 8, 청크/셀 배터리에서 반드시 >0) */
+    hc_ctr_flush();
+    if (hc_ctr_total(HC_CTR_X8_DUAL) == 0) {
+        fprintf(stderr, "DUAL PATH VACUOUS: x8_dual counter is 0\n");
+        return 2;
+    }
+    printf("test_df_x8: %d nodes; %d checks, %d failures; x8_dual %llu "
+           "x8_split %llu\n",
+           graph.n, g_checks, g_fails,
+           (unsigned long long)hc_ctr_total(HC_CTR_X8_DUAL),
+           (unsigned long long)hc_ctr_total(HC_CTR_X8_SPLIT));
     return g_fails == 0 ? 0 : 1;
 }
