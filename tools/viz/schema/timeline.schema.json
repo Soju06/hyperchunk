@@ -58,7 +58,11 @@
         "source": { "type": "string", "description": "Raw capture file this was converted from" },
         "event": {
           "type": "string",
-          "description": "Which per-chunk event t_done_ms marks (hyperchunk: serialize|deco|chain)"
+          "description": "Which per-chunk event t_done_ms marks (hyperchunk: complete|strict|serialize|deco|chain)"
+        },
+        "pp_records": {
+          "type": "boolean",
+          "description": "complete/strict events: true when per-drain pp spans (P records) were present in the capture"
         },
         "policy": { "type": "string" },
         "threads": { "type": "integer" },

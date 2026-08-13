@@ -66,17 +66,19 @@ HC_BENCH_TIMELINE=/mnt/scratch/bench/viz1/<date>/tl-free-1.txt \
 # exit 0 + "pass":true in stdout JSON == canonical PASS (golden/SHA256SUMS own-v1)
 
 ./bin/hcviz convert tl-free-1.txt --out hc.json \
-  --system hyperchunk-free --display-name hyperchunk --stage claw/5900x \
-  --event serialize --result free-1.json      # --result adds seed/canonical/pass
+  --system hyperchunk-free --display-name hyperchunk --stage hc-e6/zen5 \
+  --result free-1.json                        # --result adds seed/canonical/pass
 ```
 
 `--event` picks what "chunk done" means:
 
 | event       | source        | meaning                                    |
 |-------------|---------------|--------------------------------------------|
-| `serialize` | `S.t1` (default) | chunk in final serialized form — strictest; FREE serializes in a tail burst, so most reveal lands in the last few % of the wall |
-| `deco`      | deco `E.t1`   | block content complete — spread over the DAG window, visually richer |
-| `chain`     | `C.w5`        | noise/surface/carvers done — earliest       |
+| `complete`  | max(own `C.w5`, deco `E.t1` ±1) (default) | last substantive block write — terrain + every feature/structure placement that can reach the chunk (deco write window is source-enforced ±1; light/serialize never write blocks). Excludes the pp drain's sparse shape-fixes (no heightmap/tile effect) |
+| `strict`    | max(`complete`, pp `P.t1` ±1) | bit-final content incl. pp shape-fixes. Needs P records (VIZ-2+ captures). pp is a row-major serial sweep over every target ±1, so this collapses reveal into the pp window — audit use |
+| `serialize` | `S.t1`        | chunk in final serialized form; FREE serializes in a tail burst, so most reveal lands in the last few % of the wall |
+| `deco`      | own deco `E.t1` | own decoration done — ignores neighbor deco writes into this chunk (debug/comparison) |
+| `chain`     | `C.w5`        | noise/surface/carvers done — earliest; terrain shape final, tree/ore deco pending |
 
 Timeline `t0 = setup_end` mark, `wall_s = proc_end − setup_end` (gen wall +
 replay-load, ~1% above the bench JSON's `gen_wall_ns`).
