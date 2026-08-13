@@ -478,6 +478,18 @@ static void wf_mark(const char *name, uint64_t t) {
     g_wf_nmarks++;
 }
 
+/* VIZ-2: pp 드레인별 span — 청크별 "블록 내용 최종" 시점의 pp 항
+ * (hc_postprocess_chunk 는 드레인 청크 ±1 에 setBlock 할 수 있어 청크별
+ * 종료 시각이 필요; 데코 항은 E 레코드가 이미 커버). 타임스탬프는 드레인
+ * 루프가 B_pp 귀속용으로 이미 읽는 값 재사용 — on 상태 추가 클록 읽기 0,
+ * off 상태 비용은 드레인당 g_wf_path 검사 1회. */
+enum { WF_MAX_PP = 2048 }; /* = pp 매니페스트 상한 MAX_PPM */
+static struct {
+    int32_t  cx, cz;
+    uint64_t t0, t1;
+} g_wf_pp[WF_MAX_PP];
+static int32_t g_wf_pp_n;
+
 /* ---- B-3 연산 카운터 (HC_BENCH_COUNTERS=<path>, 기본 off) ----
  * HC_BENCH_TIMELINE 과 같은 규율: env 1회 판독, 고정 정적 버퍼, 덤프는
  * proc_end 뒤 1회 (B_* 버킷 밖). 페이즈 스냅샷은 누적치 — 페이즈별
@@ -1068,7 +1080,9 @@ static int32_t load_light_tasks(const char *path, ltask_t *out, int32_t cap) {
  *   C <i> <cx> <cz> <tid> <w0..w5>          체인 청크 (경계 6개)
  *   E <idx> <kind> <cx> <cz> <worker> <t0> <t1>   DAG 이벤트
  *   D <idx> <n> <cell...>                   이벤트 접촉 셀 (의존 재구성용)
- *   S <idx> <worker> <t0> <t1>              직렬화 청크 */
+ *   S <idx> <worker> <t0> <t1>              직렬화 청크
+ *   P <m> <cx> <cz> <t0> <t1>               pp 드레인 (VIZ-2 추가 —
+ *                                           v1 구판 파일엔 없음) */
 static void wf_dump(int free_mode, int nthreads) {
     if (!g_wf_path)
         return;
@@ -1090,6 +1104,9 @@ static void wf_dump(int free_mode, int nthreads) {
                 i, g_chunks[i].cx, g_chunks[i].cz, r->tid, r->w[0], r->w[1],
                 r->w[2], r->w[3], r->w[4], r->w[5]);
     }
+    for (int32_t m = 0; m < g_wf_pp_n; m++)
+        fprintf(f, "P %d %d %d %" PRIu64 " %" PRIu64 "\n", m, g_wf_pp[m].cx,
+                g_wf_pp[m].cz, g_wf_pp[m].t0, g_wf_pp[m].t1);
     if (free_mode) {
         for (int32_t i = 0; i < g_ev_n; i++) {
             const ev_ud_t   *u = &g_evud[i];
@@ -1790,6 +1807,13 @@ int main(int argc, char **argv) {
             hc_postprocess_chunk(&rg, pm_cx[m], pm_cz[m], &g_ppg[wi]);
             uint64_t t2 = now_ns();
             B_pp += t2 - t1;
+            if (g_wf_path && g_wf_pp_n < WF_MAX_PP) {
+                g_wf_pp[g_wf_pp_n].cx = pm_cx[m];
+                g_wf_pp[g_wf_pp_n].cz = pm_cz[m];
+                g_wf_pp[g_wf_pp_n].t0 = t1;
+                g_wf_pp[g_wf_pp_n].t1 = t2;
+                g_wf_pp_n++;
+            }
             /* postProcess 라이브 쓰기의 checkBlock — 승격 단위 배치 */
             hc_light_accum_flush(&lw);
             B_light_flush += now_ns() - t2;
