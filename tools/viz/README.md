@@ -83,14 +83,17 @@ HC_BENCH_TIMELINE=/mnt/scratch/bench/viz1/<date>/tl-free-1.txt \
 Timeline `t0 = setup_end` mark, `wall_s = proc_end − setup_end` (gen wall +
 replay-load, ~1% above the bench JSON's `gen_wall_ns`).
 
-### Vanilla / C2ME capture — TODO (follow-up task)
+### Vanilla / C2ME capture — procedure fixed, execution is a follow-up
 
-B-6 only polled cumulative full-chunk counts at 0.5 s (and vanilla holds
-chunks below `full` until the end, so even that curve is a step). A real
-per-chunk capture needs a server-side probe that logs each chunk's
-full-status timestamp (e.g. a Fabric mod hooking ChunkStatus transitions, or
-`/forceload`-free NBT mtime scraping is NOT enough). Do not assume a format
-until that task lands — the schema above is the contract.
+The B-6 probe (`b6_run.sh`: per-chunk `execute if loaded … run say HCB_<cx>_<cz>`
+against a forceloaded region, driver-clock confirmation) already yields
+per-chunk completion windows; it only needs a high-frequency poll (50–100 ms)
+and a per-chunk TSV. Full procedure, script draft, observer-load validation
+gate and error marking (`meta.probe_interval_ms`, one-sided overestimate):
+`capture/vanilla-c2me-probe.md`. The probe measures FULL-status promotion —
+for vanilla that is genuinely an end staircase (B-6 TSV: 0 until 11.4 s), so
+expect the real reveal to differ from the synthetic scan narrative. The
+schema above is the contract.
 
 ## race.yaml (render composition)
 
