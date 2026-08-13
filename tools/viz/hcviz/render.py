@@ -130,6 +130,20 @@ class Renderer:
                 (x, y + size + pg_dy, x + size - 1, y + size + pg_dy + pg_h - 1),
                 fill=t.color("track"),
             )
+        # VIZ-2: synthetic-panel micro-caption — single line in the empty band
+        # below the progress track (y≈567..598); no v5-specced pixel moves.
+        synth = [p.label for p in self.panels if p.timeline.meta.get("synthetic")]
+        if synth:
+            caption = (
+                " · ".join(n.lower() for n in synth)
+                + ": synthetic chunk timing · measured walls"
+            )
+            d.text(
+                (lay.pad, lay.height - t.get("caption", "bottom", default=26)),
+                caption,
+                font=t.font("body", t.get("caption", "size", default=13)),
+                fill=t.color("subink"),
+            )
         return img
 
     # ------------------------------------------------------------- frames ---

@@ -43,6 +43,7 @@
     "done_dy": 15
   },
   "progress": { "dy": 62, "height": 3 },
+  "caption": { "size": 13, "bottom": 26 },
   "terrain": {
     "water_deep": [96, 118, 145],
     "water_shallow": [122, 144, 168],

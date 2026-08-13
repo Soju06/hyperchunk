@@ -1,13 +1,20 @@
 # B-6 3-way public race — hc-e6 measured walls: vanilla 11.9s / C2ME 3.7s / hyperchunk FREE 0.894s.
 #
-# hyperchunk panel: REAL per-chunk timeline (HC_BENCH_TIMELINE waterfall capture,
-#   FREE run on claw, canonical PASS — see timeline meta). normalize_wall_s pins
-#   the wall to the B-6 hc-e6 number: the reveal *shape* is measured, the clock is
-#   uniformly rescaled from the claw wall (2.201s). The rescale is recorded in the
-#   loaded timeline meta (time_scaled_from_wall_s).
+# hyperchunk panel: REAL per-chunk timeline, SAME STAGE as the race walls
+#   (VIZ-2 capture: FREE 20T on hc-e6, canonical PASS, gen_wall 889.4ms within
+#   the B-6 band — see timeline meta). event=complete: a chunk reveals at its
+#   last substantive block write (own chain end ∨ deco events whose ±1 write
+#   window covers it). normalize_wall_s pins the panel clock to the published
+#   B-6 gen_wall (0.894s); the timeline wall (0.912s) additionally carries
+#   ~2.5% of interleaved replay-input parse (harness overhead) that the
+#   published number excludes for all three systems (gen_wall-setup symmetric
+#   disclosure). Rescale factor 0.980, recorded in loaded meta
+#   (time_scaled_from_wall_s). Previous claw-stage capture is kept at
+#   timelines/hyperchunk-free-claw.json for comparison.
 # Vanilla / C2ME panels: SYNTHETIC timelines (scan / wave patterns, marked
 #   meta.synthetic=true) — only their wall_s values (11.9 / 3.7) are measured
-#   (B-6). Real per-chunk capture for vanilla/C2ME is a follow-up task.
+#   (B-6). The renderer prints a bottom micro-caption naming synthetic panels
+#   as long as any remain. Real per-chunk capture is a follow-up task.
 theme: ../themes/ivory.json
 layout: race3
 view: reveal
@@ -33,6 +40,6 @@ panels:
     tile: tiles/c2me-b6.png
   - name: hyperchunk
     accent: hyperchunk
-    timeline: timelines/hyperchunk-free-claw.json
+    timeline: timelines/hyperchunk-free-hce6.json
     tile: tiles/hyperchunk-free.png
     normalize_wall_s: 0.894
