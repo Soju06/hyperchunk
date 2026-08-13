@@ -1,0 +1,73 @@
+{
+  "name": "ivory",
+  "comment": "v5 confirmed design values — SoT mockups: gif-mock-v5-race.png (race) + gif-mock-v4-endcard.png (endcard, margins unified to PAD=44)",
+  "colors": {
+    "bg": [246, 242, 234],
+    "ink": [56, 51, 44],
+    "subink": [150, 142, 130],
+    "line": [214, 207, 194],
+    "paper": [233, 228, 216],
+    "track": [222, 215, 202],
+    "accents": {
+      "vanilla": [172, 116, 100],
+      "c2me": [168, 144, 94],
+      "hyperchunk": [107, 130, 93]
+    },
+    "accent_cycle": [
+      [172, 116, 100],
+      [168, 144, 94],
+      [107, 130, 93],
+      [116, 122, 148]
+    ]
+  },
+  "fonts": {
+    "dir": "~/.local/share/fonts/brand",
+    "headline": { "file": "SpaceGroteskVar.ttf", "wght": 700 },
+    "body": { "file": "Inter-Regular.ttf" },
+    "body_semibold": { "file": "Inter-SemiBold.ttf" }
+  },
+  "spacing": { "pad": 44, "gap": 28, "top": 150, "bot": 96 },
+  "panel": { "size": 352, "chunk_px": 11, "border_px": 1 },
+  "header": {
+    "title_size": 36,
+    "title_xy": [44, 28],
+    "sub_size": 15,
+    "sub_xy": [44, 80]
+  },
+  "label": { "size": 17, "dy": -27 },
+  "timer": {
+    "size": 34,
+    "dy": 12,
+    "done_size": 15,
+    "done_dx": 12,
+    "done_dy": 15
+  },
+  "progress": { "dy": 62, "height": 3 },
+  "terrain": {
+    "water_deep": [96, 118, 145],
+    "water_shallow": [122, 144, 168],
+    "sand": [214, 199, 163],
+    "grass": [139, 155, 110],
+    "grass_alt": [122, 140, 98],
+    "grass_dark": [108, 124, 88],
+    "stone": [158, 152, 140],
+    "snow": [238, 235, 228],
+    "shade_min": 0.78,
+    "shade_max": 1.18,
+    "water_deep_threshold": 5
+  },
+  "heat": { "ramp_from": "paper", "ramp_gamma": 0.75 },
+  "diff": { "outline": "vanilla", "outline_px": 1 },
+  "endcard": {
+    "wordmark_size": 34,
+    "wordmark_xy": [44, 44],
+    "headline_size": 96,
+    "headline_y": 168,
+    "sub_size": 18,
+    "sub_gap": 40,
+    "footer_size": 17,
+    "footer_bottom": 60,
+    "footer_gap": 56,
+    "footer_pair_gap": 10
+  }
+}

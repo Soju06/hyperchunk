@@ -1,0 +1,16 @@
+# Single-panel example: real hyperchunk FREE timeline (claw), unscaled clock.
+theme: ../themes/ivory.json
+layout: single
+view: reveal
+fps: 25
+hold_s: 1.5
+header:
+  title: "1024 chunks, one race"
+  sub: "same seed · same machine"
+endcard:
+  enabled: false
+panels:
+  - name: hyperchunk
+    accent: hyperchunk
+    timeline: ../demo/timelines/hyperchunk-free-claw.json
+    tile: ../demo/tiles/hyperchunk-free.png

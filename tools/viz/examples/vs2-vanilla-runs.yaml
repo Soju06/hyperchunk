@@ -1,0 +1,24 @@
+# vs2 determinism comparison: two vanilla runs of the SAME seed on the same
+# machine (B-6 run1 vs run2). Chunks whose rendered content differs between the
+# two runs get an outline highlight once revealed on both — vanilla worldgen is
+# content-non-deterministic (B-1), so real diffs appear.
+# Timelines here are synthetic (scan) — vanilla per-chunk capture is a follow-up.
+theme: ../themes/ivory.json
+layout: vs2
+view: reveal
+fps: 25
+hold_s: 1.5
+header:
+  title: "1024 chunks, one race"
+  sub: "same seed · same machine"
+endcard:
+  enabled: false
+panels:
+  - name: Vanilla
+    accent: vanilla
+    timeline: ../demo/timelines/vanilla-b6-scan.json
+    mca: /mnt/scratch/bench/b6-3way/2026-08-12/raw-art/r.0.0-vanilla-1.mca
+  - name: Vanilla
+    accent: vanilla
+    timeline: ../demo/timelines/vanilla-b6-scan.json
+    mca: /mnt/scratch/bench/b6-3way/2026-08-12/raw-art/r.0.0-vanilla-2.mca

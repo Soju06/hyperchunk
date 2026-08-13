@@ -1,0 +1,38 @@
+# B-6 3-way public race — hc-e6 measured walls: vanilla 11.9s / C2ME 3.7s / hyperchunk FREE 0.894s.
+#
+# hyperchunk panel: REAL per-chunk timeline (HC_BENCH_TIMELINE waterfall capture,
+#   FREE run on claw, canonical PASS — see timeline meta). normalize_wall_s pins
+#   the wall to the B-6 hc-e6 number: the reveal *shape* is measured, the clock is
+#   uniformly rescaled from the claw wall (2.201s). The rescale is recorded in the
+#   loaded timeline meta (time_scaled_from_wall_s).
+# Vanilla / C2ME panels: SYNTHETIC timelines (scan / wave patterns, marked
+#   meta.synthetic=true) — only their wall_s values (11.9 / 3.7) are measured
+#   (B-6). Real per-chunk capture for vanilla/C2ME is a follow-up task.
+theme: ../themes/ivory.json
+layout: race3
+view: reveal
+fps: 25
+hold_s: 1.5
+header:
+  title: "1024 chunks, one race"
+  sub: "same seed · same machine"
+endcard:
+  enabled: true
+  hold_s: 1.5
+  wordmark: hyperchunk
+  headline: auto        # baseline wall / fastest wall → "13.3× faster"
+  sub: "and the only one that generates the same world, bit for bit, every run"
+panels:
+  - name: Vanilla
+    accent: vanilla
+    timeline: timelines/vanilla-b6-scan.json
+    tile: tiles/vanilla-b6.png
+  - name: C2ME
+    accent: c2me
+    timeline: timelines/c2me-b6-wave.json
+    tile: tiles/c2me-b6.png
+  - name: hyperchunk
+    accent: hyperchunk
+    timeline: timelines/hyperchunk-free-claw.json
+    tile: tiles/hyperchunk-free.png
+    normalize_wall_s: 0.894
