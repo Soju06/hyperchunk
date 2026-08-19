@@ -2,9 +2,11 @@
 #
 # hyperchunk panel: REAL per-chunk timeline, SAME STAGE as the race walls
 #   (VIZ-2 capture: FREE 20T on hc-e6, canonical PASS, gen_wall 889.4ms within
-#   the B-6 band — see timeline meta). event=complete: a chunk reveals at its
-#   last substantive block write (own chain end ∨ deco events whose ±1 write
-#   window covers it). normalize_wall_s pins the panel clock to the published
+#   the B-6 band — see timeline meta). Two-stage reveal (VIZ-3, owner-approved):
+#   stage-1 at chain end (t_stage1_ms — terrain shape final, deco pending)
+#   paints a muted terrain tone; the final pixels appear at event=complete —
+#   a chunk's last substantive block write (own chain end ∨ deco events whose
+#   ±1 write window covers it). normalize_wall_s pins the panel clock to the published
 #   B-6 gen_wall (0.894s); the timeline wall (0.912s) additionally carries
 #   ~2.5% of interleaved replay-input parse (harness overhead) that the
 #   published number excludes for all three systems (gen_wall-setup symmetric

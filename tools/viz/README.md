@@ -39,7 +39,7 @@ chunks, `t_done_ms` past the wall).
   "display_name": "Vanilla",
   "stage": "hc-e6/zen5",
   "wall_s": 11.9,
-  "chunks": [{"cx": 0, "cz": 0, "t_done_ms": 8123.4}],
+  "chunks": [{"cx": 0, "cz": 0, "t_done_ms": 8123.4, "t_stage1_ms": 3101.2}],
   "meta": {"seed": 1234567890, "workers": 31, "probe_interval_ms": 50}
 }
 ```
@@ -51,6 +51,11 @@ chunks, `t_done_ms` past the wall).
   Grid × `panel.chunk_px` must equal `panel.size` (32 × 11 = 352).
 - `meta.synthetic: true` + `meta.pattern` mark generated (non-measured)
   timelines; the `synth` subcommand always sets them.
+- `t_stage1_ms` (optional, VIZ-3) — an earlier per-chunk partial-content
+  instant named by `meta.stage1_event` (hyperchunk: `chain` — terrain shape
+  final, decoration pending). Must be ≤ `t_done_ms`. Both series live in one
+  file because they come from the same capture run and must never be mixed
+  across runs. Timelines without the field render single-stage, unchanged.
 
 ### hyperchunk converter (real capture)
 
@@ -67,8 +72,13 @@ HC_BENCH_TIMELINE=/mnt/scratch/bench/viz1/<date>/tl-free-1.txt \
 
 ./bin/hcviz convert tl-free-1.txt --out hc.json \
   --system hyperchunk-free --display-name hyperchunk --stage hc-e6/zen5 \
+  --stage1 chain \
   --result free-1.json                        # --result adds seed/canonical/pass
 ```
+
+`--stage1 chain` additionally emits `t_stage1_ms` = own `C.w5` per chunk
+(two-stage reveal; always ≤ `t_done_ms` since every `--event` choice is at or
+after the chunk's own chain end).
 
 `--event` picks what "chunk done" means:
 
@@ -103,7 +113,19 @@ See `demo/race-b6.yaml` (commented) and `examples/`. Fields:
 - `layout` — `race3` | `race4` | `single` | `vs2` (vs2 outlines chunks whose
   tile content differs between the two panels once both are revealed).
 - `view` — `reveal` (chunk appears at `t_done_ms`) | `heat` (completion-time
-  ramp paper→accent).
+  ramp paper→accent). When a timeline carries `t_stage1_ms`, the reveal view
+  is two-stage (VIZ-3, owner-approved): at stage-1 the chunk shows a muted
+  terrain tone — the final tile pooled to its per-chunk mean (theme
+  `stage1.cells: 1`, chunk-aligned so nothing leaks across chunks),
+  desaturated (`stage1.desat`) and blended toward paper
+  (`stage1.toward_paper`) — and the final full-content pixels appear only at
+  `t_done_ms`. The chunk-mean pooling is the honesty guard: decoration
+  placement (tree canopies, snow specks) is baked into the final tile, and
+  collapsing to one tone per chunk zeroes sub-chunk placement information by
+  construction; the surviving chunk-aggregate tone (forest density) is
+  biome-scale and final at chain time. `stage1.cells > 1` re-admits
+  cell-scale canopy-placement tone (measured: ~10 luma at cells=3) — don't.
+  Single-series timelines render single-stage exactly as before.
 - `fps`, `hold_s` (all-done hold), `header.title/sub`.
 - `endcard` — `enabled`, `hold_s`, `wordmark`, `headline` (`auto` =
   `baseline_wall / fastest_wall` → "N.N× faster"), `sub`, `baseline_panel`.

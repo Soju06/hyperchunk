@@ -19,6 +19,47 @@ class RenderError(Exception):
     pass
 
 
+def _stage1_tile(tile: np.ndarray, theme, cpx: int) -> np.ndarray:
+    """Muted 'terrain blocked-in' tile for the stage-1 reveal (VIZ-3).
+
+    Deterministic tone transform of the final tile: per-chunk mean pooling
+    (cell edges aligned to chunk edges — nothing leaks across chunk
+    boundaries), then desaturate toward luma and blend toward paper.
+    The pooling is the honesty guard: the final tile bakes decoration in
+    (tree canopies raise MOTION_BLOCKING and read as grass_dark specks, snow
+    layers are a decoration feature).  cells=1 collapses each chunk to its
+    mean tone, so sub-chunk placement information is zero by construction;
+    what survives is the chunk-aggregate tone (a forested chunk reads
+    slightly darker), which is biome-scale information and biomes ARE final
+    at chain time.  cells>1 re-admits cell-scale canopy-placement tone
+    (measured at cells=3/cpx=11: one ~5-block cell is about one tree canopy,
+    deco-attributable cell contrast up to ~10 luma — above JND), so keep the
+    shipped theme at cells=1 unless the reveal stops needing to be honest.
+    """
+    cells = int(theme.get("stage1", "cells", default=1))
+    desat = float(theme.get("stage1", "desat", default=0.85))
+    toward = float(theme.get("stage1", "toward_paper", default=0.5))
+    px = tile.astype(np.float64)
+    if 0 < cells < cpx:
+        h, w, _ = px.shape
+        gh, gw = h // cpx, w // cpx
+        b = px.reshape(gh, cpx, gw, cpx, 3)
+        out = np.empty_like(b)
+        edges = [round(k * cpx / cells) for k in range(cells + 1)]
+        for i in range(cells):
+            for j in range(cells):
+                r0, r1 = edges[i], edges[i + 1]
+                c0, c1 = edges[j], edges[j + 1]
+                sub = b[:, r0:r1, :, c0:c1, :]
+                out[:, r0:r1, :, c0:c1, :] = sub.mean(axis=(1, 3), keepdims=True)
+        px = out.reshape(h, w, 3)
+    luma = px @ np.array([0.299, 0.587, 0.114])
+    px += (luma[..., None] - px) * desat
+    paper = np.asarray(theme.color("paper"), np.float64)
+    px += (paper - px) * toward
+    return np.clip(px.round(), 0, 255).astype(np.uint8)
+
+
 class _Panel:
     def __init__(self, spec, timeline, accent, tile_rgb, theme, view):
         self.label = spec.name or timeline.display_name
@@ -39,6 +80,13 @@ class _Panel:
         if tile_rgb is None:
             tile_rgb = np.array(self.paper_px)
         self.tile = tile_rgb
+        # Two-stage reveal (VIZ-3): only when the timeline carries the
+        # optional stage-1 series, and only in the reveal view (heat encodes
+        # completion time as color — a second series has no meaning there).
+        self.s1_grid = timeline.t_stage1_grid() if view == "reveal" else None
+        self.s1_tile = (
+            _stage1_tile(self.tile, theme, cpx) if self.s1_grid is not None else None
+        )
         if view == "heat":
             base = np.array(theme.color(theme.get("heat", "ramp_from")), np.float64)
             acc = np.array(accent, np.float64)
@@ -52,9 +100,15 @@ class _Panel:
             )
 
     def content_at(self, t_ms: float) -> np.ndarray:
-        mask = self.t_grid <= t_ms
-        mask_px = mask.repeat(self.cpx, axis=0).repeat(self.cpx, axis=1)
-        return np.where(mask_px[..., None], self.tile, self.paper_px)
+        done = self.t_grid <= t_ms
+        done_px = done.repeat(self.cpx, axis=0).repeat(self.cpx, axis=1)
+        if self.s1_grid is None:
+            return np.where(done_px[..., None], self.tile, self.paper_px)
+        s1_px = (
+            (self.s1_grid <= t_ms).repeat(self.cpx, axis=0).repeat(self.cpx, axis=1)
+        )
+        base = np.where(s1_px[..., None], self.s1_tile, self.paper_px)
+        return np.where(done_px[..., None], self.tile, base)
 
 
 class Renderer:

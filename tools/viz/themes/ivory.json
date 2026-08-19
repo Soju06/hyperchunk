@@ -57,6 +57,7 @@
     "shade_max": 1.18,
     "water_deep_threshold": 5
   },
+  "stage1": { "cells": 1, "desat": 0.6, "toward_paper": 0.58 },
   "heat": { "ramp_from": "paper", "ramp_gamma": 0.75 },
   "diff": { "outline": "vanilla", "outline_px": 1 },
   "endcard": {
