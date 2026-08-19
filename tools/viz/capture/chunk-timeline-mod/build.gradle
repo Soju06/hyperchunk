@@ -1,0 +1,36 @@
+// Plain `java` build — deliberately NOT fabric-loom, same rationale as
+// tools/golden/stage-dump-mod/build.gradle (26.x ships unobfuscated, the
+// runtime namespace IS the Mojang namespace, ADR-006 D3).
+//
+// Reuses the golden pipeline's verified library tree: run
+// tools/golden/fetch_server.sh + extract_nested.sh + fetch_fabric.sh once to
+// populate tools/golden/libs/ before building.
+
+plugins {
+    id 'java'
+}
+
+def toolsGolden = new File(layout.projectDirectory.asFile, '../../../golden').canonicalFile
+def targetVersion = new File(toolsGolden, '../../TARGET_VERSION').text.trim()
+def extracted = new File(toolsGolden, 'libs/extracted')
+def fabricLibs = new File(toolsGolden, 'libs/fabric')
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+dependencies {
+    compileOnly files(new File(extracted, "server-${targetVersion}.jar"))
+    compileOnly fileTree(dir: new File(extracted, 'libraries'), include: '**/*.jar')
+    compileOnly fileTree(dir: fabricLibs, include: 'sponge-mixin-*.jar')
+}
+
+jar {
+    archiveFileName = 'hyperchunk-chunk-timeline.jar'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

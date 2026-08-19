@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "hyperchunk-chunk-timeline",
+  "version": "0.1.0",
+  "name": "hyperchunk chunk-timeline probe",
+  "description": "Logs per-chunk worldgen stage completion timestamps for the demo timelines (VIZ-5). In-memory append on the worldgen path, single flush at JVM exit. Inert unless -Dhyperchunk.timeline.file is set.",
+  "license": "MIT",
+  "environment": "*",
+  "mixins": [
+    "hyperchunk-chunk-timeline.mixins.json"
+  ],
+  "depends": {
+    "minecraft": "26.2"
+  }
+}

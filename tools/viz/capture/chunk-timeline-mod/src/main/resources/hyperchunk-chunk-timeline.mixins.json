@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "dev.hyperchunk.timeline.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "ChunkStepTimelineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
