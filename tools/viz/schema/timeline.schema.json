@@ -75,7 +75,7 @@
         },
         "stage1_event": {
           "type": "string",
-          "description": "Which per-chunk event t_stage1_ms marks when present (hyperchunk: chain — noise/surface/carvers done, terrain shape final, deco pending)"
+          "description": "Which per-chunk event t_stage1_ms marks when present (hyperchunk: chain — noise/surface/carvers done; instrumented java timelines: surface — ChunkStatus SURFACE completion). Both mean: terrain shape final, deco pending"
         },
         "pp_records": {
           "type": "boolean",

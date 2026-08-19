@@ -7,6 +7,7 @@
 #                 VIZ-5 note), c2me-instr = fabric-template + c2me + mod
 #   - JVM: -Dhyperchunk.timeline.file=$RUN_DIR/timeline.tsv
 #   - post-boot assert: mod "enabled" line present
+#   - post-stop assert: timeline.tsv '# end events=N' trailer == row count
 #   - artifact: timeline.tsv -> $ART/instrumented-timeline-$MODE-$RUNID.tsv
 #   - results.jsonl rec: + t0_epoch, instrumented, mod_sha1, timeline_events
 # Everything else (quiet rules, probe self-check, PRE census, 0.1s poll loop,
@@ -165,6 +166,25 @@ sleep 5
 PREDONE=$({ grep -oE 'PRE_[0-9]+_[0-9]+' "$LOG" || true; } | sort -u | wc -l)
 echo "   pre-generated region chunks: $PREDONE/1024"
 
+# Golden-capture sequence replication: generate the 3x3 dump grid to full
+# BEFORE the region quadrants, exactly like make_golden_unified.sh does
+# (verification runs only — changes decoration arrival order).
+if [ "${HC_GRID_FIRST:-0}" = "1" ]; then
+    echo "== grid-first: forceload 3x3 grid (blocks -16..31) and wait for full"
+    echo "forceload add -16 -16 31 31" >&3
+    for _ in $(seq 1 300); do
+        for CX in -1 0 1; do for CZ in -1 0 1; do
+            printf 'execute if loaded %d 64 %d run say GRD_%d_%d\n' $((CX*16)) $((CZ*16)) "$CX" "$CZ" >&3
+        done; done
+        sleep 2
+        NGRID=$({ grep -oE 'GRD_-?[0-9]+_-?[0-9]+' "$LOG" || true; } | sort -u | wc -l)
+        [ "$NGRID" -ge 9 ] && break
+    done
+    NGRID=$({ grep -oE 'GRD_-?[0-9]+_-?[0-9]+' "$LOG" || true; } | sort -u | wc -l)
+    [ "$NGRID" -ge 9 ] || { echo "FATAL: grid never reached full" >&2; exit 1; }
+    echo "   grid full: $NGRID/9"
+fi
+
 LOAD_T0=$(cut -d' ' -f1-3 /proc/loadavg)
 echo "== t0: forceload region (0,0) (4 x 256-chunk commands)"
 T0=$(now)
@@ -244,13 +264,17 @@ exec 3>&-
 
 # timeline flush happens in the mod's JVM shutdown hook — the process is
 # confirmed dead here, so the TSV is complete. Completeness is proven by
-# the TSV's own '# flush' header: the hook's stdout println is routed
-# through log4j, which is already stopped at shutdown-hook time and
-# swallows it (measured on hc-e6 v5i-1) — never gate on the server log.
+# the TSV's own trailer line ('# end events=N', written AFTER the event
+# rows — the '# flush' header only proves the flush started): the hook's
+# stdout println is routed through log4j, which is already stopped at
+# shutdown-hook time and swallows it (measured on hc-e6 v5i-1) — never
+# gate on the server log.
 [ -f "$TIMELINE_TSV" ] || { echo "FATAL: no timeline.tsv after stop" >&2; exit 1; }
-grep -q '^# flush epoch_ms=' "$TIMELINE_TSV" || {
-    echo "FATAL: timeline.tsv missing '# flush' header (incomplete)" >&2; exit 1; }
+TL_END=$(grep -oE '^# end events=[0-9]+' "$TIMELINE_TSV" | grep -oE '[0-9]+' || true)
+[ -n "$TL_END" ] || { echo "FATAL: timeline.tsv missing '# end' trailer (truncated flush)" >&2; exit 1; }
 TL_EVENTS=$(grep -vc '^#' "$TIMELINE_TSV")
+[ "$TL_EVENTS" = "$TL_END" ] || {
+    echo "FATAL: timeline.tsv row count $TL_EVENTS != trailer $TL_END" >&2; exit 1; }
 echo "   timeline events: $TL_EVENTS"
 
 WORKERS=$(awk '/Worker-Main/{n+=$1} END{print n+0}' "$RUN_DIR/.threads" 2>/dev/null || echo 0)

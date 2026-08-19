@@ -25,9 +25,12 @@ import net.minecraft.world.level.chunk.status.WorldGenContext;
  *
  * Unlike the golden mixin we record BOTH pyramids: 'g' (GENERATION_PYRAMID)
  * for freshly generated chunks, 'l' (LOADING_PYRAMID) for chunks re-loaded
- * from disk — boot spawn-prep saves ~144 r.0.0 chunks before t0 (B-6 §3
- * census), and their only post-t0 events are loading-pyramid steps; without
- * 'l' events those chunks would have no servable timestamp at all.
+ * from disk. Boot spawn-prep saves ~144 r.0.0 chunks before t0 (B-6 §3
+ * census); most resume generation in-window (post-t0 'g' events for their
+ * remaining stages), but the few saved at or past the binding stages
+ * (measured: 4 — 3 initialize_light + 1 full) re-run those stages only as
+ * loading-pyramid passthroughs — without 'l' events THOSE chunks would have
+ * no in-window surface/features timestamp at all.
  */
 @Mixin(ChunkStep.class)
 public abstract class ChunkStepTimelineMixin {

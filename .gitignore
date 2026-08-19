@@ -48,6 +48,8 @@ tools/golden/work/
 tools/golden/stage-dump-mod/build/
 tools/golden/stage-dump-mod/.gradle/
 tools/golden/stage-dump-mod/run/
+tools/viz/capture/chunk-timeline-mod/build/
+tools/viz/capture/chunk-timeline-mod/.gradle/
 
 __pycache__/
 *.pyc

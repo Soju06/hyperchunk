@@ -91,12 +91,21 @@ public final class TimelineLog {
                 w.newLine();
                 w.write("# event: kind stageIndex stageName cx cz nano");
                 w.newLine();
+                int n = 0;
                 for (Event e : EVENTS) {
                     w.write(String.format(Locale.ROOT, "%c\t%02d\t%s\t%d\t%d\t%d",
                             e.kind, e.status.getIndex(), stageName(e.status),
                             e.cx, e.cz, e.nano));
                     w.newLine();
+                    n++;
                 }
+                // Completeness trailer — the '# ref'/'# flush' headers prove
+                // the flush STARTED; a mid-loop IOException (e.g. ENOSPC)
+                // would leave a truncated file that still carries them. The
+                // runner must gate on this line (the catch below prints to
+                // stdout, which log4j swallows at shutdown-hook time).
+                w.write("# end events=" + n);
+                w.newLine();
             }
             System.out.println("[hyperchunk-chunk-timeline] flushed "
                     + EVENTS.size() + " events to " + FILE);

@@ -25,7 +25,9 @@
 #   Chosen runs: vanilla v5i-1 (t1 11.708s), c2me v5i-2 (t1 3.355s) —
 #   median-wall instrumented runs. Vanilla dedicated cannot load mods, so
 #   the vanilla panel shape comes from Fabric loader 0.19.3 + the hook mod
-#   ONLY (no C2ME; worldgen bit-identical, golden-pipeline precedent) —
+#   ONLY (no C2ME; the loader/mod add no worldgen changes — golden-pipeline
+#   precedent; NOTE vanilla 26.2 itself is content-nondeterministic
+#   run-to-run, ADR-007, so no two runs are bit-identical) —
 #   meta.instrumented records this; fairness footnote in
 #   .hermes/notes/viz/VIZ-5-instrumented-streaming.md. normalize_wall_s
 #   pins both panel clocks to the published B-6 walls (11.9 / 3.7; rescale
