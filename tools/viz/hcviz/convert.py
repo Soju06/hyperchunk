@@ -33,6 +33,12 @@ Per-chunk completion event choices for the emitted 32×32 region:
     deco                — own decoration event end (E.t1); ignores neighbor
                           deco writes into this chunk (debug/comparison)
     chain               — chain stages done: noise/surface/carvers (C.w5)
+
+Two-stage reveal (VIZ-3): stage1="chain" additionally emits t_stage1_ms =
+own C.w5 per chunk — the instant the chunk's terrain shape is final while
+decoration is still pending.  Always <= t_done_ms (every event above is at
+or after the chunk's own chain end).  Timelines without the field render
+single-stage; see schema/timeline.schema.json.
 """
 
 from __future__ import annotations
@@ -127,17 +133,23 @@ def _complete_times(wf, path, strict):
     return recs
 
 
+STAGE1_EVENTS = ("chain",)
+
+
 def waterfall_to_timeline(
     path,
     system: str,
     display_name: str,
     stage: str = "",
     event: str = "complete",
+    stage1: str = None,
     seed: int = None,
     result_json: str = None,
 ) -> dict:
     if event not in EVENTS:
         raise ConvertError(f"unknown event '{event}' (want {EVENTS})")
+    if stage1 is not None and stage1 not in STAGE1_EVENTS:
+        raise ConvertError(f"unknown stage1 event '{stage1}' (want {STAGE1_EVENTS})")
     wf = parse_waterfall(path)
     t0 = wf["marks"]["setup_end"]
     wall_s = (wf["marks"]["proc_end"] - t0) / 1e9
@@ -163,10 +175,29 @@ def waterfall_to_timeline(
             if 0 <= cx < 32 and 0 <= cz < 32:
                 recs.append((cx, cz, w[5]))
 
-    chunks = [
-        {"cx": cx, "cz": cz, "t_done_ms": round((t - t0) / 1e6, 3)}
-        for cx, cz, t in recs
-    ]
+    s1_times = None
+    if stage1 == "chain":
+        s1_times = {}
+        for _i, cx, cz, _tid, *w in wf["C"]:
+            s1_times[(cx, cz)] = w[5]
+
+    chunks = []
+    for cx, cz, t in recs:
+        c = {"cx": cx, "cz": cz, "t_done_ms": round((t - t0) / 1e6, 3)}
+        if s1_times is not None:
+            s1 = s1_times.get((cx, cz))
+            if s1 is None:
+                raise ConvertError(
+                    f"{path}: no chain record for target chunk ({cx},{cz}) — "
+                    "cannot emit stage-1 series"
+                )
+            if s1 > t:
+                raise ConvertError(
+                    f"{path}: chain w5 after '{event}' time for ({cx},{cz}) — "
+                    "stage-1 must not exceed t_done"
+                )
+            c["t_stage1_ms"] = round((s1 - t0) / 1e6, 3)
+        chunks.append(c)
     chunks.sort(key=lambda c: c["t_done_ms"])
 
     meta = {
@@ -180,6 +211,8 @@ def waterfall_to_timeline(
     }
     if event in ("complete", "strict"):
         meta["pp_records"] = bool(wf["P"])
+    if stage1 is not None:
+        meta["stage1_event"] = stage1
     if seed is not None:
         meta["seed"] = seed
     if result_json:

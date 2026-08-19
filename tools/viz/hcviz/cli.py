@@ -101,6 +101,7 @@ def cmd_convert(args) -> int:
         display_name=args.display_name,
         stage=args.stage,
         event=args.event,
+        stage1=args.stage1,
         seed=args.seed,
         result_json=args.result,
     )
@@ -186,6 +187,8 @@ def main(argv=None) -> int:
     p.add_argument("--stage", default="")
     p.add_argument("--event", default="complete",
                    choices=("complete", "strict", "serialize", "deco", "chain"))
+    p.add_argument("--stage1", choices=("chain",),
+                   help="also emit t_stage1_ms per chunk (two-stage reveal)")
     p.add_argument("--seed", type=int)
     p.add_argument("--result", help="bench stdout JSON (adds seed/canonical/pass)")
     p.set_defaults(fn=cmd_convert)

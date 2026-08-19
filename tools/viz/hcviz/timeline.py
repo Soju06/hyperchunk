@@ -52,12 +52,23 @@ class Timeline:
 
     def t_done_grid(self) -> np.ndarray:
         """(h, w) float ms grid, +inf where no chunk completion was recorded."""
+        return self._grid("t_done_ms")
+
+    def t_stage1_grid(self):
+        """(h, w) float ms grid of the optional stage-1 series (see
+        meta.stage1_event), +inf where a chunk carries no t_stage1_ms.
+        None when no chunk carries the series (single-stage timeline)."""
+        if not any("t_stage1_ms" in c for c in self.chunks):
+            return None
+        return self._grid("t_stage1_ms")
+
+    def _grid(self, field: str) -> np.ndarray:
         x0, z0, w, h = self.region()
         grid = np.full((h, w), np.inf, dtype=np.float64)
         for c in self.chunks:
             gx, gz = c["cx"] - x0, c["cz"] - z0
-            if 0 <= gx < w and 0 <= gz < h:
-                grid[gz, gx] = c["t_done_ms"]
+            if 0 <= gx < w and 0 <= gz < h and field in c:
+                grid[gz, gx] = c[field]
         return grid
 
     def scaled(self, wall_s: float) -> "Timeline":
@@ -65,10 +76,14 @@ class Timeline:
         f = wall_s / self.wall_s
         data = dict(self.data)
         data["wall_s"] = wall_s
-        data["chunks"] = [
-            {"cx": c["cx"], "cz": c["cz"], "t_done_ms": round(c["t_done_ms"] * f, 3)}
-            for c in self.chunks
-        ]
+
+        def _scale(c):
+            out = {"cx": c["cx"], "cz": c["cz"], "t_done_ms": round(c["t_done_ms"] * f, 3)}
+            if "t_stage1_ms" in c:
+                out["t_stage1_ms"] = round(c["t_stage1_ms"] * f, 3)
+            return out
+
+        data["chunks"] = [_scale(c) for c in self.chunks]
         meta = dict(self.meta)
         meta["time_scaled_from_wall_s"] = self.wall_s
         data["meta"] = meta
@@ -124,6 +139,14 @@ def semantic_errors(data) -> list:
             errors.append(
                 f"chunks[{i}]: t_done_ms {t:.1f} exceeds wall_s ({wall_ms:.1f} ms)"
             )
+        elif "t_stage1_ms" in c:
+            s1 = c["t_stage1_ms"]
+            if isinstance(s1, bool) or not isinstance(s1, (int, float)) or s1 < 0:
+                errors.append(f"chunks[{i}]: t_stage1_ms must be a number >= 0")
+            elif s1 > t:
+                errors.append(
+                    f"chunks[{i}]: t_stage1_ms {s1:.1f} exceeds t_done_ms ({t:.1f})"
+                )
         if region and not (
             region[0] <= c["cx"] < region[0] + region[2]
             and region[1] <= c["cz"] < region[1] + region[3]

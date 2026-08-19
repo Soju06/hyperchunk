@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hcviz/timeline.schema.json",
   "title": "hcviz per-chunk completion timeline",
-  "description": "One benchmarked system's per-chunk completion times. t=0 is generation start (setup/boot excluded). All chunk coords are absolute chunk coords; the emitted race region defaults to cx,cz in [0,31] (r.0.0).",
+  "description": "One benchmarked system's per-chunk completion times. t=0 is generation start (setup/boot excluded). All chunk coords are absolute chunk coords; the emitted race region defaults to cx,cz in [0,31] (r.0.0). Two-stage reveal (VIZ-3): chunks[].t_stage1_ms is an OPTIONAL second per-chunk series marking an earlier partial-content instant (meta.stage1_event names it; hyperchunk: 'chain' = terrain shape final, decoration pending). Design choice: one file carries both series because they come from the same capture run and must never be mixed across runs; a two-timeline input was rejected for that reason. Files without t_stage1_ms are valid unchanged and render single-stage — backward compatible by construction.",
   "type": "object",
   "required": ["system", "display_name", "wall_s", "chunks"],
   "additionalProperties": false,
@@ -36,7 +36,12 @@
         "properties": {
           "cx": { "type": "integer" },
           "cz": { "type": "integer" },
-          "t_done_ms": { "type": "number", "minimum": 0 }
+          "t_done_ms": { "type": "number", "minimum": 0 },
+          "t_stage1_ms": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Optional stage-1 instant (<= t_done_ms): earlier partial-content event named by meta.stage1_event. Renderers without two-stage support may ignore it."
+          }
         }
       }
     },
@@ -59,6 +64,10 @@
         "event": {
           "type": "string",
           "description": "Which per-chunk event t_done_ms marks (hyperchunk: complete|strict|serialize|deco|chain)"
+        },
+        "stage1_event": {
+          "type": "string",
+          "description": "Which per-chunk event t_stage1_ms marks when present (hyperchunk: chain — noise/surface/carvers done, terrain shape final, deco pending)"
         },
         "pp_records": {
           "type": "boolean",
