@@ -13,22 +13,31 @@
 #   disclosure). Rescale factor 0.980, recorded in loaded meta
 #   (time_scaled_from_wall_s). Previous claw-stage capture is kept at
 #   timelines/hyperchunk-free-claw.json for comparison.
-# Vanilla / C2ME panels: MEASURED per-chunk timelines (VIZ-4, hc-e6, same
-#   stage as the race walls) — forceload + `execute if loaded` FULL-status
-#   probe at 0.1s poll, observer-load gate passed (interleaved 3s vs 0.1s
-#   runs; 0.1s medians inside the B-6 band). Chosen runs: vanilla p01-2
-#   (t1 11.866s), c2me p01-1 (t1 3.394s) — median-wall gate-passing runs.
-#   normalize_wall_s pins both panel clocks to the published B-6 walls
-#   (11.9 / 3.7; rescale 1.0029 / 1.0902 — the published walls carry the
-#   coarser 0.5s-poll one-sided overshoot; recorded in loaded meta as
-#   time_scaled_from_wall_s). The measured shape is an END STEP-FUNCTION
-#   for both (FULL promotions pile into the last poll cycles: vanilla 0
-#   until 11.64s, C2ME 0 until 3.39s) — that is the honest externally
-#   observable picture (sub-full progress is invisible without a mod hook);
-#   do not smooth it. The renderer prints a one-line micro-caption
-#   `probe ±0.1s` for panels carrying meta.probe_interval_ms; the synthetic
-#   caption path remains for synthetic timelines (kept on disk for contrast:
-#   timelines/vanilla-b6-scan.json, timelines/c2me-b6-wave.json).
+# Vanilla / C2ME panels: INSTRUMENTED per-chunk timelines (VIZ-5, hc-e6,
+#   same stage as the race walls) — a minimal Fabric mixin mod
+#   (tools/viz/capture/chunk-timeline-mod) timestamps every ChunkStep
+#   completion server-side, in-memory, single flush at exit. Two-stage
+#   semantics mirror the hyperchunk panel: t_stage1_ms = SURFACE completion
+#   (terrain shape final, deco pending), t_done_ms = FEATURES completion
+#   (last block content write). Overhead gate passed (interleaved 3 clean vs
+#   3 instrumented runs; instrumented wall medians vanilla 11.708s /
+#   c2me 3.355s inside the VIZ-4 measured bands 11.7-11.9 / 3.35-3.69).
+#   Chosen runs: vanilla v5i-1 (t1 11.708s), c2me v5i-2 (t1 3.355s) —
+#   median-wall instrumented runs. Vanilla dedicated cannot load mods, so
+#   the vanilla panel shape comes from Fabric loader 0.19.3 + the hook mod
+#   ONLY (no C2ME; worldgen bit-identical, golden-pipeline precedent) —
+#   meta.instrumented records this; fairness footnote in
+#   .hermes/notes/viz/VIZ-5-instrumented-streaming.md. normalize_wall_s
+#   pins both panel clocks to the published B-6 walls (11.9 / 3.7; rescale
+#   1.0164 / 1.1028, recorded in loaded meta as time_scaled_from_wall_s).
+#   Unlike the external FULL-promotion probe (VIZ-4, kept on disk for
+#   contrast: timelines/vanilla-hce6.json, c2me-hce6.json — honest end
+#   step-functions), the instrumented series show the servers' real
+#   internal progress (features-done p50 at 46% / 58% of wall). Caption:
+#   `instrumented chunk timing · measured walls` keyed on
+#   meta.instrumented; probe/synthetic caption paths remain for the
+#   on-disk contrast timelines (also timelines/vanilla-b6-scan.json,
+#   timelines/c2me-b6-wave.json).
 theme: ../themes/ivory.json
 layout: race3
 view: reveal
@@ -46,12 +55,12 @@ endcard:
 panels:
   - name: Vanilla
     accent: vanilla
-    timeline: timelines/vanilla-hce6.json
+    timeline: timelines/vanilla-hce6-instr.json
     tile: tiles/vanilla-b6.png
     normalize_wall_s: 11.9
   - name: C2ME
     accent: c2me
-    timeline: timelines/c2me-hce6.json
+    timeline: timelines/c2me-hce6-instr.json
     tile: tiles/c2me-b6.png
     normalize_wall_s: 3.7
   - name: hyperchunk
