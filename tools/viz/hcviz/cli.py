@@ -138,6 +138,34 @@ def cmd_convert_probe(args) -> int:
     return 0
 
 
+def cmd_convert_instr(args) -> int:
+    from .convert import instr_tsv_to_timeline
+
+    data = instr_tsv_to_timeline(
+        args.tsv,
+        system=args.system,
+        display_name=args.display_name,
+        wall_s=args.wall_s,
+        t0_epoch=args.t0_epoch,
+        stage=args.stage,
+        seed=args.seed,
+        workers=args.workers,
+        stage1_stage=args.stage1_stage,
+        done_stage=args.done_stage,
+    )
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(data, ensure_ascii=False) + "\n")
+    print(
+        f"wrote {out}: {data['system']} wall={data['wall_s']}s "
+        f"chunks={len(data['chunks'])} stage1={args.stage1_stage} "
+        f"done={args.done_stage} "
+        f"disk_loaded={data['meta']['disk_loaded_chunks']} "
+        f"drift={data['meta']['clock_drift_ms']}ms"
+    )
+    return 0
+
+
 def cmd_synth(args) -> int:
     from .timeline import synth
 
@@ -232,6 +260,29 @@ def main(argv=None) -> int:
     p.add_argument("--seed", type=int)
     p.add_argument("--workers", type=int)
     p.set_defaults(fn=cmd_convert_probe)
+
+    p = sub.add_parser(
+        "convert-instr",
+        help="chunk-timeline mod TSV (server-side stage completions) → timeline.json",
+    )
+    p.add_argument("tsv")
+    p.add_argument("--out", required=True)
+    p.add_argument("--system", required=True)
+    p.add_argument("--display-name", required=True)
+    p.add_argument("--wall-s", type=float, required=True,
+                   help="run t1 (gen_s from results.jsonl; probe loop unchanged)")
+    p.add_argument("--t0-epoch", type=float, required=True,
+                   help="runner forceload t0 (t0_epoch from results.jsonl)")
+    p.add_argument("--stage", default="")
+    p.add_argument("--stage1-stage", default="surface",
+                   choices=("noise", "surface"),
+                   help="ChunkStatus completion bound to t_stage1_ms")
+    p.add_argument("--done-stage", default="features",
+                   choices=("features",),
+                   help="ChunkStatus completion bound to t_done_ms")
+    p.add_argument("--seed", type=int)
+    p.add_argument("--workers", type=int)
+    p.set_defaults(fn=cmd_convert_instr)
 
     p = sub.add_parser("synth", help="generate a synthetic timeline")
     p.add_argument("--pattern", required=True, choices=("scan", "wave", "burst"))

@@ -61,6 +61,14 @@
           "description": "Synthetic pattern name (scan|wave|burst) when synthetic"
         },
         "source": { "type": "string", "description": "Raw capture file this was converted from" },
+        "instrumented": {
+          "type": "string",
+          "description": "Present when chunk times come from server-side instrumentation; names the hook stack (e.g. 'fabric-loader+chunk-timeline-mod'). Drives the renderer's 'instrumented chunk timing' caption."
+        },
+        "done_event": {
+          "type": "string",
+          "description": "Which per-chunk ChunkStatus completion t_done_ms marks (instrumented timelines: features)"
+        },
         "event": {
           "type": "string",
           "description": "Which per-chunk event t_done_ms marks (hyperchunk: complete|strict|serialize|deco|chain)"

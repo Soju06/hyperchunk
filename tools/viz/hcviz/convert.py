@@ -134,6 +134,162 @@ def probe_tsv_to_timeline(
     }
 
 
+INSTRUMENTED_NAME = "fabric-loader+chunk-timeline-mod"
+INSTR_STAGE1_STAGES = ("noise", "surface")
+INSTR_DONE_STAGES = ("features",)
+
+
+def instr_tsv_to_timeline(
+    path,
+    system: str,
+    display_name: str,
+    wall_s: float,
+    t0_epoch: float,
+    stage: str = "",
+    seed: int = None,
+    workers: int = None,
+    stage1_stage: str = "surface",
+    done_stage: str = "features",
+) -> dict:
+    """chunk-timeline mod TSV (viz5_run.sh instrumented capture) → timeline.
+
+    Input (tools/viz/capture/chunk-timeline-mod): header pairs
+    '# ref epoch_ms=<ms> nano=<ns>' / '# flush epoch_ms=<ms> nano=<ns>',
+    then event rows 'kind stageIndex stageName cx cz nano' where kind 'g' is
+    a GENERATION_PYRAMID step completion and 'l' a LOADING_PYRAMID one.
+
+    Event nanos map onto the epoch clock via the ref pair; t_rel =
+    epoch(evt) - t0_epoch (runner forceload t0, `date +%s.%N`).  Only events
+    with t_rel >= 0 count: earlier ones are boot spawn-prep generation (the
+    ~144 r.0.0 chunks pre-generated on disk before t0, B-6 §3 census) —
+    content made before the timed window opened.
+
+    Per chunk, both series take the FIRST in-window completion of their
+    stage from EITHER pyramid:
+      t_stage1_ms — `stage1_stage` ('g' = freshly generated terrain, 'l' =
+                    the instant a boot-saved chunk's terrain became
+                    available on load)
+      t_done_ms   — `done_stage`, same rule
+    A chunk loaded from disk at final status therefore collapses to
+    t_stage1 == t_done within microseconds (appears at once) — honest: its
+    content was decided during boot, outside the window.  meta records the
+    count as disk_loaded_chunks (done event came from the loading pyramid).
+
+    wall_s is the run's probe t1 (the poll loop is unchanged in
+    viz5_run.sh), so the timeline shares VIZ-4's wall semantics.
+    meta.probe_interval_ms is deliberately ABSENT — the caption keys
+    'instrumented chunk timing' on meta.instrumented instead.
+    """
+    if stage1_stage not in INSTR_STAGE1_STAGES:
+        raise ConvertError(
+            f"unknown stage1 stage '{stage1_stage}' (want {INSTR_STAGE1_STAGES})")
+    if done_stage not in INSTR_DONE_STAGES:
+        raise ConvertError(
+            f"unknown done stage '{done_stage}' (want {INSTR_DONE_STAGES})")
+    p = Path(path)
+    refs = {}
+    s1_first, done_first = {}, {}
+    with open(p) as f:
+        for ln, line in enumerate(f, 1):
+            parts = line.split()
+            if not parts:
+                continue
+            if parts[0] == "#":
+                if len(parts) >= 4 and parts[1] in ("ref", "flush") \
+                        and parts[2].startswith("epoch_ms=") \
+                        and parts[3].startswith("nano="):
+                    refs[parts[1]] = (
+                        int(parts[2].split("=", 1)[1]),
+                        int(parts[3].split("=", 1)[1]),
+                    )
+                continue
+            if len(parts) != 6:
+                raise ConvertError(
+                    f"{p}:{ln}: want 'kind stageIndex stageName cx cz nano', "
+                    f"got {line!r}")
+            kind, _idx, name, cx, cz, nano = (
+                parts[0], parts[1], parts[2],
+                int(parts[3]), int(parts[4]), int(parts[5]),
+            )
+            if name == stage1_stage:
+                target = s1_first
+            elif name == done_stage:
+                target = done_first
+            else:
+                continue
+            if "ref" not in refs:
+                raise ConvertError(f"{p}:{ln}: event before '# ref' header")
+            ref_ms, ref_nano = refs["ref"]
+            t_rel = ref_ms / 1000.0 + (nano - ref_nano) / 1e9 - t0_epoch
+            if t_rel < 0:
+                continue  # pre-t0: boot spawn-prep
+            key = (cx, cz)
+            if key not in target or t_rel < target[key][0]:
+                target[key] = (t_rel, kind)
+    if "ref" not in refs or "flush" not in refs:
+        raise ConvertError(f"{p}: missing '# ref'/'# flush' clock headers")
+    ref_ms, ref_nano = refs["ref"]
+    fl_ms, fl_nano = refs["flush"]
+    drift_ms = fl_ms - (ref_ms + (fl_nano - ref_nano) / 1e6)
+    if abs(drift_ms) > 100.0:
+        raise ConvertError(
+            f"{p}: epoch/nanoTime drift {drift_ms:.1f}ms over the run — "
+            "clock mapping unreliable")
+
+    want = {(x, z) for x in range(32) for z in range(32)}
+    for label, got in (("stage1", s1_first.keys()), ("done", done_first.keys())):
+        have = want & set(got)
+        if have != want:
+            missing = sorted(want - have)[:5]
+            raise ConvertError(
+                f"{p}: {label} series not full r.0.0 coverage "
+                f"({len(have)}/1024; missing {missing})")
+
+    chunks = []
+    loaded = 0
+    for (cx, cz) in sorted(want):
+        s1, s1_kind = s1_first[(cx, cz)]
+        t, t_kind = done_first[(cx, cz)]
+        if s1 > t:
+            raise ConvertError(
+                f"{p}: {stage1_stage} after {done_stage} for ({cx},{cz}) — "
+                "stage-1 must not exceed t_done")
+        if t > wall_s:
+            raise ConvertError(
+                f"{p}: t_done past wall_s {wall_s} for ({cx},{cz}): {t:.3f}")
+        if t_kind == "l":
+            loaded += 1
+        chunks.append({
+            "cx": cx, "cz": cz,
+            "t_done_ms": round(t * 1000.0, 3),
+            "t_stage1_ms": round(s1 * 1000.0, 3),
+        })
+    chunks.sort(key=lambda c: c["t_done_ms"])
+
+    meta = {
+        "source": p.name,
+        "instrumented": INSTRUMENTED_NAME,
+        "stage1_event": stage1_stage,
+        "done_event": done_stage,
+        "disk_loaded_chunks": loaded,
+        "clock_drift_ms": round(drift_ms, 3),
+        "region": {"x0": 0, "z0": 0, "w": 32, "h": 32},
+    }
+    if seed is not None:
+        meta["seed"] = seed
+    if workers is not None:
+        meta["workers"] = workers
+
+    return {
+        "system": system,
+        "display_name": display_name,
+        "stage": stage,
+        "wall_s": wall_s,
+        "chunks": chunks,
+        "meta": meta,
+    }
+
+
 def parse_waterfall(path):
     p = Path(path)
     marks, C, E, S, P = {}, [], [], [], []

@@ -184,10 +184,11 @@ class Renderer:
                 (x, y + size + pg_dy, x + size - 1, y + size + pg_dy + pg_h - 1),
                 fill=t.color("track"),
             )
-        # VIZ-2/VIZ-4: panel micro-caption — single line in the empty band
-        # below the progress track (y≈567..598); no v5-specced pixel moves.
-        # Synthetic panels are named as such; measured probe panels get a
-        # one-sided-error tail keyed on meta.probe_interval_ms.
+        # VIZ-2/VIZ-4/VIZ-5: panel micro-caption — single line in the empty
+        # band below the progress track (y≈567..598); no v5-specced pixel
+        # moves.  Synthetic panels are named as such; server-side
+        # instrumented panels key on meta.instrumented; measured probe
+        # panels get a one-sided-error tail keyed on meta.probe_interval_ms.
         segs = []
         synth = [p.label for p in self.panels if p.timeline.meta.get("synthetic")]
         if synth:
@@ -195,10 +196,22 @@ class Renderer:
                 " · ".join(n.lower() for n in synth)
                 + ": synthetic chunk timing · measured walls"
             )
+        instr = [
+            p.label
+            for p in self.panels
+            if p.timeline.meta.get("instrumented")
+            and not p.timeline.meta.get("synthetic")
+        ]
+        if instr:
+            segs.append(
+                " · ".join(n.lower() for n in instr)
+                + ": instrumented chunk timing · measured walls"
+            )
         by_iv = {}
         for p in self.panels:
             iv = p.timeline.meta.get("probe_interval_ms")
-            if iv and not p.timeline.meta.get("synthetic"):
+            if iv and not p.timeline.meta.get("synthetic") \
+                    and not p.timeline.meta.get("instrumented"):
                 by_iv.setdefault(iv, []).append(p.label)
         for iv, labels in sorted(by_iv.items()):
             segs.append(
