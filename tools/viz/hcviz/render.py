@@ -184,17 +184,30 @@ class Renderer:
                 (x, y + size + pg_dy, x + size - 1, y + size + pg_dy + pg_h - 1),
                 fill=t.color("track"),
             )
-        # VIZ-2: synthetic-panel micro-caption — single line in the empty band
+        # VIZ-2/VIZ-4: panel micro-caption — single line in the empty band
         # below the progress track (y≈567..598); no v5-specced pixel moves.
+        # Synthetic panels are named as such; measured probe panels get a
+        # one-sided-error tail keyed on meta.probe_interval_ms.
+        segs = []
         synth = [p.label for p in self.panels if p.timeline.meta.get("synthetic")]
         if synth:
-            caption = (
+            segs.append(
                 " · ".join(n.lower() for n in synth)
                 + ": synthetic chunk timing · measured walls"
             )
+        by_iv = {}
+        for p in self.panels:
+            iv = p.timeline.meta.get("probe_interval_ms")
+            if iv and not p.timeline.meta.get("synthetic"):
+                by_iv.setdefault(iv, []).append(p.label)
+        for iv, labels in sorted(by_iv.items()):
+            segs.append(
+                " · ".join(n.lower() for n in labels) + f": probe ±{iv / 1000:g}s"
+            )
+        if segs:
             d.text(
                 (lay.pad, lay.height - t.get("caption", "bottom", default=26)),
-                caption,
+                " — ".join(segs),
                 font=t.font("body", t.get("caption", "size", default=13)),
                 fill=t.color("subink"),
             )

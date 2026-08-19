@@ -49,9 +49,89 @@ from pathlib import Path
 EVENTS = ("complete", "strict", "serialize", "deco", "chain")
 _EV_DECO = 0
 
+PROBE_NAME = "forceload+if-loaded full-status"
+
 
 class ConvertError(Exception):
     pass
+
+
+def probe_tsv_to_timeline(
+    path,
+    system: str,
+    display_name: str,
+    wall_s: float,
+    poll_s: float,
+    stage: str = "",
+    seed: int = None,
+    workers: int = None,
+) -> dict:
+    """chunks-*.tsv (viz_run.sh per-chunk probe capture) → timeline dict.
+
+    Input rows: TREL_s \\t CX \\t CZ — TREL is the driver clock at the poll
+    cycle where the chunk's FULL-status promotion was first confirmed
+    (t0 = forceload).  One-sided overestimate <= POLL_S + command tick
+    alignment (~50ms) + console/log round trip; see
+    tools/viz/capture/vanilla-c2me-probe.md.
+
+    wall_s is the run's t1 (first poll with all 1024 confirmed) — the same
+    one-sided probe overshoot applies.  These are single-series timelines
+    (no t_stage1_ms: FULL promotion is the only externally observable
+    completion instant; sub-full progress needs a mod hook).
+    meta.synthetic is deliberately ABSENT (measured data); the renderer's
+    probe caption keys on meta.probe_interval_ms instead.
+    """
+    p = Path(path)
+    recs = []
+    with open(p) as f:
+        for ln, line in enumerate(f, 1):
+            parts = line.split()
+            if not parts:
+                continue
+            if len(parts) != 3:
+                raise ConvertError(f"{p}:{ln}: want 'TREL\\tCX\\tCZ', got {line!r}")
+            trel, cx, cz = float(parts[0]), int(parts[1]), int(parts[2])
+            recs.append((cx, cz, trel))
+    seen = {(cx, cz) for cx, cz, _ in recs}
+    if len(seen) != len(recs):
+        raise ConvertError(f"{p}: duplicate chunk confirmations")
+    want = {(x, z) for x in range(32) for z in range(32)}
+    if seen != want:
+        missing = sorted(want - seen)[:5]
+        extra = sorted(seen - want)[:5]
+        raise ConvertError(
+            f"{p}: not exactly r.0.0 coverage ({len(seen)}/1024; "
+            f"missing {missing}, extra {extra})"
+        )
+    late = [(cx, cz, t) for cx, cz, t in recs if t > wall_s]
+    if late:
+        raise ConvertError(f"{p}: t_done past wall_s {wall_s}: {late[:3]}")
+
+    chunks = [
+        {"cx": cx, "cz": cz, "t_done_ms": round(t * 1000.0, 3)}
+        for cx, cz, t in recs
+    ]
+    chunks.sort(key=lambda c: c["t_done_ms"])
+
+    meta = {
+        "source": p.name,
+        "probe": PROBE_NAME,
+        "probe_interval_ms": round(poll_s * 1000.0, 3),
+        "region": {"x0": 0, "z0": 0, "w": 32, "h": 32},
+    }
+    if seed is not None:
+        meta["seed"] = seed
+    if workers is not None:
+        meta["workers"] = workers
+
+    return {
+        "system": system,
+        "display_name": display_name,
+        "stage": stage,
+        "wall_s": wall_s,
+        "chunks": chunks,
+        "meta": meta,
+    }
 
 
 def parse_waterfall(path):

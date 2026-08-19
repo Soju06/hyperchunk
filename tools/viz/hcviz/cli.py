@@ -1,4 +1,4 @@
-"""hcviz command line: render / still / validate / convert / synth / tile."""
+"""hcviz command line: render / still / validate / convert / convert-probe / synth / tile."""
 
 from __future__ import annotations
 
@@ -115,6 +115,29 @@ def cmd_convert(args) -> int:
     return 0
 
 
+def cmd_convert_probe(args) -> int:
+    from .convert import probe_tsv_to_timeline
+
+    data = probe_tsv_to_timeline(
+        args.tsv,
+        system=args.system,
+        display_name=args.display_name,
+        wall_s=args.wall_s,
+        poll_s=args.poll_s,
+        stage=args.stage,
+        seed=args.seed,
+        workers=args.workers,
+    )
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(data, ensure_ascii=False) + "\n")
+    print(
+        f"wrote {out}: {data['system']} wall={data['wall_s']}s "
+        f"chunks={len(data['chunks'])} probe_interval={args.poll_s}s"
+    )
+    return 0
+
+
 def cmd_synth(args) -> int:
     from .timeline import synth
 
@@ -192,6 +215,23 @@ def main(argv=None) -> int:
     p.add_argument("--seed", type=int)
     p.add_argument("--result", help="bench stdout JSON (adds seed/canonical/pass)")
     p.set_defaults(fn=cmd_convert)
+
+    p = sub.add_parser(
+        "convert-probe",
+        help="viz_run.sh per-chunk probe TSV (FULL-status promotion) → timeline.json",
+    )
+    p.add_argument("tsv")
+    p.add_argument("--out", required=True)
+    p.add_argument("--system", required=True)
+    p.add_argument("--display-name", required=True)
+    p.add_argument("--wall-s", type=float, required=True,
+                   help="run t1 (gen_s from results.jsonl; probe overshoot included)")
+    p.add_argument("--poll-s", type=float, required=True,
+                   help="POLL_S actually used (recorded as meta.probe_interval_ms)")
+    p.add_argument("--stage", default="")
+    p.add_argument("--seed", type=int)
+    p.add_argument("--workers", type=int)
+    p.set_defaults(fn=cmd_convert_probe)
 
     p = sub.add_parser("synth", help="generate a synthetic timeline")
     p.add_argument("--pattern", required=True, choices=("scan", "wave", "burst"))
