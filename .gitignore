@@ -67,3 +67,7 @@ Testing/
 
 # gradle wrapper caches for capture mods
 .gradle/
+
+# local agent working notes — the tracked history moved to
+# openspec/changes/archive/ (GH-2); new local notes stay untracked
+.hermes/
