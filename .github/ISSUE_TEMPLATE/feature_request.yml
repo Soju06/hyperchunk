@@ -1,0 +1,70 @@
+name: Feature request
+description: Propose a new feature, enhancement, or scope change.
+title: "feat: <one-line summary>"
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing: hyperchunk's scope is deliberately narrow and recorded in
+        [DECISIONS.md](https://github.com/Soju06/hyperchunk/blob/main/DECISIONS.md) —
+        several tempting features (GPU backend, seed search, network layer,
+        approximate float generation) are explicit anti-goals with reasons. A
+        proposal that touches an anti-goal needs to argue against the recorded
+        reasoning, not just ask.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I searched existing issues for similar proposals.
+          required: true
+        - label: I checked DECISIONS.md and this doesn't hit a recorded anti-goal (or I address it below).
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What limitation or pain point does this address? Who hits it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: >-
+        Concrete description. If it touches the core, state how it preserves
+        the invariants (bit-exact parity, RNG order, region-level ABI, pure
+        compute core — see CONTRIBUTING.md).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - core pipeline (noise / surface / carvers / features / light)
+        - SIMD backends
+        - scheduler (FREE / REPLAY)
+        - region output / NBT
+        - datapack compatibility
+        - CLI / bench tooling
+        - viz / demo
+        - golden capture tooling
+        - docs / project meta
+        - other
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context

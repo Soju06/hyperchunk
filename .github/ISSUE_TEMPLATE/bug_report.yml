@@ -1,0 +1,106 @@
+name: Bug report
+description: Report a crash, wrong output, build failure, or other reproducible bug.
+title: "bug: <one-line summary>"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Before you continue:
+
+        - If the bug is **"my generated terrain differs from vanilla"**, use the
+          dedicated **Parity mismatch** form instead — it asks for the right evidence.
+        - For security vulnerabilities, use a
+          [private advisory](https://github.com/Soju06/hyperchunk/security/advisories/new) —
+          do **not** post them here.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I can reproduce this on current `main`.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: hyperchunk version
+      description: Commit SHA (`git rev-parse --short HEAD`) or release tag.
+      placeholder: "5c87c5b"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: isa
+    attributes:
+      label: ISA backend
+      description: >-
+        Which backend was active (`--isa` flag, or the runtime cpuid dispatch
+        default for your CPU). Pick "not ISA-related" for build/tooling bugs.
+      options:
+        - scalar
+        - AVX2
+        - AVX-512
+        - runtime dispatch default (unsure which)
+        - not ISA-related
+    validations:
+      required: true
+
+  - type: input
+    id: seed
+    attributes:
+      label: Seed
+      description: World seed used, if the bug involves generation.
+      placeholder: "1234567890"
+
+  - type: input
+    id: region
+    attributes:
+      label: Region / chunk coordinates
+      description: Region (r.X.Z) or chunk (c.X.Z) coordinates where the bug shows.
+      placeholder: "r.0.0 / c.17.4"
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction command
+      description: >-
+        Exact command line(s) — build preset, binary, flags. Include the cmake
+        configure/build commands for build failures.
+      render: shell
+      placeholder: |
+        cmake -S . -B build && cmake --build build -j
+        ./build/cli/hyperchunk-verify --seed 1234567890 --region 0 0 --repo . --out /tmp/r.0.0.mca
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs actual output
+      description: >-
+        What you expected (e.g. the gate's `PASS: bit-exact parity` line, a
+        hash from `golden/SHA256SUMS`) vs what you got — paste hashes and
+        error output verbatim.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: CPU model, OS, compiler + version, CMake version.
+      placeholder: |
+        AMD Ryzen 9 5900X (Zen 3, AVX2, no AVX-512)
+        Ubuntu 24.04, GCC 13.3, CMake 3.28
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Sanitizer output, disassembly excerpts, related issues.

@@ -221,6 +221,17 @@ algorithms, and the
 [Minecraft Wiki](https://minecraft.wiki/w/Data_pack) for datapack worldgen
 schemas.
 
+## Contributing
+
+Contributions are welcome — see
+[.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) for the development setup,
+commit convention, and merge gates. The short version: the build must stay
+zero-warning, the load-bearing invariants (bit-exact parity, FMA prohibition,
+RNG order, and friends) are non-negotiable, and the parity suites that need
+local-only golden captures must be run locally — CI covers only the
+tracked-data subset. Security reports go through
+[private advisories](.github/SECURITY.md), not public issues.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

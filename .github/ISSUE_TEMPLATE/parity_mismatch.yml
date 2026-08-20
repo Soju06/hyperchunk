@@ -1,0 +1,129 @@
+name: Parity mismatch
+description: >-
+  Generated output differs from vanilla — a hash or stage-dump divergence
+  against golden data. The core product claim; highest triage priority.
+title: "bug(parity): <stage + one-line summary>"
+labels: ["bug", "parity", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A parity mismatch report is only actionable with the exact evidence below.
+        Two things to check first (both are expected behavior, not bugs):
+
+        - **FREE-mode output at stages 07+ differing between runs is definitional**
+          — vanilla itself is order-nondeterministic there. Parity is judged in
+          REPLAY mode against a golden order manifest (ADR-007/ADR-008).
+        - Comparisons must use **canonical payload hashes** (LastUpdate-masked),
+          not raw `.mca` file hashes — the container timestamps and compression
+          batching are nondeterministic.
+
+  - type: input
+    id: mc_version
+    attributes:
+      label: Minecraft version
+      description: Target version the golden data was captured from. This repo pins one version (see TARGET_VERSION).
+      placeholder: "26.2"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: hyperchunk version
+      description: Commit SHA the divergence was produced with.
+      placeholder: "5c87c5b"
+    validations:
+      required: true
+
+  - type: input
+    id: seed
+    attributes:
+      label: Seed
+      placeholder: "1234567890"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Stage where divergence is first observed
+      description: The earliest pipeline stage whose dump/hash differs — upstream of that, everything matched.
+      options:
+        - 01–02 structures (starts/references)
+        - 03 biomes
+        - 04 noise
+        - 05 surface
+        - 06 carvers
+        - 07 features
+        - 08–09 light
+        - 10 spawn
+        - 11 full
+        - region output (canonical payload / NBT)
+        - unknown — only the final region hash differs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Scheduler mode
+      description: REPLAY (order manifest) is the parity-judgment mode. See the note above before reporting FREE-mode 07+ diffs.
+      options:
+        - REPLAY (order-replay against golden manifest)
+        - FREE (bench scheduling)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: isa
+    attributes:
+      label: ISA backend
+      options:
+        - scalar
+        - AVX2
+        - AVX-512
+        - multiple backends diverge from each other (include details below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: hashes
+    attributes:
+      label: Golden hash vs produced hash
+      description: >-
+        The expected hash (from golden/SHA256SUMS or the stage-dump SHA256SUMS)
+        and the hash your run produced, verbatim, with the exact path/label of
+        the hashed object.
+      render: text
+      placeholder: |
+        golden:   golden/SHA256SUMS #canonical-payload r.0.0 = ab12...
+        produced: hyperchunk-verify canonical-payload  r.0.0 = cd34...
+    validations:
+      required: true
+
+  - type: textarea
+    id: diff
+    attributes:
+      label: Stage-dump diff excerpt
+      description: >-
+        If you have local golden stage dumps: the first ~30 lines of the diff
+        for the first diverging chunk (e.g. `diff golden/stages/seed.../c.X.Z/04_noise.blocks.txt <yours>`).
+        Include the chunk coordinates. If you only have the region hash, say so.
+      render: diff
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction command
+      render: shell
+      placeholder: |
+        SEED=1234567890 scripts/parity_gate.sh
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Datapack in use (if any), CPU model, compiler version, anything unusual about the golden capture.
