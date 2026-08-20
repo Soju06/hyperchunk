@@ -1,4 +1,7 @@
-# hyperchunk
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/banner-dark.png">
+  <img alt="hyperchunk — bit-exact vanilla Minecraft worldgen in pure C" src="assets/brand/banner.png">
+</picture>
 
 **A bit-exact Minecraft-compatible world generator in pure C.**
 
@@ -76,20 +79,20 @@ container embeds the capture-time wall clock.
 
 ## Demo
 
-The 3-way top-view race (vanilla / C2ME / hyperchunk revealing r.0.0 in real
-time) lives in [tools/viz/](tools/viz/) and regenerates in about 10 seconds:
+![3-way race: vanilla vs C2ME vs hyperchunk generating r.0.0](assets/race-b6.gif)
+
+All three panels replay **measured per-chunk timing** captured on the same
+machine (hc-e6, Zen 5): hyperchunk from its own instrumentation, vanilla and
+C2ME from a Fabric mixin mod logging worldgen stage completions
+(labeled in-frame; walls are the published bench numbers). The race lives in
+[tools/viz/](tools/viz/) and regenerates in about 10 seconds:
 
 ```bash
 cd tools/viz && ./bin/hcviz render demo/race-b6.yaml --out demo/out/race-b6.gif --out demo/out/race-b6.mp4
 ```
 
-The hyperchunk panel replays measured per-chunk completion times; the vanilla
-and C2ME panels currently use synthetic per-chunk timing against their
-measured walls (labeled in-frame). See
-[tools/viz/README.md](tools/viz/README.md) for the timeline schema and the
-capture protocol.
-
-<!-- demo-gif: pending re-render -->
+See [tools/viz/README.md](tools/viz/README.md) for the timeline schema and
+the capture protocol.
 
 ## What this is
 
