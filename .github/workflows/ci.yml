@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # CI runs the ctest subset that works from tracked data only. The 12
+  # excluded tests read gitignored local-only golden captures and fail on a
+  # fresh clone with GOLDEN/SETUP ERROR (verified empirically: fresh clone ->
+  # build -> ctest, 2026-08; per-test evidence table in
+  # .hermes/notes/gh-setup/GH-1-community-setup.md):
+  #
+  #   noise_stage surface_stage carvers_stage
+  #                             -> golden/stages/** dumps
+  #   features_walk light_stages spawn_full
+  #                             -> golden/stages/** (+ stages-alt/**) dumps
+  #                                AND golden/features-trace/** payloads (the
+  #                                trace payloads are what they hit first)
+  #   region_out                -> golden/features-trace/** payloads,
+  #                                golden/region-ref/, golden/*.mca
+  #   region_out_roundtrip      -> consume region_out's region_mca fixture
+  #   region_out_residuals         (FIXTURES_REQUIRED) and read gitignored
+  #                                golden/*.mca; with region_out excluded
+  #                                they would run fixture-less and fail, so
+  #                                the trio is excluded together
+  #   full_region free_region_golden free_region_own
+  #                             -> golden/region-ref/, region-ref-margin/,
+  #                                structures/
+  #
+  # The remaining 25 tests read nothing or only tracked paths (golden/rng/*.txt,
+  # golden/SHA256SUMS, order manifests, reference/ JSON). Two honest footnotes:
+  # df_x4/df_x8 self-skip (exit 77) on hosts without AVX2/AVX-512, and
+  # nbt_read passes vacuously on a fresh clone (it per-file-skips its
+  # gitignored golden/structures inputs by design — real coverage is local).
+  # There are no ctest LABELS in this repo, hence -E by name (anchored, exact).
+  CTEST_EXCLUDE: '^(noise_stage|surface_stage|carvers_stage|features_walk|light_stages|spawn_full|region_out|region_out_roundtrip|region_out_residuals|full_region|free_region_golden|free_region_own)$'
+
+jobs:
+  build-test:
+    name: Build + ctest (tracked-data subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Zero-warning is a merge gate but needs no extra flags here:
+      # -Wall -Wextra -Werror is unconditional in the root CMakeLists.txt.
+      - name: Configure (default preset — -O2, asserts on)
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Run tracked-data test subset
+        run: >-
+          ctest --test-dir build
+          -E "$CTEST_EXCLUDE"
+          --no-tests=error
+          --output-on-failure
+
+  no-fma:
+    name: FMA prohibition gate (release archive)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The gate judges build/core/libhyperchunk.a (the default preset's
+      # FMA-gated release archive) and is host-CPU independent: the AVX2/
+      # AVX-512 TUs are always compiled on x86-64, execution stays behind
+      # cpuid dispatch. Never point this at sanitizer builds (ADR-009 P2).
+      - name: Configure (default preset)
+        run: cmake -S . -B build
+
+      - name: Build core archive
+        run: cmake --build build --target hyperchunk -j"$(nproc)"
+
+      - name: check_no_fma
+        run: scripts/check_no_fma.sh
+
+  sanitizers:
+    name: ASan+UBSan (tracked-data subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # scripts/check_sanitizers.sh is the local gate; it hardcodes the FULL
+      # ctest suite (correct locally, where golden data exists) so it cannot
+      # run in CI. This job reproduces its build + runtime environment exactly
+      # (asan-ubsan preset, halt_on_error, --no-tests=error) constrained to
+      # the same tracked-data subset as build-test. The full-suite sanitizer
+      # pass stays a local merge gate (CONTRIBUTING.md § Merge gates).
+      - name: Configure (asan-ubsan preset)
+        run: cmake --preset asan-ubsan
+
+      - name: Build
+        run: cmake --build build-asan -j"$(nproc)"
+
+      - name: Run tracked-data test subset under ASan+UBSan
+        env:
+          ASAN_OPTIONS: halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: >-
+          ctest --test-dir build-asan
+          -E "$CTEST_EXCLUDE"
+          --no-tests=error
+          --output-on-failure
+
+  commitlint:
+    name: Commit convention
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout repository (full history for the PR range)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validator self-test
+        run: python3 scripts/ci/check_commit_msgs.py --self-test
+
+      # origin/$GITHUB_BASE_REF (the CURRENT base tip) rather than the
+      # event's base.sha: base.sha is frozen at PR creation, so after the PR
+      # pulls in newer main, a frozen-base range would re-lint mainline
+      # commits. --no-merges keeps real merge commits out of the validator
+      # (which therefore has no textual "Merge " exemption to evade).
+      # pipefail: a failed git log must fail the job, not feed the validator
+      # empty stdin (which would silently pass).
+      - name: Validate PR commit subjects
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git log --no-merges --format=%s "origin/${GITHUB_BASE_REF}..${HEAD_SHA}" \
+            | python3 scripts/ci/check_commit_msgs.py --stdin
+
+  # Single branch-protection check: require "CI Required" and every job above
+  # is covered, including future ones added to `needs`. commitlint is skipped
+  # on push-to-main, which is fine — it gates PRs.
+  ci-required:
+    name: CI Required
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - build-test
+      - no-fma
+      - sanitizers
+      - commitlint
+    steps:
+      - name: Require every CI job to pass
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed = {
+              name: details["result"]
+              for name, details in sorted(needs.items())
+              if details.get("result") not in {"success", "skipped"}
+          }
+          if failed:
+              for name, result in failed.items():
+                  print(f"{name}: {result}")
+              sys.exit(1)
+          print("all required CI jobs passed")
+          PY
