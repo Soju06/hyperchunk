@@ -1,257 +1,261 @@
-# generation-pipeline — Context
+# generation-pipeline: Context
 
 ## Purpose & scope
 
-[spec.md](spec.md)가 파이프라인 범위·버전 핀·데이터팩 호환의 normative SSOT다.
-이 문서는 "왜 밑바닥부터 순수 C로 풀 파이프라인인가"(ADR-002), "왜 데이터팩
-스키마가 호환 표면이고 fallback이 청크 단위인가"(ADR-003 호환 절반), "왜
-26.2인가"(ADR-006)의 결정 역사를 담는다. ADR-003의 ABI 절반(리전 경계, 순수
-계산 코어)은 [core-abi/context.md](../core-abi/context.md)에 있다.
+[spec.md](spec.md) is the normative SSOT for pipeline scope, the version pin,
+and datapack compatibility. This document holds the decision history for "why
+a full pipeline in pure C from scratch" (ADR-002), "why the datapack schema is
+the compatibility surface and fallback is per chunk" (ADR-003, compatibility
+half), and "why 26.2" (ADR-006). The ABI half of ADR-003 (region boundary,
+pure compute core) is in [core-abi/context.md](../core-abi/context.md).
 
-## Current state (2026-08 기준)
+## Current state (as of 2026-08)
 
-- 11스테이지 전부 C로 구현 완료 (Phase 1), 풀 리전 canonical 일치. 스테이지별
-  구현·검증 기록은 [changes/archive/](../../changes/archive/)의 task7(surface)
-  ~task14(full region) 노트에 있다.
-- 데이터팩 파서는 26.2 스키마(107.1) 기준 + 바닐라 fallback. Terralith급 외부
-  데이터팩의 golden 대조는 아직 수행하지 않았다 (스펙의 Pure-JSON datapack
-  시나리오는 계약 서술).
+- All 11 stages implemented in C (Phase 1), full-region canonical match.
+  Per-stage implementation and verification records are in the task7
+  (surface) through task14 (full region) notes under
+  [changes/archive/](../../changes/archive/).
+- The datapack parser targets the 26.2 schema (107.1) plus vanilla fallback.
+  Golden comparison of a Terralith-class external datapack has not been
+  performed yet (the spec's Pure-JSON datapack scenario states the contract).
 
 ## Decision history
 
-> append-only. 기존 항목은 수정하지 않는다. 결정이 바뀌면 새 항목을 추가하고
-> 이전 항목을 `Superseded by`로 표시한다.
+> append-only. Existing entries are never edited. When a decision changes,
+> add a new entry and mark the previous one `Superseded by`.
 
-배치: ADR-002는 본 문서가 primary home (D3 패리티는
-[worldgen-parity/spec.md](../worldgen-parity/spec.md), D1 언어 정체성은
-[engineering-safety](../engineering-safety/spec.md), P1 FMA는
-[simd-backends](../simd-backends/spec.md), P4 충돌 스케줄링은
-[scheduler](../scheduler/spec.md)의 spec으로 반영). ADR-003은 호환 절반(D4·D5)만
-여기, ABI 절반(D1~D3)은 core-abi. ADR-006은 본 문서가 primary home (D2 golden
-환경은 worldgen-parity, D4 FFM은 core-abi의 spec으로 반영).
+Placement: this document is the primary home for ADR-002 (D3 parity is
+reflected in the spec of [worldgen-parity/spec.md](../worldgen-parity/spec.md),
+D1 language identity in [engineering-safety](../engineering-safety/spec.md),
+P1 FMA in [simd-backends](../simd-backends/spec.md), P4 conflict scheduling in
+[scheduler](../scheduler/spec.md)). Of ADR-003, only the compatibility half
+(D4 and D5) is here; the ABI half (D1-D3) is in core-abi. This document is the
+primary home for ADR-006 (D2 golden environment is reflected in the
+worldgen-parity spec, D4 FFM in the core-abi spec).
 
-### ADR-002 — 밑바닥부터 순수 C로 재작성하고, 풀 파이프라인 비트 패리티를 유지한다 (Phase 1, 2026-07-27)
+### ADR-002: Rewrite from scratch in pure C, and maintain full-pipeline bit parity (Phase 1, 2026-07-27)
 
 **Status:** Decided
 **Type:** Architecture
 
 #### Context
 
-두 갈래가 있었다. (a) C2ME를 포크해 GPU density function 백엔드를 추가하는 안, (b) 밑바닥부터 C로 재작성하는 안.
+There were two paths. (a) Fork C2ME and add a GPU density function backend; (b) rewrite in C from scratch.
 
-(a)의 논거는 강했다. C2ME가 이미 해놓은 CPU 스레드 병렬화를 공짜로 얻고, 같은 CPU 코드 위에서 백엔드만 교체하므로 3-way 비교가 단일 변수 실험이 되며, GPL-3.0이라 포크 공개에 문제가 없다.
+The case for (a) was strong. It gets C2ME's already-done CPU thread parallelization for free, swapping only the backend on top of the same CPU code makes the 3-way comparison a single-variable experiment, and GPL-3.0 poses no problem for publishing a fork.
 
-사용자가 (b)를 선택했다. 원문:
+The user chose (b). The directive:
 
-> "밑바닥부터 CPI 를 치밀하게 계산해서 짜는게 본질이라고 생각해"
+> "I think the essence is writing it from the ground up with the CPI calculated meticulously." (owner directive, translated from the Korean original)
 
-이 선택을 정량 검증했다. 로컬 실측(AMD Ryzen 9 5900X, Zen 3, AVX2+FMA, AVX-512 없음) 기준:
+This choice was verified quantitatively. Based on local measurements (AMD Ryzen 9 5900X, Zen 3, AVX2+FMA, no AVX-512):
 
-- 코어당 이론 상한 16 flops/cycle (AVX2 double 4레인 × FMA 2유닛 × 2)
-- 바닐라 density function 인터프리터 실효 0.03~0.08 flops/cycle (노드당 명령어 ~12개, CPI 3~8)
-- **격차 96~256배**
+- Theoretical per-core ceiling 16 flops/cycle (AVX2 double 4 lanes x 2 FMA units x 2)
+- Vanilla density function interpreter effective 0.03-0.08 flops/cycle (~12 instructions per node, CPI 3-8)
+- **A 96-256x gap**
 
-원인은 언어가 아니라 자료구조다. 1.18부터 density function이 인터프리터 트리이며 노드마다 메가모픽 간접 호출이 발생해 JIT이 인라인하지 못한다. 대부분의 사이클을 분기 예측 실패와 간접 호출 대기로 소비한다.
+The cause is the data structure, not the language. Since 1.18 the density function is an interpreter tree, and every node makes a megamorphic indirect call the JIT cannot inline. Most cycles are spent on branch mispredictions and waiting on indirect calls.
 
-로슈라인 분석으로 이 헤드룸이 실제로 회수 가능한지 확인했다:
+A roofline analysis confirmed this headroom is actually recoverable:
 
-- 청크당 노이즈 4,200,000 flops / 출력 196,608 bytes → **arithmetic intensity 21.4 flops/byte**
-- 12코어 동시 기준 릿지포인트 7.0 flops/byte
-- 21.4 ≫ 7.0 → **COMPUTE bound**
+- 4,200,000 flops of noise per chunk / 196,608 bytes of output -> **arithmetic intensity 21.4 flops/byte**
+- Ridge point at 7.0 flops/byte with 12 cores concurrent
+- 21.4 >> 7.0 -> **COMPUTE bound**
 
-memory bound였다면 CPI 최적화가 헛수고였겠지만, compute bound이므로 IPC 개선이 벽시계 시간에 직접 반영된다. 사용자 접근의 전제조건이 실측으로 통과했다.
+Had it been memory bound, CPI optimization would have been wasted effort; because it is compute bound, IPC improvements translate directly into wall clock. The precondition of the user's approach passed on measured data.
 
-또한 공격축별 총 배수를 계산해 CPI 재작성이 Amdahl에 걸리지 않음을 확인했다. 스테이지 비중 추정 `noise 45% / surface 8% / carvers 10% / features 22% / lighting 15%` 기준:
+We also computed the total multiplier per attack axis to confirm that a CPI rewrite does not run into Amdahl. Based on the estimated stage shares `noise 45% / surface 8% / carvers 10% / features 22% / lighting 15%`:
 
-| 공격축 | 총 배수 | Amdahl |
+| Attack axis | Total multiplier | Amdahl |
 |---|---|---|
-| GPU 오프로드만 (noise+surface+lighting) | 2.9x | 손 안 댄 32~55%에 갇힘 |
-| 스레드 병렬만 (C2ME급) | 9.8x | features 충돌로 부분적 |
-| **CPI 밑바닥 재작성 (단일코어)** | **5.6x** | **적용 안 됨 (`1-p` = 0)** |
-| **CPI 재작성 + 12코어** | **47.5x** | 적용 안 됨 |
+| GPU offload only (noise+surface+lighting) | 2.9x | Capped by the untouched 32-55% |
+| Thread parallelism only (C2ME-class) | 9.8x | Partial due to features conflicts |
+| **CPI rewrite from scratch (single core)** | **5.6x** | **Does not apply (`1-p` = 0)** |
+| **CPI rewrite + 12 cores** | **47.5x** | Does not apply |
 
-Amdahl은 손대지 않은 부분이 남을 때만 성립한다. GPU 오프로드는 noise만 건드려 병목을 features/carvers로 이동시킬 뿐이다(오프로드 후 잔여 비중 features 63% / carvers 29%). CPI 재작성은 전 스테이지를 건드리므로 가속 불가 구간이 존재하지 않는다.
+Amdahl only holds when an untouched portion remains. GPU offload touches only noise and merely moves the bottleneck to features/carvers (residual shares after offload: features 63% / carvers 29%). A CPI rewrite touches every stage, so no unacceleratable portion exists.
 
-풀 파이프라인 여부도 사용자가 지정했다("풀 파이프라인으로 하고싶은데"). 이 결정을 검증하는 과정에서 **직전 분석의 오류 두 개를 정정했다**:
+The full-pipeline scope was also specified by the user ("I want to do the full pipeline", owner directive, translated from the Korean original). In the course of validating this decision, **two errors in the preceding analysis were corrected**:
 
-1. Amdahl 3.13배 상한은 "우리 vs C2ME" 구간에만 걸린다. GIF의 좌측 화면은 바닐라이고 바닐라는 청크젠에 코어를 거의 쓰지 않으므로, 우리가 얻는 배수는 `(CPU 병렬 이득) × (GPU/CPI 이득)`의 곱이다. 12코어 기준 vs 바닐라 47~75배.
-2. Amdahl은 레이턴시 법칙이고 GIF가 보여주는 것은 스루풋이다. 배치 파이프라이닝으로 총 시간이 `max(GPU, CPU)`가 되어 천장이 Amdahl이 아니라 하드웨어가 된다.
+1. The Amdahl 3.13x cap applies only to the "us vs C2ME" leg. The left panel of the GIF is vanilla, and vanilla barely uses its cores for chunk gen, so the multiplier we get is the product `(CPU parallel gain) x (GPU/CPI gain)`. At 12 cores, 47-75x vs vanilla.
+2. Amdahl is a latency law, and what the GIF shows is throughput. With batch pipelining the total time becomes `max(GPU, CPU)`, so the ceiling is the hardware, not Amdahl.
 
-#### Decision (4 핵심 결정)
+#### Decision (4 core decisions)
 
-| # | 결정 | 핵심 |
+| # | Decision | Key point |
 |---|---|---|
-| D1 | **밑바닥부터 순수 C로 재작성** | C2ME 포크 아님. 인터프리터 트리를 그대로 옮기면 2배로 끝나므로 자료구조부터 재설계 |
-| D2 | **풀 파이프라인 (noise, surface, carvers, features, lighting 전부)** | terrain-only로 자르지 않는다. GIF의 정직성이 여기 달려 있다 |
-| D3 | **바닐라와 비트단위 동일 출력 필수** | region 파일 `sha256` 일치가 수용 기준 *(ADR-007이 canonical hash + 2단 게이트로 정밀화)* |
-| D4 | **범위 3분할로 작업량 통제** | 1.21.x 단일 패치 / 오버월드만 / 구조물은 배치까지 (직소 조립 제외) *(버전 값은 ADR-006이 26.2로 교체)* |
+| D1 | **Rewrite from scratch in pure C** | Not a C2ME fork. Porting the interpreter tree as-is tops out at 2x, so the data structures are redesigned first |
+| D2 | **Full pipeline (noise, surface, carvers, features, lighting, all of it)** | No cutting down to terrain-only. The honesty of the GIF depends on this |
+| D3 | **Bit-exact output identical to vanilla is mandatory** | Region file `sha256` match is the acceptance criterion *(ADR-007 refined this into a canonical hash + two-tier gate)* |
+| D4 | **Control the workload by splitting scope three ways** | Single 1.21.x patch / overworld only / structures through placement (jigsaw assembly excluded) *(ADR-006 replaced the version value with 26.2)* |
 
-#### Why 밑바닥 재작성 over C2ME 포크?
+#### Why rewrite from scratch over a C2ME fork?
 
-(a)가 ROI 최적해였음을 기록해 둔다. (b)를 택한 근거는 ADR-001 D1이다. 목적이 기술 시연이므로 "SoTA 위에 얹어 3배"보다 "전부 다시 써서 47배"가 목적에 부합한다. 또한 D1은 C2ME의 GPL-3.0 전파를 피해 라이선스를 자유롭게 선택할 수 있게 한다.
+For the record: (a) was the ROI-optimal choice. The rationale for choosing (b) is ADR-001 D1. Since the goal is a technical demonstration, "rewrite everything for 47x" fits the goal better than "3x stacked on top of SoTA". D1 also avoids C2ME's GPL-3.0 propagation, leaving the license choice free.
 
-대가는 정직하게 기록한다. features/carvers/structures/lighting 전부를 C로 재구현해야 한다. cubiomes는 바이옴과 구조물 위치만 다뤘고 그것도 큰 프로젝트였다. **풀 바닐라 패리티 C 재구현은 선례가 없다.** 그것이 flex의 크기이자 리스크의 크기다.
+The cost is recorded honestly. All of features/carvers/structures/lighting must be reimplemented in C. cubiomes covered only biomes and structure positions, and even that was a large project. **A full vanilla-parity C reimplementation has no precedent.** That is the size of the flex and the size of the risk.
 
-#### Why 비트 패리티 필수?
+#### Why is bit parity mandatory?
 
-1. 그것이 flex의 전부다. "빠른 지형 생성기"는 흔하고 "너희 월드를 비트단위 동일하게 47배 빠르게 재생성"은 선례가 없다.
-2. 검증이 공짜로 딸려온다. 바닐라 region과 우리 출력의 `sha256` 비교로 끝난다. 그 결과가 어떤 대시보드보다 강력하다.
-3. 패리티가 없으면 GIF 자체가 무의미하다. 서로 다른 알고리즘의 속도 비교는 벤치마크가 아니다.
+1. It is the entire flex. "Fast terrain generators" are common; "regenerates your world bit-exactly, 47x faster" has no precedent.
+2. Verification comes for free. It ends with a `sha256` comparison of the vanilla region and our output. That result is stronger than any dashboard.
+3. Without parity the GIF itself is meaningless. A speed comparison between different algorithms is not a benchmark.
 
 #### Anti-goals
 
-- terrain-only 벤치마크 (D2가 배제)
-- 버전 매트릭스 지원 (D4)
-- 네더/엔드 (D4)
-- 직소 구조물 조립 — 마을 내부 방 배치는 별개 난이도이며 Phase 1 범위 밖 (D4)
-- float으로 다운캐스트한 근사 생성 — 성능은 오르지만 D3와 양립 불가
+- A terrain-only benchmark (excluded by D2)
+- Version matrix support (D4)
+- Nether/End (D4)
+- Jigsaw structure assembly: village interior room layout is a separate difficulty class and outside Phase 1 scope (D4)
+- Approximate generation downcast to float: faster, but incompatible with D3
 
 #### Pitfalls
 
-1. **FMA contraction이 조용히 지형을 바꾼다.** `a*b+c`를 FMA 한 명령으로 접으면 중간 반올림이 사라져 결과 비트가 달라진다. 바닐라는 mul → round → add 순서다. CPU 커널은 FMA 금지, GPU 코드가 생기면 `-fmad=false` 필수. 이 버그는 증상이 "지형이 미묘하게 다름"뿐이라 디버깅 비용이 극단적으로 높다. *(normative: [simd-backends/spec.md](../simd-backends/spec.md))*
-2. **RNG 소비 순서까지 재현해야 한다.** LCG와 Xoroshiro128++의 호출 순서가 바뀌면 features 배치가 달라진다. *(normative: [worldgen-parity/spec.md](../worldgen-parity/spec.md))*
-3. **바닐라 노이즈는 double이다.** float으로 낮추는 최적화는 D3 위반이다.
-4. **features는 청크 경계를 넘어 이웃 청크에 write한다.** 인접 청크를 동시 처리하면 충돌하고, 처리 순서가 바뀌면 RNG 소비 순서가 달라진다. 체스판/스트라이프 스케줄링으로 충돌 없는 청크 집합만 배치에 넣어야 한다. 이것이 GPU 커널보다 어렵고 C2ME가 수년간 씨름한 부분이다. *(normative: [scheduler/spec.md](../scheduler/spec.md))*
-5. **벤치 호스트 신뢰성.** 현재 개발 박스는 `lscpu`가 `Core(s) per socket: 22`, `Thread(s) per core: 1`, `L3 cache: 352 MiB (22 instances)`를 보고한다. 실제 5900X는 12코어/24스레드, L3 64MB이며 `hypervisor` 플래그가 있다. 즉 SMT·캐시 토폴로지가 오보고되는 VM이다. **이 박스의 사이클 카운트는 근거로 쓸 수 없다.** 공개 벤치는 베어메탈 또는 코어 핀닝된 전용 인스턴스에서 재측정해야 한다. *(이후 B-4에서 hc-e6 무대 적격성 실측, B-6에서 공개 재실측 — [benchmarks-and-viz/context.md](../benchmarks-and-viz/context.md))*
+1. **FMA contraction silently changes terrain.** Folding `a*b+c` into a single FMA instruction drops the intermediate rounding and changes the result bits. Vanilla is mul -> round -> add. FMA is banned in CPU kernels; if GPU code ever appears, `-fmad=false` is mandatory. This bug's only symptom is "terrain is subtly different", so the debugging cost is extreme. *(normative: [simd-backends/spec.md](../simd-backends/spec.md))*
+2. **RNG consumption order must be reproduced too.** If the call order of the LCG and Xoroshiro128++ changes, features placement changes. *(normative: [worldgen-parity/spec.md](../worldgen-parity/spec.md))*
+3. **Vanilla noise is double.** Lowering it to float as an optimization violates D3.
+4. **features write across chunk boundaries into neighboring chunks.** Processing adjacent chunks concurrently conflicts, and changing the processing order changes RNG consumption order. Only conflict-free chunk sets may go into a batch, via checkerboard/stripe scheduling. This is harder than the GPU kernels and is what C2ME wrestled with for years. *(normative: [scheduler/spec.md](../scheduler/spec.md))*
+5. **Bench host reliability.** The current dev box reports `Core(s) per socket: 22`, `Thread(s) per core: 1`, `L3 cache: 352 MiB (22 instances)` in `lscpu`. A real 5900X is 12 cores/24 threads with 64MB L3, and the `hypervisor` flag is present. That is, this is a VM that misreports SMT and cache topology. **Cycle counts from this box cannot be used as evidence.** Public benchmarks must be remeasured on bare metal or a core-pinned dedicated instance. *(Later: B-4 measured hc-e6's eligibility as the stage, B-6 remeasured for publication; [benchmarks-and-viz/context.md](../benchmarks-and-viz/context.md))*
 
 #### Verification
 
-- `hyperchunk-verify --seed <s> --region <x> <z>` 가 바닐라 golden region과 `sha256` 일치를 출력
-- 스테이지 비중 추정치(`noise 45%` 등)를 실측 프로파일로 교체하고 본 ADR의 계산을 재확인
-- FMA 금지가 컴파일 플래그로 강제되고 CI가 회귀를 잡는다
+- `hyperchunk-verify --seed <s> --region <x> <z>` reports `sha256` equality with the vanilla golden region
+- Replace the estimated stage shares (`noise 45%` etc.) with a measured profile and recheck this ADR's calculations
+- The FMA ban is enforced by compile flags and CI catches regressions
 
 #### When this might break
 
-- Mojang이 월드젠 알고리즘을 대규모 변경하는 경우 (D4의 단일 패치 고정이 방어선)
-- 실측 프로파일이 추정 비중과 크게 다를 경우 — 특히 features 비중이 22%보다 훨씬 크면 우선순위 재조정 필요
+- If Mojang changes the worldgen algorithm at scale (D4's single-patch pin is the line of defense)
+- If the measured profile differs greatly from the estimated shares: in particular, if the features share is much larger than 22%, priorities need rebalancing
 
 #### References
 
-- ADR-001 (목적 — [project.md](../../project.md))
+- ADR-001 (purpose; [project.md](../../project.md))
 - https://github.com/RelativityMC/C2ME-fabric
 - https://github.com/Cubitect/cubiomes
 
-### ADR-003 (호환 절반) — 호환은 데이터팩 스키마 + 바닐라 fallback으로 얻는다 (Phase 1, 2026-07-27)
+### ADR-003 (compatibility half): Compatibility comes from the datapack schema plus vanilla fallback (Phase 1, 2026-07-27)
 
 **Status:** Decided
 **Type:** Architecture / Contract
-**전문 분할:** ABI 절반(D1~D3: 순수 계산 코어, 리전 경계, arena/스케줄러 소유)과
-Context의 경계 비용·배치 분석은 [core-abi/context.md](../core-abi/context.md).
-아래는 호환 계약(D4·D5)에 해당하는 부분이다.
+**Full-text split:** The ABI half (D1-D3: pure compute core, region boundary,
+arena/scheduler ownership) and the Context's boundary-cost and batching
+analysis are in [core-abi/context.md](../core-abi/context.md). Below is the
+part covering the compatibility contract (D4 and D5).
 
-#### Context (호환 인터페이스 분석)
+#### Context (compatibility interface analysis)
 
-bun은 npm 생태계를 재구현하지 않고 Node의 *인터페이스*를 구현했다: `node:` 내장 모듈 API 표면과 **N-API ABI**(네이티브 애드온이 재컴파일 없이 로드된다). 패키지는 손대지 않고 엔진만 교체한다.
+bun did not reimplement the npm ecosystem; it implemented Node's *interface*: the `node:` built-in module API surface and the **N-API ABI** (native addons load without recompilation). It leaves packages untouched and swaps only the engine.
 
-MC 월드젠의 대응 인터페이스는 셋이다:
+MC worldgen has three corresponding interfaces:
 
-| 인터페이스 | 정체 | 네이티브 처리 가능성 |
+| Interface | What it is | Native handling feasibility |
 |---|---|---|
-| 데이터팩 worldgen JSON (`noise_settings`, `density_function`, `placed_feature`) | 데이터 | 가능. 스키마 구현으로 Terralith/Tectonic이 자동 호환 |
-| Java 코드로 등록된 Feature/StructurePiece | JVM 바이트코드 | 원리적으로 불가 |
-| Bukkit/Paper `ChunkGenerator`, `BlockPopulator` | JVM 인터페이스 | 브릿지 가능 |
+| Datapack worldgen JSON (`noise_settings`, `density_function`, `placed_feature`) | Data | Feasible. Implementing the schema makes Terralith/Tectonic compatible automatically |
+| Feature/StructurePiece registered in Java code | JVM bytecode | Impossible in principle |
+| Bukkit/Paper `ChunkGenerator`, `BlockPopulator` | JVM interface | Bridgeable |
 
-MC가 1.18부터 월드젠을 데이터 주도로 만들어 둔 것이 우리에게 N-API 역할을 한다.
+MC having made worldgen data-driven since 1.18 plays the role of N-API for us.
 
-#### Decision (호환 관련 2 결정; D1~D3은 core-abi)
+#### Decision (2 compatibility decisions; D1-D3 are in core-abi)
 
-| # | 결정 | 핵심 |
+| # | Decision | Key point |
 |---|---|---|
-| D4 | **데이터팩 worldgen JSON을 우리의 N-API로 취급** | 스키마 구현으로 Terralith/Tectonic급 월드젠이 자동 호환 |
-| D5 | **알 수 없는 확장을 만나면 해당 청크를 통째로 바닐라 경로로 fallback** | 추측하지 않는다. 정확성이 속도보다 우선 |
+| D4 | **Treat datapack worldgen JSON as our N-API** | Implementing the schema makes Terralith/Tectonic-class worldgen compatible automatically |
+| D5 | **On an unknown extension, fall back to the vanilla path for the whole chunk** | No guessing. Correctness outranks speed |
 
-#### Why fallback? — drop-in의 정의
+#### Why fallback? The definition of drop-in
 
-drop-in은 "항상 빠름"이 아니라 **"항상 동작함 + 대부분 빠름"**이다. bun도 호환되지 않는 패키지가 있지만 느려질 뿐 동작한다.
+Drop-in does not mean "always fast"; it means **"always works + mostly fast"**. bun also has incompatible packages, but they merely run slower; they still work.
 
-features 네이티브 커버리지에 따른 실효 배수(12코어):
+Effective multiplier by native features coverage (12 cores):
 
-| 시나리오 | features 커버 | ×12코어 |
+| Scenario | features coverage | x12 cores |
 |---|---|---|
-| 바닐라만 | 100% | 75x |
-| 데이터팩 월드젠 (Terralith 등) | 100% | 75x |
-| 경량 모드 (20% 자바) | 80% | 62x |
-| 중형 모드팩 (50% 자바) | 50% | 49x |
-| 헤비 모드팩 (80% 자바) | 20% | **41x** |
+| Vanilla only | 100% | 75x |
+| Datapack worldgen (Terralith etc.) | 100% | 75x |
+| Light mods (20% Java) | 80% | 62x |
+| Mid-size modpack (50% Java) | 50% | 49x |
+| Heavy modpack (80% Java) | 20% | **41x** |
 
-features가 거의 전부 자바로 남아도 41배를 유지한다. features는 전체의 22%뿐이고 **noise/surface/carvers/lighting 78%는 어떤 모드팩에서도 바닐라 알고리즘**이므로 항상 네이티브로 처리된다. 즉 호환성 손실이 "동작 불가"가 아니라 우아한 열화로 나타난다.
+Even with features remaining almost entirely in Java, 41x holds. features is only 22% of the total, and **the 78% that is noise/surface/carvers/lighting is the vanilla algorithm in any modpack**, so it is always handled natively. Compatibility loss thus shows up as graceful degradation, not as "does not work".
 
-#### Anti-goals (호환 관련)
+#### Anti-goals (compatibility)
 
-- Java Feature를 네이티브에서 에뮬레이션하려는 시도 — 원리적으로 불가하며 D5가 정답
+- Attempting to emulate Java Features natively: impossible in principle; D5 is the answer
 
-#### Pitfalls (호환 관련)
+#### Pitfalls (compatibility)
 
-- **fallback 판정을 청크보다 작은 단위로 하려는 유혹.** 부분 fallback은 RNG 소비 순서를 깨뜨린다. 판정 단위는 청크 전체다.
+- **The temptation to decide fallback at a granularity smaller than a chunk.** Partial fallback breaks RNG consumption order. The unit of decision is the whole chunk.
 
-#### Verification (호환 관련)
+#### Verification (compatibility)
 
-- Terralith 데이터팩을 입력했을 때 바닐라 대조와 `sha256` 일치
-- 인위적으로 알 수 없는 Feature를 등록했을 때 해당 청크가 바닐라 경로로 처리되고 결과가 여전히 패리티를 만족
+- With the Terralith datapack as input, `sha256` match against the vanilla comparison run
+- With an artificially registered unknown Feature, the affected chunk is handled by the vanilla path and the result still satisfies parity
 
 #### When this might break
 
-- Mojang이 데이터팩 worldgen 스키마를 비호환 변경하는 경우 (ADR-002 D4의 단일 패치 고정이 방어선)
-- 모드 생태계가 데이터팩보다 Java 코드 확장으로 회귀하는 경우 — fallback 비중이 커져 배수가 41배 아래로 내려간다
+- If Mojang makes an incompatible change to the datapack worldgen schema (ADR-002 D4's single-patch pin is the line of defense)
+- If the mod ecosystem regresses toward Java code extensions over datapacks: the fallback share grows and the multiplier drops below 41x
 
 #### References
 
-- ADR-002 (재작성 방침 — 본 문서 위)
+- ADR-002 (rewrite policy; above in this document)
 - https://minecraft.wiki/w/Data_pack
 
-### ADR-006 — 타겟 버전을 26.2로 변경하고, 비난독화 소스와 FFM을 활용한다 (Phase 1, 2026-07-28)
+### ADR-006: Change the target version to 26.2, and leverage the unobfuscated source and FFM (Phase 1, 2026-07-28)
 
 **Status:** Decided
 **Type:** Scope / Contract
-**Resolves:** ADR-002 D4의 버전 핀, ADR-003의 JNI 선택을 부분 supersede
+**Resolves:** the version pin of ADR-002 D4; partially supersedes ADR-003's JNI choice
 
 #### Context
 
-사용자 directive: "일단 최초 버전 타겟은 26.2로 하자"
+User directive: "For now, let's make the first version target 26.2" (owner directive, translated from the Korean original)
 
-ADR-002 D4는 "1.21.x 단일 패치"를 가정했으나, Mojang이 2026년부터 연도 기반 버저닝(year.drop.hotfix)으로 전환했다. 릴리스 계보: 1.21.11 → 26.1 "Tiny Takeover" (2026-03-24) → 26.1.1/26.1.2 → **26.2 "Chaos Cubed" (2026-06-16, 현재 latest release)**. 버전 매니페스트에서 실존 확인함 (protocol 776, data version 4903, data pack format 107.1).
+ADR-002 D4 assumed a "single 1.21.x patch", but Mojang switched to year-based versioning (year.drop.hotfix) starting in 2026. Release lineage: 1.21.11 -> 26.1 "Tiny Takeover" (2026-03-24) -> 26.1.1/26.1.2 -> **26.2 "Chaos Cubed" (2026-06-16, the current latest release)**. Existence confirmed in the version manifest (protocol 776, data version 4903, data pack format 107.1).
 
-조사에서 확인된 파급효과 세 가지:
+Three ripple effects confirmed by the investigation:
 
-1. **Java 25 필수.** 26.1부터 Minimum Java version = Java SE 25. 플랜의 "JDK 21 설치" 지시는 무효.
-2. **26.1부터 완전 비난독화.** 26.1은 "the first to be fully unobfuscated without an accompanying obfuscated variant". Fabric도 이에 따라 Yarn 매핑 지원을 중단하고 Mojang 공식 이름으로 전환했다. 매핑 레이어가 사라져 스테이지 덤프 하네스(mixin)를 실명 클래스로 직접 작성한다.
-3. **26.2 worldgen은 1.21.x와 다르다.** sulfur caves 케이브 바이옴과 sulfur/cinnabar 블록이 추가되어 재현해야 할 표면이 늘었다. cubiomes 등 기존 레퍼런스 구현은 26.x를 지원하지 않을 가능성이 높다. 대신 비난독화 소스가 알고리즘 확인 비용을 크게 낮춰 이를 상쇄한다.
+1. **Java 25 required.** From 26.1, minimum Java version = Java SE 25. The plan's "install JDK 21" instruction is void.
+2. **Fully unobfuscated from 26.1.** 26.1 is "the first to be fully unobfuscated without an accompanying obfuscated variant". Fabric accordingly dropped Yarn mapping support and switched to official Mojang names. With the mapping layer gone, the stage dump harness (mixin) is written directly against the real class names.
+3. **26.2 worldgen differs from 1.21.x.** The sulfur caves cave biome and sulfur/cinnabar blocks were added, enlarging the surface to reproduce. Existing reference implementations such as cubiomes most likely do not support 26.x. In exchange, the unobfuscated source greatly lowers the cost of confirming algorithms, offsetting this.
 
-#### Decision (4 핵심 결정)
+#### Decision (4 core decisions)
 
-| # | 결정 | 핵심 |
+| # | Decision | Key point |
 |---|---|---|
-| D1 | **타겟 버전 = 26.2 고정** | TARGET_VERSION=26.2. ADR-002 D4의 "단일 패치 고정" 원칙은 유지, 값만 교체 |
-| D2 | **golden 생성 환경은 JDK 25** | 26.x 서버 구동 요건 *(normative: [worldgen-parity/spec.md](../worldgen-parity/spec.md))* |
-| D3 | **매핑 레이어 폐기, Mojang 실명 직접 사용** | Yarn 사망. 비난독화 jar 기준으로 mixin/리플렉션 작성 |
-| D4 | **Phase 3 브릿지는 JNI 대신 FFM** | Java 25에서 FFM(JEP 454)이 정식. ADR-003의 "Java 21 preview라서 JNI" 논거 소멸. 경계 입도 불변식(리전 단위)은 그대로 *(normative: [core-abi/spec.md](../core-abi/spec.md))* |
+| D1 | **Target version = 26.2, pinned** | TARGET_VERSION=26.2. ADR-002 D4's "single-patch pin" principle stays; only the value is replaced |
+| D2 | **Golden generation environment is JDK 25** | Requirement to run a 26.x server *(normative: [worldgen-parity/spec.md](../worldgen-parity/spec.md))* |
+| D3 | **Drop the mapping layer, use real Mojang names directly** | Yarn is dead. Write mixins/reflection against the unobfuscated jar |
+| D4 | **Phase 3 bridge uses FFM instead of JNI** | FFM (JEP 454) is final in Java 25. ADR-003's "JNI because Java 21 preview" rationale is gone. The boundary-granularity invariant (per region) stands *(normative: [core-abi/spec.md](../core-abi/spec.md))* |
 
 #### Why 26.2 over 1.21.x?
 
-최신 안정판이 26.2이므로 "현재의 바닐라"와 비교하는 것이 시연 목적(ADR-001)에 부합한다. 1.21.x 대비 벤치는 출시 시점에 이미 구버전 비교가 된다.
+The latest stable release is 26.2, so comparing against "current vanilla" fits the demonstration goal (ADR-001). A benchmark against 1.21.x would already be an old-version comparison at release time.
 
 #### Anti-goals
 
-- 26.1/26.3-snapshot 동시 지원 (단일 패치 원칙)
-- 1.21.x 하위 호환
-- 디컴파일/비난독화 소스 코드의 복사 — 이름 참조와 알고리즘 이해는 자유로워졌지만 코드 복사는 여전히 저작권 문제 (ADR-002 R4 원칙 유지)
+- Simultaneous 26.1/26.3-snapshot support (single-patch principle)
+- 1.21.x backward compatibility
+- Copying decompiled/unobfuscated source code: name references and algorithm understanding are now unencumbered, but copying code is still a copyright problem (ADR-002 R4 principle stands)
 
 #### Pitfalls
 
-1. **sulfur caves는 carvers/features/biomes 재구현 범위에 포함된다.** 1.21 기준 자료(위키 문서 다수)가 26.2 현실과 다를 수 있으므로, 항상 비난독화 소스와 26.2 추출 JSON을 1차 근거로 삼는다.
-2. **cubiomes 참조 시 버전 주의.** 26.x 미지원 알고리즘을 그대로 믿으면 패리티가 조용히 깨진다.
-3. **data pack format 107.1.** Task 12 데이터팩 스키마 파서는 26.2 스키마 기준이다.
-4. **오버월드 y 범위(-64..319) 유지 여부 미확인.** Task 2 golden 덤프에서 실측으로 확정하고 hyperchunk.h 상수를 그에 맞춘다.
+1. **sulfur caves are inside the carvers/features/biomes reimplementation scope.** 1.21-based material (most wiki articles) can differ from 26.2 reality, so the unobfuscated source and the 26.2-extracted JSON are always the primary evidence.
+2. **Mind the version when consulting cubiomes.** Trusting an algorithm that lacks 26.x support silently breaks parity.
+3. **data pack format 107.1.** The Task 12 datapack schema parser targets the 26.2 schema.
+4. **Whether the overworld y range (-64..319) is retained is unconfirmed.** Settle it by measurement in the Task 2 golden dump and align the hyperchunk.h constants to it.
 
 #### Verification
 
-- TARGET_VERSION 파일 내용 = 26.2
-- golden 서버가 JDK 25에서 구동되고 region 생성 확인
-- 스테이지 덤프 하네스가 매핑 도구 없이 빌드됨
+- TARGET_VERSION file content = 26.2
+- The golden server runs on JDK 25 and region generation is confirmed
+- The stage dump harness builds without mapping tools
 
 #### References
 
-- ADR-002 (본 문서 위), ADR-003 ([core-abi/context.md](../core-abi/context.md))
+- ADR-002 (above in this document), ADR-003 ([core-abi/context.md](../core-abi/context.md))
 - https://minecraft.wiki/w/Java_Edition_26.2
-- https://minecraft.wiki/w/Java_Edition_26.1 (비난독화, Java 25 요건)
-- https://docs.fabricmc.net/develop/porting/ (Yarn 중단, Mojang mappings 전환)
+- https://minecraft.wiki/w/Java_Edition_26.1 (unobfuscation, Java 25 requirement)
+- https://docs.fabricmc.net/develop/porting/ (Yarn discontinued, switch to Mojang mappings)

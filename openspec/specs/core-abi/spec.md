@@ -2,9 +2,10 @@
 
 ## Purpose
 
-코어 라이브러리 경계의 normative SSOT: 순수 계산 라이브러리 계약, 리전 단위 C
-ABI, 코어가 소유하는 것(arena/SoA·배치 스케줄러)과 소비자(CLI/FFM/Rust FFI).
-근거·수치·결정 역사는 [context.md](context.md).
+Normative SSOT for the core library boundary: the pure compute library
+contract, the region-granularity C ABI, what the core owns (arena/SoA and
+the batch scheduler), and the consumers (CLI/FFM/Rust FFI). Rationale,
+numbers, and decision history are in [context.md](context.md).
 
 ## Requirements
 
@@ -14,7 +15,7 @@ ABI, 코어가 소유하는 것(arena/SoA·배치 스케줄러)과 소비자(CLI
 ADR-005): it MUST NOT contain file I/O, networking, or player/entity/
 inventory/tick-loop state. Consumers pass buffers in and receive buffers
 out; region file writing lives in the CLI/consumer layer. The core MUST
-build with no third-party dependencies — it links against libc, libm, and
+build with no third-party dependencies: it links against libc, libm, and
 pthreads only.
 
 #### Scenario: Dependency audit
@@ -32,7 +33,7 @@ pthreads only.
 
 The public C ABI SHALL expose region-granularity batch entry points only
 (ADR-003 D2). Node-level density-function entry points MUST NOT be declared
-in the public header — the 18.5%-of-chunk-time boundary-cost cliff is
+in the public header: the 18.5%-of-chunk-time boundary-cost cliff is
 prevented at the API surface, not by convention.
 
 #### Scenario: Public header audit
@@ -57,7 +58,7 @@ through the library contract ([scheduler](../scheduler/spec.md)).
 ### Requirement: FFI consumers and bridge technology
 
 Supported consumer surfaces are: the CLI (bench, parity verification, region
-output), a Fabric-side Java bridge using FFM (JEP 454, final in Java 25 —
+output), a Fabric-side Java bridge using FFM (JEP 454, final in Java 25,
 ADR-006 D4; Phase 3, not yet started), and Rust FFI (planned; Pumpkin/
 Valence-class servers). Every bridge MUST preserve the region-granularity
 boundary invariant; a bridge that crosses the FFI per node or per sample

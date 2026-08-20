@@ -1,142 +1,193 @@
-# core-abi — Context
+# core-abi Context
 
 ## Purpose & scope
 
-[spec.md](spec.md)가 코어 경계·ABI의 normative SSOT다. 이 문서는 "왜 리전
-단위 경계이고 왜 코어가 순수 계산 라이브러리인가"(ADR-003 ABI 절반)의 결정
-역사를 담는다. ADR-003의 호환 절반(데이터팩 D4·fallback D5)은
-[generation-pipeline/context.md](../generation-pipeline/context.md), P4 격리
-경계(ADR-005)는 [project.md](../../project.md)에 있다.
+[spec.md](spec.md) is the normative SSOT for the core boundary and ABI. This
+document holds the decision history for "why a region-granularity boundary,
+and why the core is a pure compute library" (the ABI half of ADR-003). The
+compatibility half of ADR-003 (datapack D4, fallback D5) is in
+[generation-pipeline/context.md](../generation-pipeline/context.md), and the
+P4 isolation boundary (ADR-005) is in [project.md](../../project.md).
 
-## Current state (2026-08 기준)
+## Current state (as of 2026-08)
 
-- 코어는 `libhyperchunk.a` (C11, libc/libm/pthreads만). 소비자는 CLI
-  (`hyperchunk-verify`, region 출력)와 벤치 드라이버(`hyperchunk-bench`).
-  Fabric FFM 브릿지(Phase 3)는 미착수, Rust FFI는 계획 단계.
-- ADR-003 당시의 JNI 선택은 ADR-006 D4가 FFM으로 교체했다 (Java 25에서 JEP
-  454 정식) — 전문은 generation-pipeline/context.md의 ADR-006.
+- The core is `libhyperchunk.a` (C11, libc/libm/pthreads only). Consumers are
+  the CLI (`hyperchunk-verify`, region output) and the bench driver
+  (`hyperchunk-bench`). The Fabric FFM bridge (Phase 3) is not started; Rust
+  FFI is at the planning stage.
+- The JNI choice made at ADR-003 time was replaced with FFM by ADR-006 D4
+  (JEP 454 is final in Java 25); the full text is ADR-006 in
+  generation-pipeline/context.md.
 
 ## Decision history
 
-> append-only. 기존 항목은 수정하지 않는다. 결정이 바뀌면 새 항목을 추가하고
-> 이전 항목을 `Superseded by`로 표시한다.
+> Append-only. Existing entries are never edited. When a decision changes,
+> add a new entry and mark the old one `Superseded by`.
 
-### ADR-003 (ABI 절반) — 코어는 리전 단위 C ABI를 노출하는 순수 계산 라이브러리다 (Phase 1, 2026-07-27)
+### ADR-003 (ABI half): the core is a pure compute library exposing a region-granularity C ABI (Phase 1, 2026-07-27)
 
 **Status:** Decided
 **Type:** Architecture / Contract
-**전문 분할:** 호환 절반(D4 데이터팩 N-API, D5 청크 단위 fallback)과 그
-인터페이스 분석은 [generation-pipeline/context.md](../generation-pipeline/context.md).
-아래는 ABI·모듈 경계(D1~D3)에 해당하는 부분이다.
+**Full-text split:** the compatibility half (D4 datapack N-API, D5
+chunk-granularity fallback) and its interface analysis are in
+[generation-pipeline/context.md](../generation-pipeline/context.md).
+Below is the part covering the ABI and module boundary (D1~D3).
 
 #### Context
 
-ADR-002 논의 중 저자가 "밑바닥부터 C = JVM 밖 독립 바이너리"라고 결론지었다. **이는 오류였고 사용자가 정정했다.** 원문:
+During the ADR-002 discussion the author concluded that "from-scratch C = a
+standalone binary outside the JVM". **This was wrong, and the user corrected
+it.** Original text:
 
-> "이게 사용성 측면에서 기존 버킷 호환 또는 플러그인 호환 레이어를 못만들면 사용성이 떨어지고 이식성이 좀 많이 깎이는게 단점일것 같은데 방법있을까?
-> 예전에 내가 느꼈던 node -> bun으로만 바꿨는데 API 레이턴시가 30% 늘어나는 그런 경험을 주게 만들고싶어"
+> "On the usability side, if we can't build a compatibility layer for
+> existing Bukkit or plugins, usability drops and portability takes a pretty
+> big hit, which seems like the downside. Is there a way around it?
+> I keep thinking of the experience I had before, where just switching
+> node -> bun made API latency go up 30%; I don't want to create that kind
+> of experience."
 
-C로 작성한 코드를 Fabric 모드 내부에 `.so`로 탑재하는 것은 완전히 가능하다. 독립 바이너리는 선택지이지 강제사항이 아니다.
+Shipping C code as a `.so` inside a Fabric mod is entirely possible. A
+standalone binary is an option, not a requirement.
 
-bun의 실제 전략(N-API ABI 구현 — 인터페이스만 구현하고 엔진을 교체)은 호환 절반에 기록했다. ABI 쪽 핵심은 경계 비용의 정량화다(JNI 빈 호출 ~22ns, 청크 생성 ~10ms 기준):
+bun's actual strategy (implementing the N-API ABI: implement only the
+interface and swap the engine) is recorded in the compatibility half. The key
+point on the ABI side is quantifying the boundary cost (baseline: an empty
+JNI call ~22ns, chunk generation ~10ms):
 
-| 경계 입도 | 청크당 호출 | 비용 | 청크시간 대비 | 판정 |
+| Boundary granularity | Calls per chunk | Cost | Share of chunk time | Verdict |
 |---|---|---|---|---|
-| 청크 1개당 1회 | 1 | 0.00002ms | 0.00% | 무료 |
-| 셀 컬럼당 1회 | 64 | 0.001ms | 0.01% | 무료 |
-| 노이즈 샘플당 1회 | 1,400 | 0.031ms | 0.31% | 허용 |
-| **density 노드당 1회** | **84,000** | **1.85ms** | **18.5%** | **치명적** |
+| 1 per chunk | 1 | 0.00002ms | 0.00% | Free |
+| 1 per cell column | 64 | 0.001ms | 0.01% | Free |
+| 1 per noise sample | 1,400 | 0.031ms | 0.31% | Acceptable |
+| **1 per density node** | **84,000** | **1.85ms** | **18.5%** | **Fatal** |
 
-사용자의 "bun으로 바꿨는데 30% 느려짐" 경험은 마지막 행에 해당한다. 경계 입도가 잘못되면 네이티브 전환이 오히려 손해다.
+The user's "switched to bun and got 30% slower" experience corresponds to the
+last row. With the wrong boundary granularity, going native is a net loss.
 
-이후 사용자가 스코프를 확장했다:
+The user then expanded the scope:
 
-> "청크 생성만 위임하는게 아니라, 배치 처리도 좀 java가 삐리한 것 같아서, 아예 월드 생성 관련 부분을 아예 우리가 모듈식으로 전부 관리하는게 나중에 있을 병목 요소를 많이 줄일 수 있을 것 같아"
+> "Rather than delegating only chunk generation, Java seems weak at batch
+> processing too, so if we manage the entire worldgen side ourselves as
+> modules, I think that would cut down a lot of the bottlenecks we would hit
+> later."
 
-이 진단을 정량 검증했다. 자바가 청크 하나당 생성하는 객체는 약 40,808개(DensityFunction 중간객체 11,200 / BlockState·Palette 참조 24,576 / BlockPos 5,000 등) ≈ 1.31 MB/청크다.
+This diagnosis was verified quantitatively. Java allocates about 40,808
+objects per chunk (DensityFunction intermediates 11,200 / BlockState/Palette
+references 24,576 / BlockPos 5,000, etc.), roughly 1.31 MB per chunk.
 
-| 처리량 | 할당율 | |
+| Throughput | Allocation rate | |
 |---|---|---|
-| 50 chunk/s | 0.07 GB/s | 여유 |
-| 500 chunk/s | 0.65 GB/s | 허용 |
-| **5000 chunk/s** | **6.53 GB/s** | **G1 처리한계(1~2GB/s) 초과** |
+| 50 chunk/s | 0.07 GB/s | Comfortable |
+| 500 chunk/s | 0.65 GB/s | Acceptable |
+| **5000 chunk/s** | **6.53 GB/s** | **Exceeds G1's sustainable limit (1~2GB/s)** |
 
-즉 배치가 느린 근본 원인은 언어가 아니라 **청크당 수만 객체 할당**이다. 자바에서는 배치를 키우면 GC 압력이 선형 증가해 오히려 손해다. C에서 arena/SoA로 전환하면 할당이 0이 되어 **배치가 커질수록 이득이 커진다. 부호가 반대다.**
+In other words, the root cause of slow batching is not the language but
+**tens of thousands of object allocations per chunk**. In Java, growing the
+batch increases GC pressure linearly, a net loss. Switching to arena/SoA in C
+drops allocations to zero, so **the bigger the batch, the bigger the win. The
+sign is reversed.**
 
-경계 입도를 리전으로 올리면 청크당 경계비용이 22ns → 0.02ns가 된다. 사용자 제안은 스코프 확대가 아니라 설계 개선이다.
+Raising the boundary granularity to a region takes the per-chunk boundary
+cost from 22ns to 0.02ns. The user's proposal is not scope creep but a design
+improvement.
 
-마지막으로 결정적인 경쟁 지형이 확인됐다:
+Finally, a decisive competitive landscape was confirmed:
 
-| 프로젝트 | 정체 | 약점 |
+| Project | What it is | Weakness |
 |---|---|---|
-| Pumpkin (Rust) | 서버 전체 재구현 | **worldgen/saving 미완** |
-| Valence (Rust) | Bevy ECS 프레임워크 | 바닐라 worldgen 없음 |
-| Minestom (Java) | NMS 제거 프레임워크 | 바닐라 worldgen 없음(의도적) |
-| Cuberite (C++) | 독자 서버 | 바닐라 패리티 없음 |
-| C2ME | 청크젠 최적화 모드 | JVM 한계 내부 |
+| Pumpkin (Rust) | Full server reimplementation | **worldgen/saving incomplete** |
+| Valence (Rust) | Bevy ECS framework | No vanilla worldgen |
+| Minestom (Java) | NMS-free framework | No vanilla worldgen (intentional) |
+| Cuberite (C++) | Independent server | No vanilla parity |
+| C2ME | Chunkgen optimization mod | Stays within JVM limits |
 
-**네이티브 서버를 만드는 팀들이 전부 worldgen에서 막혀 있다.** 모듈식 C ABI로 독립하면 이들이 잠재 소비자가 되며, 우리 코어가 bun의 N-API 위치를 차지한다.
+**Every team building a native server is stuck on worldgen.** Standing alone
+as a modular C ABI makes them potential consumers, and our core takes the
+position that N-API holds for bun.
 
-#### Decision (ABI 관련 3 결정; D4·D5는 generation-pipeline)
+#### Decision (3 ABI decisions; D4 and D5 are in generation-pipeline)
 
-| # | 결정 | 핵심 |
+| # | Decision | Key point |
 |---|---|---|
-| D1 | **코어는 순수 계산 라이브러리. 파일 I/O도 네트워크도 모른다** | 4개 소비자가 붙을 수 있고, 벤치가 깨끗하고, 상태 관리가 코어를 오염시키지 못한다 |
-| D2 | **경계는 리전 단위로만 노출. 노드 단위 함수를 외부로 내보내지 않는다** | `hyperchunk_batch(seed, region_list, out)`. 노드 단위 노출은 18.5% 손실 |
-| D3 | **arena/SoA 할당자와 배치 스케줄러를 코어가 소유** | 배치를 자바에 남기면 GC 벽에 걸려 성과가 드러나지 않는다 |
+| D1 | **The core is a pure compute library. It knows nothing of file I/O or networking** | Four consumers can attach, benchmarks stay clean, and state management cannot contaminate the core |
+| D2 | **The boundary is exposed at region granularity only. No node-level functions are exported** | `hyperchunk_batch(seed, region_list, out)`. Node-level exposure is an 18.5% loss |
+| D3 | **The core owns the arena/SoA allocator and the batch scheduler** | Leaving batching in Java hits the GC wall and the gains never show up |
 
-#### Why 리전 단위 경계?
+#### Why a region-granularity boundary?
 
-D2가 사용자의 bun 열화 경험을 구조적으로 회피한다. "C 함수를 Java에서 호출한다"가 아니라 "리전을 통째로 넘기고 완성해서 받는다"는 구조여야 한다. 노드 단위로 노출하면 naive 구현이 자연스럽게 18.5% 손실 경로로 빠진다. 따라서 이것은 성능 팁이 아니라 **API 표면에서 강제하는 불변식**이다.
+D2 structurally avoids the user's bun-regression experience. The shape must
+be "hand over a whole region and receive it completed", not "call C functions
+from Java". With node-level exposure, a naive implementation naturally falls
+into the 18.5%-loss path. This is therefore not a performance tip but **an
+invariant enforced at the API surface**.
 
-FFM(Panama)은 Java 22에서 확정됐고(JEP 454) MC 1.20.5+는 Java 21을 요구하므로 21에서는 preview다. 따라서 JNI로 간다. 리전 단위 입도에서는 FFM과 JNI의 성능 차이가 무의미하다. *(ADR-006 D4가 supersede: 타겟이 26.2/Java 25가 되면서 FFM 정식 — 브릿지는 FFM으로.)*
+FFM (Panama) was finalized in Java 22 (JEP 454), and MC 1.20.5+ requires
+Java 21, where it is still preview. So we go with JNI. At region granularity
+the performance difference between FFM and JNI is meaningless. *(Superseded
+by ADR-006 D4: with the target moving to 26.2/Java 25, FFM is final, and the
+bridge uses FFM.)*
 
-#### 모듈 경계
+#### Module boundary
 
 ```
-┌─ hyperchunk (순수 C, 의존성 0, C ABI) ──────────────┐
-│  arena 할당자 / SoA 블록 스토리지                          │
-│  density function 컴파일러 (AVX2 + AVX-512 런타임 디스패치) │
-│  5 스테이지 파이프라인                                      │
-│  배치 스케줄러 (체스판 스케줄링, features 충돌 회피)          │
-│  API: hyperchunk_batch(seed, region_list, out)  ← 리전 단위  │
+┌─ hyperchunk (pure C, zero dependencies, C ABI) ─────┐
+│  arena allocator / SoA block storage                        │
+│  density function compiler (AVX2 + AVX-512 runtime dispatch) │
+│  5-stage pipeline                                            │
+│  batch scheduler (checkerboard scheduling, features conflict avoidance) │
+│  API: hyperchunk_batch(seed, region_list, out)  ← region granularity │
 └────────────────────────────────────────────────────────┘
       ↑              ↑               ↑
-  CLI(벤치/GIF)   JNI(Fabric)   Rust FFI (Pumpkin/Valence)
+  CLI (bench/GIF)   JNI (Fabric)   Rust FFI (Pumpkin/Valence)
 ```
 
-- **CLI**는 벤치·GIF·패리티 검증 전용. JVM 워밍업 논란을 차단하고 벤치 순수성을 보장한다
-- **JNI/Fabric**은 실제 서버 사용성 *(ADR-006 D4 이후 FFM)*
-- **Rust FFI**는 Phase 3 이후. 위 경쟁 지형이 수요를 보여준다
-- Paper 플러그인 브릿지는 API가 더 얽혀 있어 Fabric 검증 후로 미룬다
+- **CLI** is for bench, GIF, and parity verification only. It shuts down
+  JVM-warmup disputes and guarantees benchmark purity
+- **JNI/Fabric** is real-server usability *(FFM since ADR-006 D4)*
+- **Rust FFI** comes after Phase 3. The competitive landscape above shows the
+  demand
+- A Paper plugin bridge is deferred until after Fabric validation because its
+  API is more entangled
 
-CLI와 모드는 같은 정적 라이브러리를 두 번 링크하므로 추가 비용이 거의 없다.
+The CLI and the mod link the same static library twice, so the extra cost is
+negligible.
 
-#### Anti-goals (ABI 관련)
+#### Anti-goals (ABI-related)
 
-- 코어에 파일 I/O·네트워크·플레이어/엔티티 상태 넣기 (D1)
-- density function 노드 단위 FFI 노출 (D2)
-- 배치 스케줄링을 자바에 남기기 (D3)
-- Paper 브릿지를 Phase 1에 포함
+- Putting file I/O, networking, or player/entity state in the core (D1)
+- Node-level FFI exposure of density functions (D2)
+- Leaving batch scheduling in Java (D3)
+- Including a Paper bridge in Phase 1
 
-#### Pitfalls (ABI 관련)
+#### Pitfalls (ABI-related)
 
-1. **노드 단위 FFI 유혹.** 이식 초기에 "Java의 density function 노드를 하나씩 네이티브 호출"하는 것이 가장 쉬운 경로처럼 보인다. 그것이 18.5% 손실 경로다. 코어 헤더에 노드 단위 함수를 아예 선언하지 않아 컴파일 단계에서 막는다.
-2. **arena 재사용 시 stale 데이터.** SoA 버퍼를 배치 간 재사용할 때 초기화 누락이 패리티 버그로 나타나고, 증상이 산발적이라 추적이 어렵다.
-3. **Java 21 vs 22 런타임 혼선.** FFM 예제 코드를 그대로 쓰면 `--enable-preview` 없이 동작하지 않는다. JNI를 쓰기로 한 이유가 여기 있다. *(ADR-006 이후 Java 25 타겟이라 해당 없음 — 역사 기록으로 보존.)*
+1. **The node-level FFI temptation.** Early in the port, "natively call
+   Java's density function nodes one at a time" looks like the easiest path.
+   That is the 18.5%-loss path. Node-level functions are simply never
+   declared in the core header, so this is blocked at compile time.
+2. **Stale data on arena reuse.** When SoA buffers are reused across batches,
+   a missed initialization shows up as a parity bug, and the sporadic
+   symptoms make it hard to track down.
+3. **Java 21 vs 22 runtime confusion.** FFM sample code used as-is does not
+   run without `--enable-preview`. This is why JNI was chosen. *(No longer
+   applicable since ADR-006 moved the target to Java 25; preserved as
+   historical record.)*
 
-#### Verification (ABI 관련)
+#### Verification (ABI-related)
 
-- `hyperchunk` 헤더에 리전 단위 진입점만 존재하고 노드 단위 함수가 없다
-- 코어가 `libc` 외 의존성 없이 빌드된다 (`ldd` 확인)
+- The `hyperchunk` header contains only region-granularity entry points and
+  no node-level functions
+- The core builds with no dependency beyond `libc` (verified with `ldd`)
 
 #### When this might break
 
-- 모드 생태계가 데이터팩보다 Java 코드 확장으로 회귀하는 경우 — fallback 비중이 커져 배수가 41배 아래로 내려간다 (호환 절반 참조)
+- If the mod ecosystem regresses toward Java code extensions over datapacks:
+  the fallback share grows and the multiplier drops below 41x (see the
+  compatibility half)
 
 #### References
 
-- ADR-002 (재작성 방침 — [generation-pipeline/context.md](../generation-pipeline/context.md))
+- ADR-002 (rewrite policy, in [generation-pipeline/context.md](../generation-pipeline/context.md))
 - https://openjdk.org/jeps/454 (FFM, Java 22)
 - https://github.com/pumpkin-mc/pumpkin
 - https://github.com/valence-rs/valence

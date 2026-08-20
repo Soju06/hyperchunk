@@ -1,100 +1,106 @@
-# worldgen-parity — Context
+# worldgen-parity: Context
 
 ## Purpose & scope
 
-[spec.md](spec.md)가 패리티 정의·게이트의 normative SSOT다. 이 문서는 그 결정의
-역사와 근거, 현재 게이트 상태의 배경을 담는다.
+[spec.md](spec.md) is the normative SSOT for the parity definition and gates.
+This document holds the history and rationale of those decisions and the
+background of the current gate state.
 
-## Current state (2026-08 기준)
+## Current state (as of 2026-08)
 
-- 풀 리전 r.0.0이 바닐라 golden 캡처와 canonical 해시 일치
-  (`golden/SHA256SUMS`에 핀, `scripts/parity_gate.sh`가 판정). 37개 ctest 전부
-  green, sanitizer-clean. CI는 추적 데이터만으로 도는 25개 서브셋을 실행하고,
-  golden 의존 12개 스위트는 로컬 전용 (.github/CONTRIBUTING.md § Tests and
-  golden data).
-- strict 대조(스케줄-틱 포함 canonical 정규화)가 코드 기본값. 재캡처-3 unified
-  골든 + `postProcessGeneration` 드레인으로 region 게이트 4/4 byte-exact
+- Full region r.0.0 matches the vanilla golden capture on the canonical hash
+  (pinned in `golden/SHA256SUMS`, asserted by `scripts/parity_gate.sh`). All
+  37 ctest suites green, sanitizer-clean. CI runs the 25-suite subset that
+  needs only tracked data; the 12 golden-dependent suites are local-only
+  (.github/CONTRIBUTING.md section Tests and golden data).
+- Strict comparison (canonical normalization including scheduled ticks) is
+  the code default. With the recapture-3 unified golden plus the
+  `postProcessGeneration` drain, the region gate is 4/4 byte-exact
   (Task 13-close, [archive](../../changes/archive/)).
-- 각 스테이지 게이트가 무엇을 커버하고 무엇에 blind한지는 mutation probe로
-  실측해 태스크별 완료 노트에 기록했다
-  ([changes/archive/](../../changes/archive/)의 task7~task14 폴더).
+- What each stage gate covers and what it is blind to was measured with
+  mutation probes and recorded in the per-task completion notes (the task7
+  through task14 folders under [changes/archive/](../../changes/archive/)).
 
-## Canonical hash의 유래
+## Origin of the canonical hash
 
-"canonical-일치" 정의(스펙의 Canonical payload hash 요구사항)는 B-6 공개 벤치
-노트 §3에서 공개 문서용으로 확정된 것이다: 저장-시각 필드(루트 `LastUpdate`,
-mca 헤더 타임스탬프 테이블)와 섹터 배치·압축 프레이밍을 제외한 청크 페이로드
-전 바이트의 정규화 해시 (`tools/golden/compare_regions.py`). 골든의 헤더
-타임스탬프는 캡처 당시 벽시계라 raw-비트 일치는 어떤 시스템도 원리적으로
-불가하다. 골든 canonical `a5963205…3c24`, FREE own-v1 `2eb7485b…84d6`
-(golden/SHA256SUMS). 전문: [benchmarks-and-viz/context.md](../benchmarks-and-viz/context.md).
+The "canonical-identical" definition (the spec's Canonical payload hash
+requirement) was finalized for public documents in section 3 of the B-6
+public bench notes: a normalized hash over all chunk payload bytes, excluding
+save-time fields (root `LastUpdate`, the mca header timestamp table) and
+sector layout/compression framing (`tools/golden/compare_regions.py`). The
+golden's header timestamps are the capture-time wall clock, so raw-bit
+equality is impossible in principle for any system. Golden canonical
+`a5963205...3c24`, FREE own-v1 `2eb7485b...84d6` (golden/SHA256SUMS). Full
+text: [benchmarks-and-viz/context.md](../benchmarks-and-viz/context.md).
 
 ## Decision history
 
-> append-only. 기존 항목은 수정하지 않는다. 결정이 바뀌면 새 항목을 추가하고
-> 이전 항목을 `Superseded by`로 표시한다.
+> Append-only. Existing entries are never edited. When a decision changes,
+> add a new entry and mark the previous one `Superseded by`.
 
-관련 ADR 배치: ADR-002(전문: [generation-pipeline/context.md](../generation-pipeline/context.md))의
-D3(비트 패리티 필수)·P2(RNG 소비 순서)·P3(double 유지)가 본 capability
-spec.md의 요구사항으로 반영되어 있다. ADR-006(전문: 같은 문서) D2(golden 생성
-환경 JDK 25)도 여기 spec.md로 반영. 아래는 본 capability가 primary home인
-ADR-007 전문이다.
+Related ADR placement: D3 (bit parity mandatory), P2 (RNG consumption order),
+and P3 (keep double) of ADR-002 (full text:
+[generation-pipeline/context.md](../generation-pipeline/context.md)) are
+reflected as requirements in this capability's spec.md. ADR-006 (full text:
+same document) D2 (golden capture environment JDK 25) is also reflected into
+this spec.md. Below is the full text of ADR-007, whose primary home is this
+capability.
 
-### ADR-007 — 패리티 게이트를 2단(비트정확 + 순서재생)으로 재정의한다 (Phase 1, 2026-07-28)
+### ADR-007: Redefine the parity gate as two tiers (bit-exact + order-replay) (Phase 1, 2026-07-28)
 
 **Status:** Decided
 **Type:** Quality strategy / Contract
-**Resolves:** ADR-002 D3의 "region sha256 일치" 게이트를 정밀화 (원칙 유지, 정의 교체)
+**Resolves:** Refines the "region sha256 equality" gate of ADR-002 D3 (principle kept, definition replaced)
 
 #### Context
 
-Task 2 golden 작업에서 실측으로 확인된 사실: **바닐라 26.2 월드젠은 같은 시드·같은 머신에서도 run-to-run 비결정적이다.** 증거는 `tools/golden/NOTES.md`에 기록했다. 요약:
+Fact established by measurement during the Task 2 golden work: **vanilla 26.2 worldgen is nondeterministic run-to-run even at the same seed on the same machine.** Evidence is recorded in `tools/golden/NOTES.md`. Summary:
 
-- `01_structure_starts`~`06_carvers` 스테이지 덤프는 두 독립 실행에서 바이트 단위 일치
-- `07_features` 이후는 3x3 기본 런에서 4/9 청크, 5x5 순차 probe에서 16/25 청크가 실제 내용 차이 (glow_lichen/vine/광맥 배치)
-- raw `.mca`는 물론 타임스탬프를 마스킹한 canonical payload 해시도 불일치
-- 순차 forceload로도 안정화 실패: **full 승격 순서 자체가 두 probe 런에서 달랐다**
+- Stage dumps `01_structure_starts` through `06_carvers` are byte-identical across two independent runs
+- From `07_features` onward, 4/9 chunks in the 3x3 baseline run and 16/25 chunks in the 5x5 sequential probe differ in actual content (glow_lichen/vine/ore vein placement)
+- Not only the raw `.mca` mismatches; the canonical payload hash with timestamps masked out mismatches too
+- Sequential forceload also failed to stabilize it: **the full-promotion order itself differed between the two probe runs**
 
-메커니즘: carvers까지는 (seed, chunk pos)의 위치시드 순수 함수라 순서 무관. features는 청크 경계를 넘어 읽고 쓰므로(나무/덩굴 스필오버, heightmap 갱신) 이웃 데코 순서가 결과를 바꾸고, 스케줄러는 그 순서를 고정하지 않는다.
+Mechanism: up through carvers, stages are position-seeded pure functions of (seed, chunk pos), so order does not matter. Features read and write across chunk boundaries (tree/vine spillover, heightmap updates), so neighbor decoration order changes the result, and the scheduler does not fix that order.
 
-따라서 ADR-002 D3의 "바닐라 region과 sha256 일치"는 그대로는 정의 불성립이다. **바닐라가 자기 자신과도 sha256이 일치하지 않는다.**
+Therefore ADR-002 D3's "sha256 equality with the vanilla region", taken as-is, is not a well-formed definition. **Vanilla does not sha256-match even itself.**
 
-#### Decision (3 핵심 결정)
+#### Decision (3 core decisions)
 
-| # | 결정 | 핵심 |
+| # | Decision | Key point |
 |---|---|---|
-| D1 | **Tier 1 게이트: 01~06 스테이지는 바닐라 golden 덤프와 바이트 단위 일치** | 순서 무관 구간이므로 무조건 비트정확. noise/surface/carvers가 여기 속함 |
-| D2 | **Tier 2 게이트: features 이후는 order-replay 검증** | golden 런의 실제 features 실행 순서를 order manifest로 기록하고, C 구현이 그 순서를 재생해 07~11 덤프와 바이트 단위 일치해야 함 |
-| D3 | **비결정성을 노이즈가 아니라 입력으로 승격** | 서로 다른 순서의 golden 런 2개를 모두 재생·일치시키면 알고리즘 패리티의 강한 증거 |
+| D1 | **Tier 1 gate: stages 01-06 must be byte-identical to the vanilla golden dumps** | Order-independent range, so unconditionally bit-exact. noise/surface/carvers belong here |
+| D2 | **Tier 2 gate: features onward are verified by order-replay** | Record the golden run's actual features execution order as an order manifest; the C implementation replays that order and must byte-match the 07-11 dumps |
+| D3 | **Promote the nondeterminism to an input, not noise** | Replaying two golden runs with different orders and matching both is strong evidence of algorithmic parity |
 
-#### Why order-replay over 바닐라 순서 고정?
+#### Why order-replay over pinning the vanilla order?
 
-바닐라를 우리 순서에 맞추는 실험(sequential probe)은 실패했다. 스케줄러가 외부에서 고정되지 않는다. 반대로 **바닐라가 실제로 한 순서를 기록해 우리가 따라가는 것**은 항상 가능하고, 재현 가능한 golden 번들(덤프 + order manifest)을 만든다. C 코어는 어차피 배치 스케줄러를 소유하므로(ADR-003 D3) 임의 순서 재생이 자연스럽다.
+The experiment to bend vanilla to our order (sequential probe) failed. The scheduler cannot be pinned from outside. In the other direction, **recording the order vanilla actually took and following it ourselves** is always possible, and it produces a reproducible golden bundle (dumps + order manifest). The C core owns the batch scheduler anyway (ADR-003 D3), so replaying an arbitrary order comes naturally.
 
-#### 3-way 시연에 대한 의미 (ADR-001 연계)
+#### Implications for the 3-way demo (ties to ADR-001)
 
-"바닐라와 비트단위 동일" 주장의 정확한 스코프는 "**같은 시드 + 같은 데코 순서에서** 비트단위 동일"이 된다. 시연 문구와 README는 이 스코프를 정직하게 명시한다. 이는 약점이 아니라 오히려 방어력이다: 기술 관객이 "바닐라도 런마다 다른데 뭐랑 같다는 거냐"고 공격하는 지점을 우리가 먼저 점유한다.
+The exact scope of the "bit-identical to vanilla" claim becomes "bit-identical **at the same seed + the same decoration order**". The demo copy and the README state this scope honestly. This is not a weakness but a defense: we occupy first the exact point where a technical audience would attack with "vanilla differs run to run itself, so identical to what?".
 
 #### Anti-goals
 
-- 바닐라 스케줄러 자체를 패치해 순서를 고정하는 접근 (침습적, 유지 불가)
-- features 이후를 "통계적 유사"로 완화 (패리티 원칙 포기)
-- Tier 1 구간을 order-replay로 낮추기 (불필요한 약화)
+- Patching the vanilla scheduler itself to pin the order (invasive, unmaintainable)
+- Relaxing features onward to "statistically similar" (abandons the parity principle)
+- Lowering the Tier 1 range to order-replay (needless weakening)
 
 #### Pitfalls
 
-1. **order manifest 기록이 아직 미구현.** stage-dump mod 확장 필요 (open item). manifest 없는 golden은 Tier 2 검증에 쓸 수 없다. *(이후 구현 완료 — Task 9-pre에서 훅 설계 확정, [archive](../../changes/archive/) task9pre-order 노트 참조.)*
-2. **probe의 순차 강제 실패 원인 미규명.** forceload 완료 대기 로직이 스케줄러를 못 고정했다. Tier 2 설계는 이 실패에 의존하지 않지만, 재도전은 시간 낭비다.
-3. **spawn/full 스테이지 diff는 features의 하류 효과.** 별도 원인으로 오인하지 말 것.
+1. **Order manifest recording is not implemented yet.** Requires extending the stage-dump mod (open item). A golden without a manifest cannot be used for Tier 2 verification. *(Since implemented: hook design finalized in Task 9-pre, see the task9pre-order note in [archive](../../changes/archive/).)*
+2. **The cause of the probe's sequential-forcing failure is unresolved.** The forceload completion-wait logic failed to pin the scheduler. The Tier 2 design does not depend on this failure, but retrying it is a waste of time.
+3. **spawn/full stage diffs are downstream effects of features.** Do not mistake them for a separate cause.
 
 #### Verification
 
-- golden 번들에 order.manifest 포함 확인
-- C 구현이 manifest 재생 모드를 지원하고, 서로 다른 순서의 golden 2벌을 모두 통과
-- Tier 1: `diff -rq` 01~06 전체 0 diff
+- Confirm the golden bundle includes order.manifest
+- The C implementation supports a manifest replay mode and passes both golden bundles with different orders
+- Tier 1: `diff -rq` across all of 01-06 with 0 diff
 
 #### References
 
-- ADR-002 (패리티 원칙 — [generation-pipeline/context.md](../generation-pipeline/context.md)), ADR-003 (배치 스케줄러 소유 — [core-abi/context.md](../core-abi/context.md))
-- tools/golden/NOTES.md (증거·환경·재현 절차)
+- ADR-002 (parity principle: [generation-pipeline/context.md](../generation-pipeline/context.md)), ADR-003 (batch scheduler ownership: [core-abi/context.md](../core-abi/context.md))
+- tools/golden/NOTES.md (evidence, environment, reproduction procedure)
 - tools/golden/experiments/sequential_probe.sh

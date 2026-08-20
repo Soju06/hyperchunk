@@ -1,118 +1,123 @@
-# hyperchunk — Project
+# hyperchunk: Project
 
-바닐라 Minecraft Java Edition 26.2 오버월드 월드젠을 순수 C11로 비트단위 동일하게
-재구현하는 프로젝트. 이 문서는 프로젝트의 방향 결정(제품 목적·스코프 경계)과
-capability 인덱스를 담는다. 테스트 가능한 요구사항은 `specs/<capability>/spec.md`,
-각 결정의 근거·수치·역사는 같은 폴더 `context.md`의 "Decision history"에 있다.
+A project that reimplements the vanilla Minecraft Java Edition 26.2 overworld
+worldgen bit-exactly in pure C11. This document holds the project's direction
+decisions (product purpose, scope boundaries) and the capability index.
+Testable requirements live in `specs/<capability>/spec.md`; each decision's
+rationale, numbers, and history live in the "Decision history" section of the
+same folder's `context.md`.
 
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG
 > OR MICROSOFT.
 
 ## Capabilities
 
-| Capability | 무엇의 SSOT인가 |
+| Capability | SSOT of what |
 |---|---|
-| [worldgen-parity](specs/worldgen-parity/spec.md) | 비트정확 패리티 정의, 2단 게이트(비트정확 + order-replay), canonical hash 정의, golden capture 체계 |
-| [generation-pipeline](specs/generation-pipeline/spec.md) | 11스테이지 파이프라인, 26.2 버전 핀, 데이터팩 스키마 호환 + 바닐라 fallback |
-| [simd-backends](specs/simd-backends/spec.md) | 스칼라/AVX2/AVX-512 런타임 디스패치, 백엔드 간 바이트동일, FMA 금지 게이트 |
-| [core-abi](specs/core-abi/spec.md) | 리전 단위 C ABI, 순수 계산 라이브러리 경계, FFI 소비자(CLI/FFM/Rust) |
-| [scheduler](specs/scheduler/spec.md) | FREE/REPLAY 이중 모드, 결정론 보장, 스테이지 코드 공유 |
-| [engineering-safety](specs/engineering-safety/spec.md) | C11 유지, sanitizer 게이트, zero-warning, 게이트 체인 |
-| [benchmarks-and-viz](specs/benchmarks-and-viz/spec.md) | 공개 벤치 수치와 클레임 규칙, 데모/viz 캡처·타임라인 |
+| [worldgen-parity](specs/worldgen-parity/spec.md) | Bit-exact parity definition, two-tier gate (bit-exact + order-replay), canonical hash definition, golden capture scheme |
+| [generation-pipeline](specs/generation-pipeline/spec.md) | 11-stage pipeline, 26.2 version pin, datapack schema compatibility + vanilla fallback |
+| [simd-backends](specs/simd-backends/spec.md) | Scalar/AVX2/AVX-512 runtime dispatch, byte-identical output across backends, FMA prohibition gate |
+| [core-abi](specs/core-abi/spec.md) | Region-granularity C ABI, pure compute library boundary, FFI consumers (CLI/FFM/Rust) |
+| [scheduler](specs/scheduler/spec.md) | FREE/REPLAY dual mode, determinism guarantee, shared stage code |
+| [engineering-safety](specs/engineering-safety/spec.md) | Staying on C11, sanitizer gates, zero-warning, gate chain |
+| [benchmarks-and-viz](specs/benchmarks-and-viz/spec.md) | Public bench numbers and claim rules, demo/viz capture and timeline |
 
-## 워크플로 (요약)
+## Workflow (summary)
 
-specs가 현재 동작의 normative SSOT다. 동작·계약·스키마를 바꾸는 작업은
-`openspec/changes/`에 change를 먼저 만들고, 구현 후 spec을 동기화하고,
-`openspec validate --specs`를 통과시킨 뒤 `openspec/changes/archive/`로 보관한다.
-자세한 절차는 리포 루트 [AGENTS.md](../AGENTS.md), 기여 규칙은
+The specs are the normative SSOT for current behavior. Work that changes
+behavior, contracts, or schemas first creates a change in `openspec/changes/`,
+syncs the spec after implementation, passes `openspec validate --specs`, and
+then archives to `openspec/changes/archive/`. Detailed procedure: repo-root
+[AGENTS.md](../AGENTS.md); contribution rules:
 [.github/CONTRIBUTING.md](../.github/CONTRIBUTING.md).
 
-Decision history 규칙 (구 append-only ADR 로그의 계승): 각 capability
-`context.md`의 "Decision history" 섹션은 **append-only**다. 기존 ADR 항목은
-수정하지 않는다. 결정이 바뀌면 새 항목을 추가하고 이전 항목을 `Superseded by`로
-표시하며, spec.md 반영은 openspec change를 통해서만 한다.
+Decision history rule (successor to the former append-only ADR log): the
+"Decision history" section of each capability's `context.md` is
+**append-only**. Existing ADR entries are not modified. When a decision
+changes, add a new entry and mark the previous one with `Superseded by`;
+spec.md updates happen only through an openspec change.
 
 ---
 
-## Decision history — 프로젝트 방향
+## Decision history: project direction
 
-요구사항이라기보다 방향 결정인 ADR 두 건을 여기 보존한다. ADR 번호·날짜는
-원본(구 append-only ADR 로그, 2026-07-27~28 작성)을 그대로 유지한다.
+Two ADRs that are direction decisions rather than requirements are preserved
+here. ADR numbers and dates are kept exactly as in the original (the former
+append-only ADR log, written 2026-07-27 to 2026-07-28).
 
-### ADR-001 — 프로젝트 목적은 ROI가 아니라 기술 시연이며, 산출물은 3-way 탑뷰 비교 GIF다 (Phase 0, 2026-07-27)
+### ADR-001: The project goal is technical demonstration, not ROI, and the deliverable is a 3-way top-view comparison GIF (Phase 0, 2026-07-27)
 
 **Status:** Decided
 **Type:** Product direction
-**Plan:** [changes/archive/2026-07-28-phase1-vertical-slice/](changes/archive/2026-07-28-phase1-vertical-slice/) (구 .hermes/plans/2026-07-27_phase1-vertical-slice.md)
+**Plan:** [changes/archive/2026-07-28-phase1-vertical-slice/](changes/archive/2026-07-28-phase1-vertical-slice/) (formerly .hermes/plans/2026-07-27_phase1-vertical-slice.md)
 
 #### Context
 
-프로젝트는 "청크 생성 SaaS"로 출발했다. 초기 조사에서 SaaS 형태를 죽이는 벽 세 개가 확인됐다.
+The project started as a "chunk generation SaaS". Initial research identified three walls that kill the SaaS form.
 
-1. **법적 벽.** Minecraft Usage Guidelines는 열거주의다. 원문: "Do **not** make commercial use or commercially exploit anything that we have made unless these guidelines say it's okay" / "If something isn't covered by these guidelines and we haven't otherwise said it's okay, that probably means we don't want you to do it". 허용 목록은 영상·스트림, 서버 운영, 출판물, 핸드크래프트(연 $5,000 상한)뿐이고 "월드젠 출력물 판매"는 열거되지 않았다.
-2. **공짜의 벽.** Chunky가 무료로 pregen을 수행한다. 고객은 이미 유휴 CPU를 임대 중이고, pregen은 일회성 비용이라 구독이 붙지 않는다. MC 호스팅 시장가는 $1/GB 수준으로 가격 민감도가 극단적이다.
-3. **커모디티 벽.** 시드맵 레이어(Chunkbase, seeds.gg, seedlander, mcseedmap, seedmap.app, cubiomes.com)는 전부 무료 광고 모델이며 SaaS가 아니라 SEO/트래픽 시장이다.
+1. **The legal wall.** The Minecraft Usage Guidelines work by enumeration: "Do **not** make commercial use or commercially exploit anything that we have made unless these guidelines say it's okay" / "If something isn't covered by these guidelines and we haven't otherwise said it's okay, that probably means we don't want you to do it". The allowlist covers only videos/streams, server hosting, publications, and handcrafts (with a $5,000/year cap); "selling worldgen output" is not enumerated.
+2. **The free-alternative wall.** Chunky performs pregen for free. Customers are already renting idle CPUs, and pregen is a one-time cost, so a subscription does not attach. The MC hosting market price is around $1/GB, making price sensitivity extreme.
+3. **The commodity wall.** The seed-map layer (Chunkbase, seeds.gg, seedlander, mcseedmap, seedmap.app, cubiomes.com) is entirely free ad-supported models; it is an SEO/traffic market, not a SaaS market.
 
-이 시점에 사용자가 목적을 명시했다. 원문 그대로:
+At this point the user stated the goal explicitly:
 
-> "솔직히 그냥 ROI 개무시한 괴물같은 기술력 자랑이야, 사람들 FOMO오게"
+> "Honestly, this is just a monstrous show of technical skill that completely ignores ROI, to give people FOMO." (owner directive, translated from the Korean original)
 
-이 directive가 벽 2와 벽 3을 무효화했다(무료 배포이므로 공짜 대안 및 광고 시장과 경쟁하지 않는다). 벽 1은 남는다. 같은 문서가 commercial use를 이렇게 정의하기 때문이다: "commercial use means any uses of our name, brand, or assets that you use and share with others (**regardless of whether you receive payment or provide it for free**)".
+This directive nullified walls 2 and 3 (as a free release it does not compete with free alternatives or the ad market). Wall 1 remains, because the same document defines commercial use like this: "commercial use means any uses of our name, brand, or assets that you use and share with others (**regardless of whether you receive payment or provide it for free**)".
 
-산출물 형태 역시 사용자가 지정했다:
+The user also specified the deliverable format:
 
-> "java 기본 vs 가장 최적화 잘됬다는 버킷/플러그인 vs 우리 / 이거 청크 탑뷰로 실시간 생성이 얼마나 빠른지 gif같은 숏폼으로 보여주기만 해도 충분할 듯"
+> "Default Java vs the bukkit/plugin that's supposedly best optimized vs us / just showing how fast real-time generation is in a chunk top view, as a short-form like a GIF, would probably be enough." (owner directive, translated from the Korean original)
 
-#### Decision (5 핵심 결정)
+#### Decision (5 core decisions)
 
-| # | 결정 | 핵심 |
+| # | Decision | Key point |
 |---|---|---|
-| D1 | **ROI 최적화를 명시적 anti-goal로 선언** | 수익 모델·과금·고객 획득은 설계 입력이 아니다 |
-| D2 | **산출물은 3-way 탑뷰 실시간 생성 비교 숏폼** | `바닐라 Java` vs `Paper + C2ME + Chunky` vs `hyperchunk` |
-| D3 | **무료 공개 (OSS)** | 벽 2·3을 회피하고 재현성을 확보 |
-| D4 | **비트단위 패리티를 제품의 본질로 승격** | 3-way 화면에서 "지형은 동일, 속도만 다름"이 눈으로 증명되어야 GIF가 성립 |
-| D5 | **법적 가드레일 준수** | 이름에 Minecraft를 지배적 요소로 쓰지 않고 부제로만, "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT" 명시 |
+| D1 | **Declare ROI optimization an explicit anti-goal** | Revenue model, billing, and customer acquisition are not design inputs |
+| D2 | **The deliverable is a 3-way top-view real-time generation comparison short-form** | `vanilla Java` vs `Paper + C2ME + Chunky` vs `hyperchunk` |
+| D3 | **Free release (OSS)** | Sidesteps walls 2 and 3 and secures reproducibility |
+| D4 | **Promote bit-exact parity to the essence of the product** | The GIF only works if "same terrain, only speed differs" is proven to the eye on the 3-way screen |
+| D5 | **Comply with the legal guardrails** | Do not use Minecraft as a dominant element of the name, only as a subtitle; state "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT" |
 
-D4의 normative 반영은 [worldgen-parity](specs/worldgen-parity/spec.md), D5는
-[benchmarks-and-viz](specs/benchmarks-and-viz/spec.md)에 있다.
+The normative reflection of D4 is in [worldgen-parity](specs/worldgen-parity/spec.md), and of D5 in
+[benchmarks-and-viz](specs/benchmarks-and-viz/spec.md).
 
-#### Why 3-way GIF over 벤치 대시보드?
+#### Why a 3-way GIF over a bench dashboard?
 
-초기에는 별도 패리티 검증 하네스를 데모의 주인공으로 삼는 안을 검토했다. 3-way 탑뷰가 우월하다. 같은 시드로 세 화면을 나란히 놓으면 패리티 증명이 화면에 내장되어 별도 하네스가 불필요해지고, 기술 관객과 일반 관객을 동시에 커버한다. 대시보드는 기술 관객만 읽는다.
+Early on we considered making a separate parity verification harness the star of the demo. The 3-way top view is superior. Putting three panels side by side on the same seed embeds the parity proof in the screen itself, making a separate harness unnecessary, and it covers the technical and general audiences at once. A dashboard is read only by the technical audience.
 
-단 이것이 D4를 강제한다. 패리티가 화면에 내장된다는 것은 패리티가 깨지면 그것도 화면에 내장된다는 뜻이다. 우리 쪽이 지형만 생성하고 features를 빼면 관객이 즉시 알아채고 flex가 사기로 뒤집힌다.
+But this forces D4. If parity is embedded in the screen, then a parity break is embedded in the screen too. If our side generated only terrain and dropped features, the audience would notice immediately and the flex would flip into fraud.
 
-#### Why 시드 탐색(seed search)을 버렸나
+#### Why seed search was abandoned
 
-ROI 기준으로는 시드 탐색이 최적해였다. 시드 간 의존성이 0이라 Amdahl 지분이 없고, 바이옴/구조물 레이어만 평가하므로 decoration RNG 순서 재현이 불필요하며, cubiomes라는 검증된 C 레퍼런스가 있고, 개인 노트북으로 10^12 시드를 스캔할 수 없어 컴퓨트 판매 지점이 실제로 존재한다.
+By ROI criteria, seed search was the optimal solution. Inter-seed dependency is zero, so there is no Amdahl share; only the biome/structure layers are evaluated, so reproducing the decoration RNG order is unnecessary; cubiomes exists as a proven C reference; and a personal laptop cannot scan 10^12 seeds, so a compute-sales point actually exists.
 
-그러나 D1이 확정되자 탈락했다. 시드 탐색은 **화면에 아무것도 보이지 않는다.** "10^12개 스캔함"은 숫자일 뿐이고 관객이 감탄할 그림이 없다. FOMO 지표로는 최악이다.
+But once D1 was settled, it was eliminated. Seed search **shows nothing on screen.** "Scanned 10^12 seeds" is just a number; there is no picture for the audience to marvel at. By the FOMO metric it is the worst option.
 
 #### Anti-goals (explicit rejections)
 
-- 과금·구독·컴퓨트 판매 (D1)
-- pregen 대행 서비스 (벽 2)
-- 시드맵 웹사이트 (벽 3)
-- 시드 탐색 서비스 (위 절)
-- MC를 벗어난 범용 절차적 지형 생성 API — 시장은 크지만 기술 재사용도가 낮고 이 프로젝트의 flex와 무관
+- Billing, subscriptions, compute sales (D1)
+- A pregen service (wall 2)
+- A seed-map website (wall 3)
+- A seed search service (the section above)
+- A general-purpose procedural terrain generation API beyond MC: the market is large, but the technology reuse is low and it is unrelated to this project's flex
 
 #### Pitfalls
 
-1. **"빠름"은 눈에 보이지 않고 "끊김"만 눈에 보인다.** 일반 유저 관객만 노리면 최적화 성과가 "좋은 서버네"로 소비되고 끝난다. 3-way 나란히 비교가 이 저주를 회피하는 유일한 형태다.
-2. **비교 기준선을 낡은 버전으로 잡으면 즉시 털린다.** C2ME는 이미 density function compiler를 도입했다. GIF의 2번 화면은 반드시 C2ME 최신 릴리스여야 한다.
-3. **풀 파이프라인 숫자를 숨기면 첫 댓글에서 무너진다.** features가 순차 의존이라 GPU/병렬화가 제한된다는 사실을 먼저 공개하는 편이 신뢰를 얻는다.
+1. **"Fast" is invisible; only "stutter" is visible.** If you target only the general-user audience, the optimization work gets consumed as "nice server" and that is the end of it. The 3-way side-by-side comparison is the only format that escapes this curse.
+2. **Picking an outdated version as the comparison baseline gets you torn apart immediately.** C2ME has already introduced a density function compiler. Panel 2 of the GIF must be the latest C2ME release.
+3. **Hiding the full-pipeline numbers collapses at the first comment.** Disclosing up front that features are sequentially dependent, which limits GPU use and parallelization, is what earns trust.
 
 #### Verification
 
-- 3-way GIF의 세 화면이 동일 시드에서 육안으로 동일한 지형을 그린다
-- 세 구성의 region 파일 `sha256`이 일치한다 (ADR-002 D3; ADR-007이 canonical hash로 정밀화)
-- 배포물 README와 영상 설명에 D5 디스클레이머가 포함되어 있다
+- The three panels of the 3-way GIF draw visually identical terrain from the same seed
+- The region file `sha256` of the three configurations match (ADR-002 D3; refined by ADR-007 into the canonical hash)
+- The release README and video descriptions include the D5 disclaimer
 
 #### When this might break
 
-- Mojang이 Usage Guidelines를 개정해 서드파티 월드젠 재구현을 명시적으로 금지하는 경우
-- ROI가 목적으로 재진입하는 경우 — 그때는 본 ADR을 supersede하고 시드 탐색안을 재검토해야 한다
+- If Mojang revises the Usage Guidelines to explicitly prohibit third-party worldgen reimplementations
+- If ROI re-enters as a goal: then this ADR must be superseded and the seed search option re-examined
 
 #### References
 
@@ -120,81 +125,81 @@ ROI 기준으로는 시드 탐색이 최적해였다. 시드 간 의존성이 0�
 - https://modrinth.com/project/VSNURh3q (C2ME)
 - https://github.com/Cubitect/cubiomes-viewer
 
-### ADR-005 — 네트워크/패킷 레이어(P4)는 별개 제품으로 격리하고 Phase 1 설계에 영향을 주지 않는다 (Phase 4, 2026-07-27)
+### ADR-005: Isolate the network/packet layer (P4) as a separate product; it does not affect Phase 1 design (Phase 4, 2026-07-27)
 
 **Status:** Decided
 **Type:** Scope boundary
-**Phase:** 4 (paper-only, P1~P3 완료 후 재평가)
+**Phase:** 4 (paper-only, re-evaluate after P1-P3 are complete)
 
 #### Context
 
-사용자가 장기 로드맵을 제시했다:
+The user laid out a long-term roadmap:
 
-> "최종 로드맵은 c레벨 자바 없는 네트워트/패킷레벨 최적화도 해보고싶어서"
+> "For the final roadmap, I also want to try C-level network/packet-level optimization with no Java." (owner directive, translated from the Korean original)
 
-이후 성격을 명확히 했다:
+and later clarified its nature:
 
-> "P4는 그냥 꺼내본 장기 로드맵이였어"
+> "P4 was just a long-term roadmap idea I floated." (owner directive, translated from the Korean original)
 
-로슈라인을 재적용해 P4가 P1~P3과 같은 물리법칙 위에 있는지 확인했다:
+We re-applied the roofline model to check whether P4 sits on the same physical laws as P1-P3:
 
-| 워크로드 | arithmetic intensity | 판정 |
+| Workload | arithmetic intensity | Verdict |
 |---|---|---|
-| 청크 생성 | **21.36 flops/byte** | COMPUTE bound |
-| 청크 zlib 압축 | 2.03 | MEMORY/IO bound |
-| **패킷 직렬화** | **0.00** | **MEMORY/IO bound** |
+| Chunk generation | **21.36 flops/byte** | COMPUTE bound |
+| Chunk zlib compression | 2.03 | MEMORY/IO bound |
+| **Packet serialization** | **0.00** | **MEMORY/IO bound** |
 
-**축적한 무기가 전이되지 않는다.** AVX-512, zmm 32 레지스터, `vpermt2pd`, FMA 금지 대응, CPI 튜닝은 모두 compute bound 워크로드용이다. 패킷 계층에 필요한 것은 `io_uring`, zero-copy, `sendmmsg`, syscall 배칭이며 완전히 다른 스킬셋이다.
+**The accumulated weapons do not transfer.** AVX-512, the 32 zmm registers, `vpermt2pd`, working around the FMA prohibition, and CPI tuning are all for compute bound workloads. What the packet layer needs is `io_uring`, zero-copy, `sendmmsg`, and syscall batching, a completely different skill set.
 
-압축은 이미 해결된 문제다. libdeflate / ISA-L / zlib-ng가 zlib보다 2배 이상 빠르고 검증되어 있다. 직접 구현은 NIH이며 조립이 정답이다.
+Compression is already a solved problem. libdeflate / ISA-L / zlib-ng are 2x or more faster than zlib and battle-tested. Implementing it ourselves is NIH; assembly from libraries is the right answer.
 
-더 중요한 것은 **P4가 ADR-003 D5를 무효화한다**는 점이다. 패킷 계층을 대체하려면 플레이어/엔티티/인벤토리/틱루프 상태를 우리가 소유해야 하고, 그 순간 fallback 대상인 JVM 서버가 사라져 fallback이 원리적으로 불가능해진다. 즉 P4는 "모드"가 아니라 "서버 전체 대체"이며 Pumpkin과 같은 카테고리다.
+More importantly, **P4 invalidates ADR-003 D5**. Replacing the packet layer means we would have to own player/entity/inventory/tick-loop state, and at that moment the JVM server that is the fallback target disappears, making fallback impossible in principle. In other words P4 is not a "mod" but a "full server replacement", the same category as Pumpkin.
 
-#### Decision (3 핵심 결정)
+#### Decision (3 core decisions)
 
-| # | 결정 | 핵심 |
+| # | Decision | Key point |
 |---|---|---|
-| D1 | **P4는 별개 제품으로 격리. Phase 1~3 설계 입력이 아니다** | P4를 고려한 상태 관리 레이어를 코어에 미리 넣지 않는다 |
-| D2 | **P3(region I/O)까지는 P1에 포함** | 패리티 검증에 region 비교가 필요하고, 압축은 라이브러리 조립이라 저비용 |
-| D3 | **격리가 P4를 막는 것이 아니라 가능하게 한다** | 코어가 순수 계산 라이브러리면 P4에서 그대로 재사용된다 |
+| D1 | **P4 is isolated as a separate product. It is not a design input for Phases 1-3** | Do not pre-install a P4-aware state management layer in the core |
+| D2 | **P3 (region I/O) is included in P1** | Parity verification needs region comparison, and compression is library assembly, so the cost is low |
+| D3 | **Isolation does not block P4; it enables it** | If the core is a pure compute library, it is reused as-is in P4 |
 
-#### 로드맵 축별 평가
+#### Roadmap evaluation by axis
 
-| 축 | 성격 | 헤드룸 | 필요 기술 | 선행 | 판정 |
+| Axis | Nature | Headroom | Required tech | Prerequisite | Verdict |
 |---|---|---|---|---|---|
-| P1 worldgen 코어 | compute | 높음 (AI 21.4) | SIMD/CPI 직결 | 없음 | 최우선 |
-| P2 배치/스케줄러 | compute | GC 제거가 본질 | arena/SoA | P1 | **P1에 흡수** |
-| P3 region I/O | IO | libdeflate 등 | 라이브러리 조립 | P1 | 포함 |
-| P4 네트워크/패킷 | IO | AI 0.00 | io_uring 등 | 서버 전체 | **격리** |
+| P1 worldgen core | compute | high (AI 21.4) | directly SIMD/CPI | none | top priority |
+| P2 batching/scheduler | compute | GC removal is the essence | arena/SoA | P1 | **absorbed into P1** |
+| P3 region I/O | IO | libdeflate etc. | library assembly | P1 | included |
+| P4 network/packet | IO | AI 0.00 | io_uring etc. | entire server | **isolated** |
 
-P2를 P1에 흡수한 근거는 ADR-003 D3에 기록했다. 배치를 자바에 남기면 GC 벽에 걸려 P1 성과가 드러나지 않는다. 이것은 스코프 확대가 아니라 P1이 원래 포함해야 했던 부분이며, 초기 설계에서 누락된 항목이다.
+The rationale for absorbing P2 into P1 is recorded in ADR-003 D3. If batching stays in Java, it hits the GC wall and the P1 gains never show. This is not scope expansion but something P1 should have included from the start, an item missing from the initial design.
 
-#### Why 격리가 P4를 가능하게 하나
+#### Why isolation enables P4
 
-Pumpkin/Valence가 우리 코어를 쓸 수 있다는 것은, 우리가 나중에 서버를 만들 때도 코어가 그대로 쓰인다는 뜻이다. 반대로 지금 P4를 고려해 코어에 상태 관리를 넣으면, 코어가 4개 소비자 어디에도 붙지 않는 어중간한 물건이 된다. grill-me 스킬이 경고하는 speculative implementation 패턴이다.
+That Pumpkin/Valence can use our core means the core is also reused as-is if we later build a server. Conversely, if we put state management into the core now with P4 in mind, the core becomes a half-baked thing that fits none of the four consumers. This is the speculative implementation pattern the grill-me skill warns about.
 
 #### Anti-goals
 
-- 코어에 플레이어/엔티티/인벤토리/틱루프 상태 넣기 (D1)
-- 압축 알고리즘 직접 구현 (libdeflate 조립)
-- P4를 Phase 1 플랜의 태스크로 편성
+- Putting player/entity/inventory/tick-loop state into the core (D1)
+- Implementing a compression algorithm ourselves (assemble libdeflate instead)
+- Scheduling P4 as a task in the Phase 1 plan
 
 #### Pitfalls
 
-1. **"나중에 필요할 테니 미리" 논리.** P4를 근거로 코어에 상태 훅을 추가하는 것이 가장 흔한 오염 경로다. ADR-003 D1이 방어선이다.
-2. **P3와 P4 혼동.** region 파일 쓰기(P3)는 코어 밖 CLI/모드 계층의 일이며 코어는 버퍼만 채운다. 이 경계가 흐려지면 D1이 무너진다.
+1. **The "we will need it later, so add it now" logic.** Adding state hooks to the core on the grounds of P4 is the most common contamination path. ADR-003 D1 is the line of defense.
+2. **Confusing P3 with P4.** Writing region files (P3) is the job of the CLI/mod layer outside the core; the core only fills buffers. If this boundary blurs, D1 collapses.
 
 #### Verification
 
-- Phase 1~3 코드에 소켓·플레이어·틱루프 관련 심볼이 존재하지 않는다 (normative: [core-abi](specs/core-abi/spec.md))
-- 코어 헤더에 상태 수명주기 API가 없다
+- No socket, player, or tick-loop related symbols exist in Phase 1-3 code (normative: [core-abi](specs/core-abi/spec.md))
+- The core header has no state lifecycle API
 
 #### When this might break
 
-- P1~P3가 완료되고 사용자가 P4를 실제 목표로 승격하는 경우 — 그때 본 ADR을 supersede하고 ADR-003 D5(fallback)의 대체 전략을 새로 설계해야 한다
+- If P1-P3 are complete and the user promotes P4 to an actual goal: then this ADR must be superseded and a replacement strategy for ADR-003 D5 (fallback) designed anew
 
 #### References
 
-- ADR-003 (fallback 전략, 모듈 경계 — [core-abi/context.md](specs/core-abi/context.md))
-- https://github.com/zlib-ng/zlib-ng/issues/1486 (압축 라이브러리 벤치)
+- ADR-003 (fallback strategy, module boundaries: [core-abi/context.md](specs/core-abi/context.md))
+- https://github.com/zlib-ng/zlib-ng/issues/1486 (compression library bench)
 - https://minecraft.wiki/w/Java_Edition_protocol/Packets

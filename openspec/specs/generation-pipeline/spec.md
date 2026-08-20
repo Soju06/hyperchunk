@@ -2,17 +2,18 @@
 
 ## Purpose
 
-생성 파이프라인의 normative SSOT: 풀 파이프라인 범위(11스테이지), 타겟 버전
-핀(26.2), 데이터팩 스키마 호환과 바닐라 fallback 계약. 근거·수치·결정 역사는
+Normative SSOT for the generation pipeline: full pipeline scope (11 stages),
+target version pin (26.2), datapack schema compatibility, and the vanilla
+fallback contract. Rationale, numbers, and decision history are in
 [context.md](context.md).
 
 ## Requirements
 
 ### Requirement: Full pipeline, eleven stages
 
-The implementation MUST cover the full vanilla chunk pipeline — all 11
+The implementation MUST cover the full vanilla chunk pipeline, all 11
 statuses from `structure_starts` to `full` (noise, surface rules, carvers,
-features, lighting, spawn, full promotion included) — not a terrain-only
+features, lighting, spawn, full promotion included), not a terrain-only
 subset (ADR-002 D2). Every stage runs in the C core; there is no JVM in the
 generation path.
 
@@ -23,7 +24,7 @@ generation path.
   full-region parity gate ([worldgen-parity](../worldgen-parity/spec.md))
   passes over the complete pipeline output
 
-### Requirement: Single-version pin — 26.2
+### Requirement: Single-version pin (26.2)
 
 The target version SHALL be pinned to exactly one vanilla release, recorded
 in the `TARGET_VERSION` file (currently `26.2`, data version 4903, data pack

@@ -2,9 +2,10 @@
 
 ## Purpose
 
-SIMD 백엔드 계약의 normative SSOT: 스칼라/AVX2/AVX-512 백엔드 구성과 런타임
-디스패치, 백엔드 간 바이트동일 출력, FMA 금지와 그 게이트. 근거·수치·결정
-역사는 [context.md](context.md).
+Normative SSOT for the SIMD backend contract: the scalar/AVX2/AVX-512
+backend set and runtime dispatch, byte-identical output across backends,
+and the FMA prohibition with its gate. Rationale, numbers, and decision
+history live in [context.md](context.md).
 
 ## Requirements
 
@@ -64,5 +65,5 @@ removes an intermediate rounding and silently changes terrain bits.
 
 - **GIVEN** the `asan-ubsan` or `tsan` build directories
 - **WHEN** the FMA gate is configured
-- **THEN** those builds are never its target — instrumentation pollutes the
+- **THEN** those builds are never its target: instrumentation pollutes the
   disassembly; the gate judges the release archive only

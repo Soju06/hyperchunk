@@ -2,10 +2,10 @@
 
 ## Purpose
 
-비트정확 패리티의 normative 정의: 무엇이 "바닐라와 동일"인지(canonical payload
-hash), 어떤 게이트가 그것을 판정하는지(2단 게이트: 비트정확 + order-replay),
-golden capture 체계가 지켜야 할 불변식. 근거·수치·결정 역사는
-[context.md](context.md).
+The normative definition of bit-exact parity: what counts as "identical to
+vanilla" (canonical payload hash), which gates decide it (two-tier gate:
+bit-exact + order-replay), and the invariants the golden capture system must
+uphold. Rationale, numbers, and decision history: [context.md](context.md).
 
 ## Requirements
 
@@ -21,7 +21,7 @@ MUST NOT be downcast to float.
 - **GIVEN** the golden capture of region r.0.0 (seed 1234567890, overworld)
 - **WHEN** hyperchunk generates the same region in REPLAY mode
 - **THEN** the canonical payload hash equals the pinned golden hash in
-  `golden/SHA256SUMS` (canonical `a5963205…`), asserted by
+  `golden/SHA256SUMS` (canonical `a5963205...`), asserted by
   `scripts/parity_gate.sh`
 
 #### Scenario: Approximate generation is rejected
@@ -34,10 +34,10 @@ MUST NOT be downcast to float.
 
 The parity acceptance gate SHALL be two-tiered (ADR-007):
 
-- **Tier 1** — stage dumps `01_structure_starts` through `06_carvers` MUST be
+- **Tier 1**: stage dumps `01_structure_starts` through `06_carvers` MUST be
   byte-equal to the vanilla golden dumps unconditionally. These stages are
   pure functions of (seed, chunk pos) and order-independent.
-- **Tier 2** — stages `07_features` through `11_full` MUST be byte-equal to
+- **Tier 2**: stages `07_features` through `11_full` MUST be byte-equal to
   the golden dumps **under order-replay**: the C implementation replays the
   decoration order recorded in the golden bundle's order manifest.
 
@@ -46,7 +46,7 @@ weakened to statistical similarity.
 
 #### Scenario: Tier 1 stage comparison
 
-- **GIVEN** golden stage dumps for stages 01–06
+- **GIVEN** golden stage dumps for stages 01-06
 - **WHEN** the corresponding parity test (`noise_stage`, `surface_stage`,
   `carvers_stage`) runs
 - **THEN** every dump compares byte-equal with zero diff, with no order input
@@ -57,7 +57,7 @@ weakened to statistical similarity.
   `order.manifest` of the run that produced them
 - **WHEN** the C implementation generates with the scheduler replaying that
   manifest
-- **THEN** the 07–11 stage outputs compare byte-equal against that bundle
+- **THEN** the 07-11 stage outputs compare byte-equal against that bundle
 
 ### Requirement: Vanilla nondeterminism is an input, not noise
 
@@ -91,12 +91,12 @@ vanilla included.
 - **GIVEN** a generated r.0.0.mca and the golden capture
 - **WHEN** `compare_regions.py --canonical-hash` runs on both
 - **THEN** equality is judged on normalized chunk payloads only, and the
-  golden side reproduces the pinned canonical hash `a5963205…`
+  golden side reproduces the pinned canonical hash `a5963205...`
 
 ### Requirement: RNG consumption order is a contract
 
 LCG and Xoroshiro128++ call order MUST be preserved exactly (ADR-002 P2). Any
-reordering — loop restructuring, batching, early-exit — that changes RNG
+reordering (loop restructuring, batching, early-exit) that changes RNG
 consumption order changes worldgen output and MUST be rejected by the parity
 gates.
 
@@ -115,7 +115,7 @@ those semantics, not the C library's:
   glibc by 1 ulp; such paths MUST call `hc_jdk_sin`/`hc_jdk_cos`, never
   libm `sin`/`cos`.
 - Float literals MUST be parsed from the raw literal with `strtof`; parsing
-  as double and narrowing (`strtod` → `(float)`) double-rounds and MUST NOT
+  as double and narrowing (`strtod` -> `(float)`) double-rounds and MUST NOT
   be used on datapack value paths.
 
 #### Scenario: Trig path audit

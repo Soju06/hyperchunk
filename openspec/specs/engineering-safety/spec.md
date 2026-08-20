@@ -2,9 +2,9 @@
 
 ## Purpose
 
-구현 언어 정체성과 안전망의 normative SSOT: 순수 C11 유지, sanitizer 게이트,
-zero-warning 빌드, 머지 게이트 체인. 근거·수치·결정 역사는
-[context.md](context.md).
+The normative SSOT for implementation-language identity and the safety net:
+staying pure C11, sanitizer gates, zero-warning build, merge gate chain.
+Rationale, numbers, and decision history are in [context.md](context.md).
 
 ## Requirements
 
@@ -62,10 +62,10 @@ MUST NOT exist.
 
 ### Requirement: Merge gate chain
 
-Every merge MUST clear the applicable gates (.github/CONTRIBUTING.md § Merge
-gates is the operational checklist): zero-warning build; full local ctest
-(37/37 with local golden data — CI covers the 25-test tracked-data subset
-only); `check_no_fma.sh`; `check_sanitizers.sh` (+ `check_tsan.sh` for
+Every merge MUST clear the applicable gates (.github/CONTRIBUTING.md section
+"Merge gates" is the operational checklist): zero-warning build; full local
+ctest (37/37 with local golden data; CI covers the 25-test tracked-data
+subset only); `check_no_fma.sh`; `check_sanitizers.sh` (+ `check_tsan.sh` for
 threading); `parity_gate.sh` for core-affecting changes; `check_isa_equiv.sh`
 for SIMD changes; commit-subject validation
 (`scripts/ci/check_commit_msgs.py`, CI-enforced).
@@ -74,5 +74,5 @@ for SIMD changes; commit-subject validation
 
 - **GIVEN** a PR touching `core/`
 - **WHEN** the merge gates are evaluated
-- **THEN** CI green alone is insufficient — local full-suite and parity-gate
+- **THEN** CI green alone is insufficient; local full-suite and parity-gate
   evidence is required

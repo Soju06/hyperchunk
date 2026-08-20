@@ -2,16 +2,18 @@
 
 ## Purpose
 
-공개 벤치 수치와 클레임 규칙, 데모/viz 캡처의 normative SSOT. 여기 있는 숫자와
-문구는 **클레임 펜스**다: 요약·재서술 과정에서 숫자·문구를 바꾸는 것 자체가
-스펙 위반이다. 측정 프로토콜·캐벳 전량·결정 역사는 [context.md](context.md).
+The normative SSOT for the public bench numbers, the claim rules, and the
+demo/viz captures. The numbers and phrasings here are the **claim fence**:
+changing a number or a phrasing while summarizing or restating is itself a
+spec violation. The measurement protocol, the full caveats, and the decision
+history are in [context.md](context.md).
 
 ## Requirements
 
 ### Requirement: Canonical public benchmark numbers
 
 The published 3-way numbers are the B-6 campaign medians (region r.0.0, 1024
-chunks, seed 1234567890, one machine — hc-e6: OCI `VM.Standard.E6.Flex`,
+chunks, seed 1234567890, one machine, hc-e6: OCI `VM.Standard.E6.Flex`,
 AMD EPYC 9J45 Zen5, 32 vCPU, OpenJDK 25.0.3):
 
 | System | Wall | vs vanilla |
@@ -29,9 +31,9 @@ are updated.
 
 - **WHEN** any document, caption, or PR summarizes the public benchmark
 - **THEN** the numbers 11.9 s / 3.7 s / 3.155 s / 0.894 s / 13.3x / 4.14x
-  appear verbatim or are omitted — never rounded, rescaled, or "improved"
+  appear verbatim or are omitted, never rounded, rescaled, or "improved"
 
-### Requirement: Stage attribution — multipliers are not portable
+### Requirement: Stage attribution - multipliers are not portable
 
 Every public multiplier claim MUST name its stage (machine): 13.3x/4.14x are
 properties of hc-e6 (Zen5, AVX-512 dispatch active, 32 vCPU) and MUST NOT be
@@ -45,12 +47,12 @@ generalized to arbitrary hardware (B-6 caveat 13).
 ### Requirement: Lower bounds accompany headline multipliers
 
 Public headline multipliers MUST carry the measurement-error-deducted lower
-bounds as a footnote: **≥12.5x** vs vanilla, **≥3.3x** vs C2ME.
+bounds as a footnote: **>=12.5x** vs vanilla, **>=3.3x** vs C2ME.
 
 #### Scenario: Headline caption
 
 - **WHEN** the 13.3x (or 4.14x) figure appears in a caption or README
-- **THEN** the ≥12.5x / ≥3.3x lower bounds are stated alongside
+- **THEN** the >=12.5x / >=3.3x lower bounds are stated alongside
 
 ### Requirement: REPLAY claim phrasing
 
@@ -81,10 +83,10 @@ mixing modes in a report is a rejection.
 ### Requirement: Determinism narrative numbers
 
 The public determinism comparison MUST use the observed minima, never
-higher: same seed, two runs — vanilla differs in **581+/1024** chunks, C2ME
+higher: same seed, two runs: vanilla differs in **581+/1024** chunks, C2ME
 in **758+/1024**, hyperchunk in **0**, across all 12 runs at both 20 and 32
-threads (REPLAY 6/6 == golden canonical `a5963205…`, FREE 6/6 == own-v1
-`2eb7485b…`).
+threads (REPLAY 6/6 == golden canonical `a5963205...`, FREE 6/6 == own-v1
+`2eb7485b...`).
 
 #### Scenario: Determinism caption
 
@@ -113,7 +115,7 @@ server-side instrumentation. Timeline JSON MUST record its provenance
 (`meta.synthetic` / probe / instrumented fields) so a synthetic panel cannot
 pass as measured. The two-stage reveal maps `t_stage1_ms` (chain/SURFACE) to
 the faint-terrain pass and `t_done_ms` (complete/FEATURES) to final pixels,
-with the `t_stage1 ≤ t_done` invariant enforced at conversion.
+with the `t_stage1 <= t_done` invariant enforced at conversion.
 
 #### Scenario: Timeline provenance check
 
