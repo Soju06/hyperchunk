@@ -1,0 +1,16 @@
+# Pure C11 with zero third-party libraries (ADR-003 D1) — the only
+# dependency surface that can rot is the pinned GitHub Actions SHAs.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      # Conforms to the repo commit convention (scripts/ci/check_commit_msgs.py)
+      prefix: "chore(ci)"

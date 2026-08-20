@@ -1,0 +1,55 @@
+name: Stale issues and PRs
+
+on:
+  schedule:
+    # Daily, off the :00 mark to avoid the top-of-hour Actions rush.
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mark and close stale issues and PRs
+        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11
+        with:
+          # Solo-maintained cadence: 60 days quiet -> stale, 14 more -> close.
+          days-before-stale: 60
+          days-before-close: 14
+
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          close-issue-reason: "not_planned"
+
+          stale-issue-message: |
+            This issue has been automatically marked as **stale** — no activity
+            for 60 days. It will be closed in 14 days unless there is new
+            activity. If it's still relevant, a short comment (or removing the
+            `stale` label) keeps it open.
+
+          close-issue-message: |
+            Closed for inactivity (60 days quiet + 14-day stale window).
+            Feel free to reopen with new information — especially parity
+            reports with a fresh hash/stage-dump against current `main`.
+
+          stale-pr-message: |
+            This pull request has been automatically marked as **stale** — no
+            activity for 60 days. It will be closed in 14 days unless there is
+            new activity (a rebase, a push, or a comment).
+
+          close-pr-message: |
+            Closed for inactivity. If the change is still relevant, please
+            reopen or submit a fresh PR rebased on current `main`.
+
+          # Operator-protected labels never go stale.
+          exempt-issue-labels: "pinned,security"
+          exempt-pr-labels: "pinned,security"
+
+          operations-per-run: 100
+          remove-stale-when-updated: true
+          ascending: true
