@@ -5,12 +5,10 @@
 
 **A bit-exact Minecraft-compatible world generator in pure C.**
 
-hyperchunk reimplements the vanilla Minecraft Java Edition overworld pipeline
-(noise, surface rules, carvers, features, lighting) from scratch in C11, with
-no dependencies beyond libc and no JVM in the generation path. Every byte of
-every chunk payload in a generated region matches the same region generated
-by vanilla. Not "visually similar", not "close enough": identical bytes. On
-the benchmark machine below, it does this 13.3x faster than the vanilla
+hyperchunk reimplements the vanilla Java Edition overworld pipeline (noise,
+surface rules, carvers, features, lighting) in C11, with nothing beyond libc
+and no JVM in the generation path. Every byte of every chunk payload matches
+vanilla. On the machine below, it generates 13.3x faster than the vanilla
 server.
 
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG
@@ -22,30 +20,21 @@ server.
 
 ![3-way race: vanilla vs C2ME vs hyperchunk generating r.0.0](assets/race-b6.gif)
 
-All three panels replay measured per-chunk timing captured on the same
-machine (hc-e6, Zen 5): hyperchunk from its own instrumentation, vanilla and
-C2ME from a Fabric mixin mod that logs worldgen stage completions (labeled
-in-frame; the wall clocks are the published bench numbers). The race lives in
-[tools/viz/](tools/viz/) and regenerates in about 10 seconds:
+All three panels replay measured per-chunk timing from the same machine:
+hyperchunk from its own instrumentation, vanilla and C2ME from a Fabric mixin
+mod that logs worldgen stage completions. Regenerates in about 10 seconds:
 
 ```bash
-cd tools/viz && ./bin/hcviz render demo/race-b6.yaml --out demo/out/race-b6.gif --out demo/out/race-b6.mp4
+cd tools/viz && ./bin/hcviz render demo/race-b6.yaml --out demo/out/race-b6.gif
 ```
-
-[tools/viz/README.md](tools/viz/README.md) documents the timeline schema and
-the capture protocol.
 
 ## Benchmarks
 
-Full generation of region r.0.0 (1024 chunks, overworld, seed 1234567890)
-with all four systems on the same machine: an OCI `VM.Standard.E6.Flex`
-instance, 16 OCPU AMD EPYC 9J45 (Zen5), 32 vCPUs, 64 GB, Ubuntu 24.04. The
-Java rows run OpenJDK 25.0.3 with `-Xms2G -Xmx8G` and no other tuning.
-Medians of 3 runs, measured 2026-08-12. All rows time generation plus
-serialization and exclude process boot/setup on both sides; the Java rows are
-timed by 0.5 s status polling, hyperchunk by internal instrumentation.
+Region r.0.0 (1024 chunks, overworld, seed 1234567890) on one machine: OCI
+`VM.Standard.E6.Flex`, 16 OCPU AMD EPYC 9J45 (Zen5), 32 vCPUs, Ubuntu 24.04,
+OpenJDK 25.0.3. Medians of 3 runs, generation plus serialization:
 
-| System | Generation wall | Chunks/s | vs vanilla |
+| System | Wall | Chunks/s | vs vanilla |
 |---|---|---|---|
 | vanilla 26.2 dedicated server | 11.9 s | 86 | 1.00x |
 | Fabric 0.19.3 + C2ME 0.4.2-alpha.0.35 | 3.7 s | 277 | 3.22x |
@@ -53,52 +42,33 @@ timed by 0.5 s status polling, hyperchunk by internal instrumentation.
 | hyperchunk FREE, 20 threads | 0.894 s | 1145 | **13.3x** |
 
 FREE and REPLAY run the same stage code under two scheduler policies
-([ADR-008](DECISIONS.md)). FREE, the benchmark mode, picks its own
-conflict-free chunk order. REPLAY, the verification mode, reproduces the
-golden chunk order with canonical-identical output at C2ME-class speed; its
-gap to C2ME is inside the measurement band (lower bound 0.95x), so no speed
-claim is made there. The point of the split is that the code proven bit-exact
-in REPLAY is the code being timed in FREE.
+([ADR-008](DECISIONS.md)). FREE picks its own conflict-free chunk order;
+REPLAY reproduces the golden chunk order with canonical-identical output at
+C2ME-class speed. The code proven bit-exact in REPLAY is the code timed in
+FREE.
 
-Read the multipliers as properties of this stage, not as an expectation for
-arbitrary hardware: on Zen5 hyperchunk dispatches its AVX-512 noise backend,
-and 32 vCPUs reward hyperchunk's scaling far more than vanilla's. FREE is
-4.14x vs C2ME here; after subtracting the measurement-error budget (every
-component of which favors hyperchunk), the conservative lower bounds are
-≥12.5x vs vanilla and ≥3.3x vs C2ME.
+The multipliers are properties of this stage (AVX-512 dispatch, 32 vCPUs),
+not a promise for arbitrary hardware. Conservative lower bounds after
+subtracting the measurement-error budget: ≥12.5x vs vanilla, ≥3.3x vs C2ME.
 
-Determinism is the other half of the result. Generating the same seed twice,
-vanilla differs in 581+/1024 chunks run-to-run and C2ME in 758+/1024, because
-feature-decoration order is scheduler-dependent and gets baked into block
-content. hyperchunk differs in 0: REPLAY matched the vanilla golden hash and
-FREE matched its own pinned-order hash in all 12 runs, at both 20 and 32
-threads.
-
-"Canonical-identical" means the sha256 of the full chunk payloads with
-save-time fields (root `LastUpdate`, the `.mca` header timestamp table) and
-sector/compression framing normalized out. Raw `.mca` bit-equality is
-unattainable by any implementation, including vanilla itself, because the
-container embeds the capture-time wall clock.
+Determinism is the other half of the result. Same seed, two runs: vanilla
+differs in 581+/1024 chunks and C2ME in 758+/1024, because decoration order
+is scheduler-dependent and gets baked into block content. hyperchunk differs
+in 0, across all 12 runs at both 20 and 32 threads. ("Canonical-identical"
+means sha256 over full chunk payloads with save-time fields normalized out;
+raw `.mca` bit-equality is impossible for any implementation, including
+vanilla itself, because the container embeds the capture-time wall clock.)
 
 ## Why
 
-Vanilla density functions are evaluated by walking an interpreter tree. Every
-node is a megamorphic virtual call, so the JIT cannot inline, and the
-effective throughput lands around 0.03-0.08 flops/cycle against a theoretical
-ceiling of 8 flops/cycle on AVX2 without FMA. That is a 96-256x gap, and it
-is a data structure problem rather than a language problem.
-
-The workload is also firmly compute bound. Chunk noise runs at roughly
-21.4 flops/byte of arithmetic intensity against a 12-core ridge point near
-7.0 flops/byte, which means instruction-level improvements translate directly
-into wall-clock time instead of stalling on memory bandwidth.
-
-The catch is that bit-exact parity forbids FMA contraction, since folding
-`a*b+c` into a single instruction removes an intermediate rounding step and
-silently changes terrain. Losing FMA doubles the number of independent
-dependency chains needed to saturate the FP ports, which is why register
-pressure, not vector width, is the dominant constraint. See
-[ADR-004](DECISIONS.md) for the full analysis.
+Vanilla evaluates density functions by walking an interpreter tree of
+megamorphic virtual calls the JIT cannot inline: roughly 0.03-0.08
+flops/cycle against an 8 flops/cycle ceiling. The workload is compute bound
+(21.4 flops/byte of arithmetic intensity against a ridge point near 7.0), so
+instruction-level wins translate directly into wall clock. The catch is that
+bit-exact parity forbids FMA contraction, which doubles the dependency chains
+needed to saturate the FP ports; register pressure, not vector width, is the
+dominant constraint. Full analysis in [ADR-004](DECISIONS.md).
 
 ## Architecture
 
@@ -117,11 +87,8 @@ pressure, not vector width, is the dominant constraint. See
    bench + parity     Phase 3, planned  Pumpkin / Valence
 ```
 
-Java allocates roughly 40,808 objects per chunk. At 5000 chunk/s that is
-6.53 GB/s of allocation pressure against a G1 throughput ceiling near
-1-2 GB/s, so larger batches actively hurt. Arena and SoA storage take that to
-zero allocations, which inverts the sign: batching gets cheaper as it grows.
-The cost model behind these figures is in [ADR-003](DECISIONS.md).
+Java allocates roughly 40,808 objects per chunk; arena and SoA storage take
+that to zero, so batching gets cheaper as it grows ([ADR-003](DECISIONS.md)).
 
 ## Design invariants
 
@@ -137,33 +104,18 @@ These are load-bearing. Violating any of them breaks the project.
 
 ## Status
 
-Phase 1 (parity) and Phase 2 (performance) are complete. Phase 3, the Fabric
-server bridge (Java FFM), has not started.
+Phase 1 (parity) and Phase 2 (performance) are complete; Phase 3, the Fabric
+server bridge (Java FFM), has not started. The full region hashes identically
+to the vanilla golden capture (sha256 pinned in
+[golden/SHA256SUMS](golden/SHA256SUMS), asserted by `scripts/parity_gate.sh`);
+37 tests, all green, sanitizer-clean. One qualifier ([ADR-007](DECISIONS.md)):
+vanilla's own decoration order does not reproduce itself run to run, so the
+byte-exact comparison replays the order recorded from the golden run.
 
-hyperchunk regenerates the full 1024-chunk region r.0.0 (seed 1234567890)
-byte-exact against vanilla 26.2: every chunk payload in the region hashes
-identically to the vanilla golden capture (canonical payload sha256
-`a59632059bab42d808a24c27091d4b8786b5615405263a84ec1ba9a193223c24`, pinned in
-[golden/SHA256SUMS](golden/SHA256SUMS) and asserted by
-`scripts/parity_gate.sh`). One honest qualifier ([ADR-007](DECISIONS.md)):
-vanilla's own feature-decoration order is scheduler-dependent and does not
-reproduce itself run to run, so the byte-exact comparison replays the
-decoration order recorded from the golden vanilla run, and save-time
-timestamps in the region container are normalized out. The test suite is 37
-tests, all green and sanitizer-clean under the ASan/UBSan and TSan presets.
-
-Shipped so far:
-
-- Single pinned version: 26.2 ("Chaos Cubed"), overworld only, full pipeline
-- Structures placed but not jigsaw-assembled
-- Scalar reference kernel plus AVX2 and AVX-512 SIMD backends,
-  runtime-dispatched, byte-identical output
-- Multithreaded batching: the FREE / REPLAY dual-mode scheduler
-
-Out of scope for now: the FFM bridge and Fabric mod (Phase 3), Nether and
-End, version matrix support.
-
-See [DECISIONS.md](DECISIONS.md) for the nine architectural decision records.
+Version pinned to 26.2, overworld only. Structures are placed but not
+jigsaw-assembled. Nether, End, and the version matrix are out of scope for
+now. [DECISIONS.md](DECISIONS.md) holds the nine architectural decision
+records.
 
 ## Building
 
@@ -174,19 +126,12 @@ ctest --test-dir build --output-on-failure
 ./scripts/parity_gate.sh         # canonical payload hash vs golden/SHA256SUMS
 ```
 
-`parity_gate.sh` and the golden-gated tests read vanilla reference captures
-under `golden/` that are local-only (only their sha256 pins in
-`golden/SHA256SUMS` are committed), so on a fresh clone those steps require
-regenerating the captures with the `tools/golden/` harness first.
-
-Sanitizer and benchmark builds use the CMake presets `asan-ubsan`, `tsan`,
-`release`, and `bench-o2`/`bench-o3` (see `CMakePresets.json`). The benchmark
-harness is `bench/run_bench.sh`.
+Golden-gated tests read local-only vanilla captures under `golden/` (only
+their sha256 pins are committed); regenerate them with the `tools/golden/`
+harness on a fresh clone. Sanitizer and benchmark builds use the CMake
+presets `asan-ubsan`, `tsan`, `release`, and `bench-o2`/`bench-o3`.
 
 ## Prior art
-
-hyperchunk occupies a gap rather than competing head-on. Native Minecraft
-server implementations consistently stall at world generation:
 
 | Project | What it is | Gap |
 |---|---|---|
@@ -196,22 +141,15 @@ server implementations consistently stall at world generation:
 | [Cuberite](https://github.com/cuberite/cuberite) | C++ server | no vanilla parity |
 | [C2ME](https://github.com/RelativityMC/C2ME-fabric) | Chunk gen optimization mod | bounded by the JVM |
 
-Reference material that made this tractable:
-[cubiomes](https://github.com/Cubitect/cubiomes) for biome and structure
-algorithms, and the
-[Minecraft Wiki](https://minecraft.wiki/w/Data_pack) for datapack worldgen
-schemas.
+[cubiomes](https://github.com/Cubitect/cubiomes) and the
+[Minecraft Wiki](https://minecraft.wiki/w/Data_pack) made this tractable.
 
 ## Contributing
 
-Contributions are welcome; [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)
-covers the development setup, commit convention, and merge gates. The short
-version: the build must stay zero-warning, the load-bearing invariants
-(bit-exact parity, FMA prohibition, RNG order, and friends) are
-non-negotiable, and the parity suites that need local-only golden captures
-must run locally, since CI covers only the tracked-data subset. Security
-reports go through [private advisories](.github/SECURITY.md), not public
-issues.
+[.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) covers setup, the commit
+convention, and merge gates. Parity suites that need golden captures run
+locally; CI covers the tracked-data subset. Security reports go through
+[private advisories](.github/SECURITY.md).
 
 ## License
 
