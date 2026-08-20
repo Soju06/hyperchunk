@@ -1,0 +1,22 @@
+schema: spec-driven
+
+context: |
+  Process: this repo uses the OpenSpec workflow. Always read AGENTS.md first.
+  hyperchunk is a bit-exact reimplementation of vanilla Minecraft Java Edition
+  26.2 overworld worldgen in pure C11 (libc/libm/pthreads only, C ABI).
+  spec.md files are requirements-only (MUST/SHALL + scenarios). Narrative
+  rationale, measurements, and decision history live in each capability's
+  context.md. Decision-history sections are append-only: never edit an
+  existing ADR entry; supersede it with a new entry and route spec.md changes
+  through openspec/changes/.
+  Claim fence (never alter these when summarizing): vanilla 11.9 s / C2ME
+  3.7 s / REPLAY 3.155 s / FREE 0.894 s = 13.3x vs vanilla, 4.14x vs C2ME
+  (stage hc-e6, Zen5 32 vCPU); lower bounds >=12.5x / >=3.3x; golden canonical
+  hash prefix a5963205; REPLAY is described only as "canonical-identical
+  output at C2ME-class speed" - never as faster than C2ME.
+
+rules:
+  context_docs:
+    - Keep the "Decision history" section append-only; ADR entries preserve their original number and date.
+    - Do not duplicate normative requirements; link to spec.md.
+    - Never alter benchmark numbers or claim-fence phrasing when editing.
