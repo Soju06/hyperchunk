@@ -61,3 +61,9 @@ build-release/
 
 # P2-0 bench raw results — local-only
 bench/results/
+
+# ctest debris when ctest is run from repo root instead of build/
+Testing/
+
+# gradle wrapper caches for capture mods
+.gradle/
