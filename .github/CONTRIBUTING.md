@@ -138,9 +138,8 @@ type(scope): subject
   optional. Recommended scopes: the core stage names (`noise`, `surface`,
   `carvers`, `features`, `light`, `region`), plus `simd`, `sched`, `cli`,
   `viz`, `capture`, `git`, `readme`.
-- **Subject language**: English or Korean, both first-class (history is
-  ~50/50). Em-dash `—` as a summary/detail separator and `·` as a list
-  separator are house style, not violations.
+- **Subject language**: English only. (History up to 2026-08-20 is EN/KR
+  mixed; the convention is forward-only and old commits are not rewritten.)
 - **Compound commits**: `bench(micro)+notes(bench): ...` is legal when one
   logic unit genuinely spans two areas. Rare by design.
 - **Body** optional. When the commit implements or is constrained by a
