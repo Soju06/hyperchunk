@@ -10,12 +10,13 @@ Read .github/CONTRIBUTING.md first — especially the load-bearing invariants.
 
 ## ADR relevance
 
-<!-- hyperchunk records every design decision in DECISIONS.md (append-only).
+<!-- hyperchunk records every design decision as append-only decision history
+     in openspec/ (project.md + specs/<capability>/context.md).
      If this PR implements, is constrained by, or changes a decision, link it. -->
 
 - [ ] Not decision-relevant (mechanical fix, docs, tooling)
-- [ ] Implements / constrained by an existing ADR: <!-- e.g. ADR-007 -->
-- [ ] Changes a decision → this PR **adds a new superseding ADR** (never edits an existing one)
+- [ ] Implements / constrained by an existing ADR entry: <!-- e.g. ADR-007, openspec/specs/worldgen-parity/ -->
+- [ ] Changes a decision → this PR **adds a new superseding decision-history entry via an `openspec/changes/` change** (never edits an existing one)
 
 ## Gates
 
@@ -37,7 +38,7 @@ Read .github/CONTRIBUTING.md first — especially the load-bearing invariants.
 <!-- These are hard fences; the PR is rejected if they're crossed. -->
 
 - [ ] This PR does **not** touch `golden/` (golden regeneration is its own reviewed `golden:` process)
-- [ ] This PR does **not** edit existing content in `DECISIONS.md` (append-only; new ADRs are fine)
+- [ ] This PR does **not** edit existing decision-history entries in `openspec/` (append-only; new superseding entries are fine)
 - [ ] Commit subjects follow the convention (`scripts/ci/check_commit_msgs.py`; CI-enforced)
 
 ## Perf claims

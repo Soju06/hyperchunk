@@ -7,7 +7,9 @@ body:
     attributes:
       value: |
         Before proposing: hyperchunk's scope is deliberately narrow and recorded in
-        [DECISIONS.md](https://github.com/Soju06/hyperchunk/blob/main/DECISIONS.md) —
+        [openspec/project.md](https://github.com/Soju06/hyperchunk/blob/main/openspec/project.md)
+        and the capability specs under
+        [openspec/specs/](https://github.com/Soju06/hyperchunk/tree/main/openspec/specs) —
         several tempting features (GPU backend, seed search, network layer,
         approximate float generation) are explicit anti-goals with reasons. A
         proposal that touches an anti-goal needs to argue against the recorded
@@ -20,7 +22,7 @@ body:
       options:
         - label: I searched existing issues for similar proposals.
           required: true
-        - label: I checked DECISIONS.md and this doesn't hit a recorded anti-goal (or I address it below).
+        - label: I checked openspec/ (project.md and the capability specs) and this doesn't hit a recorded anti-goal (or I address it below).
           required: true
 
   - type: textarea

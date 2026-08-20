@@ -31,7 +31,8 @@ Requirements: CMake ≥ 3.28, GCC with C11 and AVX-512 flag support (any
 GCC ≥ 9; the AVX2/AVX-512/SHA-NI translation units are always *compiled* on
 x86-64 regardless of host CPU — execution is behind runtime `cpuid`
 dispatch), `python3` (stdlib only), `bash`. There are zero third-party
-library dependencies ([ADR-003](../DECISIONS.md) D1): the core links against
+library dependencies ([ADR-003](../openspec/specs/core-abi/context.md) D1):
+the core links against
 `libm` and pthreads only.
 
 ```bash
@@ -73,16 +74,20 @@ tools/viz/    demo renderer and capture tooling
 golden/       parity anchors: tracked hashes + order manifests; heavy payloads are local-only
 reference/    extracted 26.2 datapack worldgen JSON + structure NBT (tracked, read by tests)
 scripts/      gate scripts (check_no_fma, check_sanitizers, check_tsan, parity_gate, check_isa_equiv)
-DECISIONS.md  append-only ADR log — the project's source of truth for every design decision
+openspec/     spec-driven SSOT — capability specs (spec.md), decision history (context.md), archived change notes
 ```
 
-`DECISIONS.md` is **append-only**: existing ADRs are never edited. If a
-decision changes, a new ADR supersedes the old one and says so. PRs that
-rewrite ADR history are rejected regardless of content.
+The decision history in `openspec/` (`project.md` and each capability's
+`context.md`) is **append-only**: existing ADR entries are never edited. If
+a decision changes, a new entry supersedes the old one and says so, and the
+`spec.md` update goes through an `openspec/changes/` change. PRs that
+rewrite decision history are rejected regardless of content.
 
 ## Load-bearing invariants
 
-These come from the ADRs in [DECISIONS.md](../DECISIONS.md). They are not
+These come from the ADRs preserved as decision history in
+[openspec/](../openspec/project.md) (normative form in each capability's
+`spec.md`). They are not
 style preferences; each one is load-bearing for the product claim ("your
 world, bit-identical, N× faster"). **Violating any of them is an automatic
 PR rejection.**
@@ -173,7 +178,8 @@ the rest are run locally and the PR template asks you to attest to them.
 - [ ] **No `golden/` edits in feature PRs.** Golden regeneration is its own
       reviewed process via `tools/golden/` and ships as a dedicated
       `golden:` PR with capture provenance.
-- [ ] **`DECISIONS.md` is append-only.** New ADRs only; never edit or delete
+- [ ] **Decision history is append-only.** New superseding entries only
+      (via an `openspec/changes/` change); never edit or delete
       existing ones.
 - [ ] **Commit subjects conform** to the convention above (CI-enforced).
 - [ ] **Perf claims carry evidence**: bench numbers labeled with stage and
@@ -220,9 +226,11 @@ dedicated `golden:` commit with capture provenance. Feature PRs never touch
 2. Make commits following the [convention](#commit-convention).
 3. Run the [merge gates](#merge-gates) that apply to your change; record the
    results in the PR template.
-4. Open the PR using the template. Link the ADR if the change implements or
-   affects a recorded decision; if it *changes* a decision, the PR must add a
-   new superseding ADR (append-only).
+4. Open the PR using the template. Link the owning openspec capability
+   (`spec.md` requirement or `context.md` decision-history entry) if the
+   change implements or affects a recorded decision; if it *changes* a
+   decision or behavior, the PR must carry an `openspec/changes/` change and
+   append a new superseding decision-history entry (append-only).
 5. CI (build + tracked-data test subset + FMA gate + sanitizers + commitlint)
    must be green. The maintainer reviews and merges; for core-affecting
    changes expect to be asked for local parity-gate evidence.

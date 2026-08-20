@@ -42,7 +42,7 @@ OpenJDK 25.0.3. Medians of 3 runs, generation plus serialization:
 | hyperchunk FREE, 20 threads | 0.894 s | 1145 | **13.3x** |
 
 FREE and REPLAY run the same stage code under two scheduler policies
-([ADR-008](DECISIONS.md)). FREE picks its own conflict-free chunk order;
+([ADR-008](openspec/specs/scheduler/context.md)). FREE picks its own conflict-free chunk order;
 REPLAY reproduces the golden chunk order with canonical-identical output at
 C2ME-class speed. The code proven bit-exact in REPLAY is the code timed in
 FREE.
@@ -68,7 +68,8 @@ flops/cycle against an 8 flops/cycle ceiling. The workload is compute bound
 instruction-level wins translate directly into wall clock. The catch is that
 bit-exact parity forbids FMA contraction, which doubles the dependency chains
 needed to saturate the FP ports; register pressure, not vector width, is the
-dominant constraint. Full analysis in [ADR-004](DECISIONS.md).
+dominant constraint. Full analysis in
+[ADR-004](openspec/specs/simd-backends/context.md).
 
 ## Architecture
 
@@ -88,7 +89,8 @@ dominant constraint. Full analysis in [ADR-004](DECISIONS.md).
 ```
 
 Java allocates roughly 40,808 objects per chunk; arena and SoA storage take
-that to zero, so batching gets cheaper as it grows ([ADR-003](DECISIONS.md)).
+that to zero, so batching gets cheaper as it grows
+([ADR-003](openspec/specs/core-abi/context.md)).
 
 ## Design invariants
 
@@ -108,14 +110,16 @@ Phase 1 (parity) and Phase 2 (performance) are complete; Phase 3, the Fabric
 server bridge (Java FFM), has not started. The full region hashes identically
 to the vanilla golden capture (sha256 pinned in
 [golden/SHA256SUMS](golden/SHA256SUMS), asserted by `scripts/parity_gate.sh`);
-37 tests, all green, sanitizer-clean. One qualifier ([ADR-007](DECISIONS.md)):
+37 tests, all green, sanitizer-clean. One qualifier
+([ADR-007](openspec/specs/worldgen-parity/context.md)):
 vanilla's own decoration order does not reproduce itself run to run, so the
 byte-exact comparison replays the order recorded from the golden run.
 
 Version pinned to 26.2, overworld only. Structures are placed but not
 jigsaw-assembled. Nether, End, and the version matrix are out of scope for
-now. [DECISIONS.md](DECISIONS.md) holds the nine architectural decision
-records.
+now. [openspec/](openspec/project.md) holds the capability specs and the
+nine architectural decision records (decision history in each capability's
+`context.md`).
 
 ## Building
 
